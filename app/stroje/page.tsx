@@ -29,6 +29,14 @@ export default function StrojePage() {
     checkUser();
   }, []);
 
+  function photoUrl(path: string) {
+    const { data } = supabase.storage
+      .from("machine-photos")
+      .getPublicUrl(path);
+
+    return data.publicUrl;
+  }
+
   async function checkUser() {
     const {
       data: { session },
@@ -46,7 +54,7 @@ export default function StrojePage() {
   async function loadMachines(currentUserId: string = userId) {
     if (!currentUserId) return;
 
-    const { data, error } = await supabase
+    const { data: machinesData, error } = await supabase
       .from("machines")
       .select("*")
       .eq("user_id", currentUserId)
@@ -57,7 +65,33 @@ export default function StrojePage() {
       return;
     }
 
-    setMachines(data || []);
+    const machineIds = (machinesData || []).map((m) => m.id);
+
+    let photosData: any[] = [];
+
+    if (machineIds.length > 0) {
+      const { data } = await supabase
+        .from("machine_photos")
+        .select("*")
+        .in("machine_id", machineIds)
+        .eq("user_id", currentUserId)
+        .order("created_at", { ascending: false });
+
+      photosData = data || [];
+    }
+
+    const machinesWithPhotos = (machinesData || []).map((item) => {
+      const firstPhoto = photosData.find(
+        (photo) => photo.machine_id === item.id
+      );
+
+      return {
+        ...item,
+        first_photo_url: firstPhoto ? photoUrl(firstPhoto.file_path) : null,
+      };
+    });
+
+    setMachines(machinesWithPhotos);
   }
 
   function updateMachine(key: string, value: string) {
@@ -287,57 +321,66 @@ export default function StrojePage() {
             {machines.map((item) => (
               <div
                 key={item.id}
-                className="rounded-2xl border bg-white p-6 shadow-sm"
+                className="overflow-hidden rounded-2xl border bg-white shadow-sm"
               >
-                <h3 className="text-2xl font-bold">
-                  {item.name || "Bez názvu"}
-                </h3>
+                {item.first_photo_url ? (
+                  <img
+                    src={item.first_photo_url}
+                    alt={item.name || "Fotografia stroja"}
+                    className="h-56 w-full object-cover"
+                  />
+                ) : (
+                  <div className="flex h-56 w-full items-center justify-center bg-slate-200 text-slate-500">
+                    Bez fotografie
+                  </div>
+                )}
 
-                <p className="mt-2 text-slate-600">
-                  Kategória: {item.category || "—"}
-                </p>
+                <div className="p-6">
+                  <h3 className="text-2xl font-bold">
+                    {item.name || "Bez názvu"}
+                  </h3>
 
-                <p className="text-slate-600">
-                  Výrobca: {item.manufacturer || "—"}
-                </p>
+                  <p className="mt-2 text-slate-600">
+                    Kategória: {item.category || "—"}
+                  </p>
+                  <p className="text-slate-600">
+                    Výrobca: {item.manufacturer || "—"}
+                  </p>
+                  <p className="text-slate-600">
+                    Model: {item.model || "—"}
+                  </p>
+                  <p className="text-slate-600">
+                    Sériové číslo: {item.serial_number || "—"}
+                  </p>
+                  <p className="text-slate-600">
+                    Rok výroby: {item.year || "—"}
+                  </p>
+                  <p className="text-slate-600">
+                    Stav: {item.status || "—"}
+                  </p>
 
-                <p className="text-slate-600">
-                  Model: {item.model || "—"}
-                </p>
+                  <div className="mt-5 flex gap-3">
+                    <Link
+                      href={`/stroje/${item.id}`}
+                      className="rounded-xl bg-slate-900 px-4 py-2 text-white hover:bg-slate-800"
+                    >
+                      Detail
+                    </Link>
 
-                <p className="text-slate-600">
-                  Sériové číslo: {item.serial_number || "—"}
-                </p>
+                    <button
+                      onClick={() => editMachine(item)}
+                      className="rounded-xl bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
+                    >
+                      Upraviť
+                    </button>
 
-                <p className="text-slate-600">
-                  Rok výroby: {item.year || "—"}
-                </p>
-
-                <p className="text-slate-600">
-                  Stav: {item.status || "—"}
-                </p>
-
-                <div className="mt-5 flex gap-3">
-                  <Link
-                    href={`/stroje/${item.id}`}
-                    className="rounded-xl bg-slate-900 px-4 py-2 text-white hover:bg-slate-800"
-                  >
-                    Detail
-                  </Link>
-
-                  <button
-                    onClick={() => editMachine(item)}
-                    className="rounded-xl bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
-                  >
-                    Upraviť
-                  </button>
-
-                  <button
-                    onClick={() => deleteMachine(item.id)}
-                    className="rounded-xl bg-red-600 px-4 py-2 text-white hover:bg-red-700"
-                  >
-                    Vymazať
-                  </button>
+                    <button
+                      onClick={() => deleteMachine(item.id)}
+                      className="rounded-xl bg-red-600 px-4 py-2 text-white hover:bg-red-700"
+                    >
+                      Vymazať
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}
