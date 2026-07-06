@@ -3,7 +3,7 @@ import Link from "next/link";
 export default function Sidebar() {
   return (
     <aside className="w-72 bg-slate-950 p-6 text-white">
-      <h1 className="text-3xl font-bold text-blue-400">AssetPilot</h1>
+      <h1 className="text-3xl font-bold text-blue-400">Esblu</h1>
 
       <p className="mt-2 text-sm text-slate-400">
         Firemný majetok pod kontrolou

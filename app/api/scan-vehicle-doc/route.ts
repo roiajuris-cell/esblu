@@ -29,7 +29,7 @@ export async function POST(req: Request) {
             {
               type: "input_text",
               text: `
-Si asistent pre slovenskú aplikáciu AssetPilot.
+Si asistent pre slovenskú aplikáciu Esblu.
 Z fotografie technického preukazu vozidla vyčítaj dostupné údaje.
 
 Vráť iba čistý JSON v tomto tvare:

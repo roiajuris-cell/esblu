@@ -53,7 +53,7 @@ export default function LoginPage() {
         <h1 className="text-3xl font-bold text-slate-900">Prihlásenie</h1>
 
         <p className="mt-2 text-slate-500">
-          Prihlás sa do aplikácie AssetPilot.
+          Prihlás sa do aplikácie Esblu.
         </p>
 
         <div className="mt-6 space-y-4">

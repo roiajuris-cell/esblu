@@ -14,7 +14,7 @@ export default function Dashboard() {
   const [items, setItems] = useState<any[]>([]);
   const [alerts, setAlerts] = useState<any[]>([]);
   const [search, setSearch] = useState("");
-  const [companyName, setCompanyName] = useState("AssetPilot");
+  const [companyName, setCompanyName] = useState("Esblu");
 
   useEffect(() => {
     checkUser();
