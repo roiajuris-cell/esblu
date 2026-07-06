@@ -73,7 +73,7 @@ return Response.json({
   data: vehicleData,
 });
   } catch (error) {
-    console.error(error);
+    console.error("OPENAI ERROR:", error);
 
     return Response.json(
       {
