@@ -6,6 +6,16 @@ import type { ReactNode } from "react";
 import Image from "next/image"
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+function getGreeting() {
+  const hour = new Date().getHours();
+
+  if (hour >= 5 && hour < 12) return "Dobré ráno ☀️";
+  if (hour >= 12 && hour < 18) return "Dobrý deň 👋";
+  if (hour >= 18 && hour < 22) return "Dobrý večer 🌙";
+
+  return "Dobrú noc 🌜";
+}
+
 
 export default function Dashboard() {
   const router = useRouter();
@@ -15,7 +25,7 @@ export default function Dashboard() {
   const [items, setItems] = useState<any[]>([]);
   const [companyName, setCompanyName] = useState("ESBLU");
   const [search, setSearch] = useState("");
-
+  const greeting = getGreeting();
   useEffect(() => {
     checkUser();
   }, []);
@@ -240,7 +250,7 @@ export default function Dashboard() {
 </p>
 
 <h2 className="mt-1 text-3xl font-black tracking-tight text-slate-950 lg:text-5xl">
-  Dobrý večer 👋
+  {greeting}
 </h2>
             </div>
 
