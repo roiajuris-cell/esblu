@@ -1,8 +1,8 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import type { ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
@@ -13,6 +13,7 @@ export default function Dashboard() {
   const [machines, setMachines] = useState<any[]>([]);
   const [items, setItems] = useState<any[]>([]);
   const [companyName, setCompanyName] = useState("ESBLU");
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
     checkUser();
@@ -73,18 +74,18 @@ export default function Dashboard() {
     const next30Days = new Date();
     next30Days.setDate(today.getDate() + 30);
 
-    const alerts: any[] = [];
+    const result: any[] = [];
 
     vehicles.forEach((car) => {
-      checkDate(alerts, car, "STK", car.stk, today, next30Days);
-      checkDate(alerts, car, "EK", car.ek, today, next30Days);
+      checkDate(result, car, "STK", car.stk, today, next30Days);
+      checkDate(result, car, "EK", car.ek, today, next30Days);
     });
 
-    return alerts;
+    return result;
   }
 
   function checkDate(
-    alerts: any[],
+    result: any[],
     car: any,
     type: string,
     value: string | null,
@@ -98,66 +99,113 @@ export default function Dashboard() {
       (date.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
     );
 
-    const vehicleName = `${car.znacka || ""} ${car.model || ""}`.trim();
+    const name = `${car.znacka || ""} ${car.model || ""}`.trim();
     const spz = car.spz || "bez ŠPZ";
 
     if (date < today) {
-      alerts.push({
+      result.push({
         level: "red",
-        text: `${type} po termíne: ${vehicleName || "Vozidlo"} (${spz})`,
+        text: `${type} po termíne: ${name || "Vozidlo"} (${spz})`,
       });
     } else if (date <= next30Days) {
-      alerts.push({
+      result.push({
         level: "orange",
-        text: `${type} končí o ${diffDays} dní: ${
-          vehicleName || "Vozidlo"
-        } (${spz})`,
+        text: `${type} končí o ${diffDays} dní: ${name || "Vozidlo"} (${spz})`,
       });
     }
   }
 
   const alerts = createAlerts();
+  const query = search.toLowerCase().trim();
+
+  const searchResults = query
+    ? [
+        ...vehicles
+          .filter((v) =>
+            `${v.znacka} ${v.model} ${v.spz} ${v.vin}`
+              .toLowerCase()
+              .includes(query)
+          )
+          .map((v) => ({
+            type: "Vozidlo",
+            title: `${v.znacka || ""} ${v.model || ""}`.trim() || "Vozidlo",
+            subtitle: `${v.spz || "bez ŠPZ"} | ${v.vin || "bez VIN"}`,
+            href: `/vozidla/${v.id}`,
+          })),
+
+        ...machines
+          .filter((m) =>
+            `${m.name} ${m.category} ${m.manufacturer} ${m.model} ${m.serial_number}`
+              .toLowerCase()
+              .includes(query)
+          )
+          .map((m) => ({
+            type: "Stroj",
+            title: m.name || "Bez názvu",
+            subtitle: `${m.category || "bez kategórie"} | ${
+              m.serial_number || "bez sériového čísla"
+            }`,
+            href: `/stroje/${m.id}`,
+          })),
+
+        ...items
+          .filter((i) =>
+            `${i.name} ${i.category} ${i.location} ${i.notes}`
+              .toLowerCase()
+              .includes(query)
+          )
+          .map((i) => ({
+            type: "Sklad",
+            title: i.name || "Bez názvu",
+            subtitle: `${i.quantity || 0} ${i.unit || ""} | ${
+              i.location || "bez umiestnenia"
+            }`,
+            href: `/sklad/${i.id}`,
+          })),
+      ]
+    : [];
 
   const modules = [
     {
       title: "Vozidlá",
       subtitle: `${vehicles.length} uložených vozidiel`,
       href: "/vozidla",
-      image: "/images/van.png",
+      image: <VanImage />,
     },
     {
       title: "Stroje",
       subtitle: `${machines.length} uložených strojov`,
       href: "/stroje",
-      image: "/images/excavator.png",
+      image: <ExcavatorImage />,
     },
     {
       title: "Sklad",
       subtitle: `${items.length} skladových položiek`,
       href: "/sklad",
-      image: "/images/warehouse.png",
+      image: <WarehouseImage />,
     },
     {
       title: "Nastavenia",
       subtitle: "Nastavenia aplikácie",
       href: "/nastavenia",
-      image: "/images/settings.png",
+      image: <SettingsImage />,
     },
   ];
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-slate-50 text-slate-900">
-      <div className="absolute inset-0 bg-[linear-gradient(120deg,rgba(255,255,255,0.96),rgba(239,246,255,0.88))]" />
-
-      <div
-        className="absolute inset-0 bg-cover bg-center opacity-35"
-        style={{ backgroundImage: "url('/images/background.jpg')" }}
-      />
+    <main className="relative min-h-screen overflow-hidden bg-slate-100 text-slate-900">
+      <div className="absolute inset-0 bg-[linear-gradient(120deg,rgba(255,255,255,0.96),rgba(239,246,255,0.9))]" />
+      <div className="absolute bottom-0 left-72 h-80 w-[560px] opacity-20">
+        <ConstructionBackground />
+      </div>
+      <div className="absolute right-0 top-0 h-full w-[58%] opacity-35">
+        <FiberBackground />
+      </div>
 
       <div className="relative flex min-h-screen">
         <aside className="m-4 flex w-72 flex-col rounded-3xl bg-white/90 p-7 shadow-xl backdrop-blur">
           <div className="flex items-center gap-3">
-            <div className="grid h-12 w-12 place-items-center rounded-2xl bg-blue-600">
+            <div className="grid h-12 w-12 place-items-center rounded-2xl bg-blue-600 shadow">
               <div className="h-7 w-7 rotate-45 rounded-md border-4 border-white" />
             </div>
 
@@ -167,18 +215,18 @@ export default function Dashboard() {
           </div>
 
           <nav className="mt-12 space-y-3">
-            <SideLink active href="/" label="Menu" icon="▦" />
-            <SideLink href="/vozidla" label="Vozidlá" icon="▰" />
-            <SideLink href="/stroje" label="Stroje" icon="▱" />
-            <SideLink href="/sklad" label="Sklad" icon="▣" />
-            <SideLink href="/nastavenia" label="Nastavenia" icon="⚙" />
+            <SideLink active href="/" label="Menu" icon={<MenuIcon />} />
+            <SideLink href="/vozidla" label="Vozidlá" icon={<CarIcon />} />
+            <SideLink href="/stroje" label="Stroje" icon={<MachineIcon />} />
+            <SideLink href="/sklad" label="Sklad" icon={<WarehouseIcon />} />
+            <SideLink href="/nastavenia" label="Nastavenia" icon={<SettingsIcon />} />
           </nav>
 
           <button
             onClick={logout}
             className="mt-auto flex items-center gap-3 rounded-2xl px-4 py-3 text-left text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
           >
-            <span className="text-xl">↪</span>
+            <LogoutIcon />
             Odhlásiť sa
           </button>
         </aside>
@@ -199,22 +247,53 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <div className="mt-14 grid grid-cols-1 gap-8 md:grid-cols-2 xl:grid-cols-4">
+          <div className="mt-10 rounded-3xl bg-white/90 p-6 shadow-lg backdrop-blur">
+            <div className="flex items-center gap-4">
+              <SearchIcon />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Hľadať vozidlo, stroj alebo skladovú položku..."
+                className="w-full bg-transparent text-lg outline-none placeholder:text-slate-400"
+              />
+            </div>
+
+            {query && (
+              <div className="mt-5 space-y-3">
+                {searchResults.length === 0 ? (
+                  <p className="rounded-2xl bg-slate-50 p-4 text-slate-500">
+                    Nič sa nenašlo.
+                  </p>
+                ) : (
+                  searchResults.map((result, index) => (
+                    <Link
+                      key={index}
+                      href={result.href}
+                      className="block rounded-2xl border border-slate-100 bg-slate-50 p-4 transition hover:bg-white hover:shadow"
+                    >
+                      <p className="text-sm font-bold uppercase tracking-wide text-blue-600">
+                        {result.type}
+                      </p>
+                      <p className="mt-1 text-lg font-black text-slate-900">
+                        {result.title}
+                      </p>
+                      <p className="text-sm text-slate-500">{result.subtitle}</p>
+                    </Link>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="mt-10 grid grid-cols-1 gap-8 md:grid-cols-2 xl:grid-cols-4">
             {modules.map((module) => (
               <Link
                 key={module.href}
                 href={module.href}
                 className="group rounded-3xl bg-white/90 p-8 text-center shadow-lg transition duration-300 hover:-translate-y-1 hover:shadow-2xl"
               >
-                <div className="mx-auto flex h-40 items-center justify-center">
-                  <Image
-                    src={module.image}
-                    alt={module.title}
-                    width={180}
-                    height={130}
-                    className="h-auto w-auto object-contain transition duration-300 group-hover:scale-105"
-                    priority
-                  />
+                <div className="mx-auto flex h-40 items-center justify-center transition group-hover:scale-105">
+                  {module.image}
                 </div>
 
                 <h3 className="mt-7 text-3xl font-black text-slate-950">
@@ -269,7 +348,7 @@ export default function Dashboard() {
                         : "bg-orange-100 text-orange-800"
                     }`}
                   >
-                    {alert.level === "red" ? "🔴" : "🟠"} {alert.text}
+                    {alert.level === "red" ? "●" : "●"} {alert.text}
                   </div>
                 ))}
               </div>
@@ -289,7 +368,7 @@ function SideLink({
 }: {
   href: string;
   label: string;
-  icon: string;
+  icon: ReactNode;
   active?: boolean;
 }) {
   return (
@@ -301,8 +380,187 @@ function SideLink({
           : "text-slate-700 hover:bg-slate-100"
       }`}
     >
-      <span className="w-7 text-center text-xl">{icon}</span>
+      <span className={active ? "text-blue-600" : "text-slate-500"}>{icon}</span>
       {label}
     </Link>
+  );
+}
+
+function IconBase({ children }: { children: ReactNode }) {
+  return (
+    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      {children}
+    </svg>
+  );
+}
+
+function MenuIcon() {
+  return (
+    <IconBase>
+      <rect x="3" y="3" width="7" height="7" rx="1" />
+      <rect x="14" y="3" width="7" height="7" rx="1" />
+      <rect x="3" y="14" width="7" height="7" rx="1" />
+      <rect x="14" y="14" width="7" height="7" rx="1" />
+    </IconBase>
+  );
+}
+
+function CarIcon() {
+  return (
+    <IconBase>
+      <path d="M5 17h14" />
+      <path d="M6 17v-5l2-5h8l2 5v5" />
+      <circle cx="8" cy="17" r="2" />
+      <circle cx="16" cy="17" r="2" />
+    </IconBase>
+  );
+}
+
+function MachineIcon() {
+  return (
+    <IconBase>
+      <path d="M4 17h13" />
+      <path d="M8 17V7l4-2 3 5" />
+      <path d="M15 10l4 3-2 4" />
+      <circle cx="6" cy="17" r="2" />
+      <circle cx="14" cy="17" r="2" />
+    </IconBase>
+  );
+}
+
+function WarehouseIcon() {
+  return (
+    <IconBase>
+      <path d="M3 10l9-6 9 6" />
+      <path d="M5 10v10h14V10" />
+      <path d="M9 20v-6h6v6" />
+    </IconBase>
+  );
+}
+
+function SettingsIcon() {
+  return (
+    <IconBase>
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a8 8 0 0 0 .1-6l-2.1-.5-1-2-2 .7a8 8 0 0 0-5 0l-2-.7-1 2-2.1.5a8 8 0 0 0 .1 6l2.1.5 1 2 2-.7a8 8 0 0 0 5 0l2 .7 1-2Z" />
+    </IconBase>
+  );
+}
+
+function LogoutIcon() {
+  return (
+    <IconBase>
+      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+      <path d="M16 17l5-5-5-5" />
+      <path d="M21 12H9" />
+    </IconBase>
+  );
+}
+
+function SearchIcon() {
+  return (
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="11" cy="11" r="7" />
+      <path d="M21 21l-4.3-4.3" />
+    </svg>
+  );
+}
+
+function VanImage() {
+  return (
+    <svg viewBox="0 0 260 170" className="h-40 w-56">
+      <ellipse cx="130" cy="142" rx="92" ry="13" fill="#dbe4ef" />
+      <rect x="42" y="68" width="145" height="52" rx="8" fill="#f8fafc" stroke="#94a3b8" strokeWidth="3" />
+      <path d="M78 68h77l28 28v24H78z" fill="#eef2f7" />
+      <path d="M158 68l27 28h-27z" fill="#cbd5e1" />
+      <rect x="88" y="77" width="42" height="24" rx="3" fill="#cbd5e1" />
+      <rect x="137" y="77" width="28" height="24" rx="3" fill="#cbd5e1" />
+      <rect x="48" y="105" width="140" height="14" rx="4" fill="#e2e8f0" />
+      <rect x="52" y="118" width="136" height="6" rx="3" fill="#64748b" />
+      <circle cx="78" cy="126" r="15" fill="#1f2937" />
+      <circle cx="158" cy="126" r="15" fill="#1f2937" />
+      <circle cx="78" cy="126" r="6" fill="#cbd5e1" />
+      <circle cx="158" cy="126" r="6" fill="#cbd5e1" />
+    </svg>
+  );
+}
+
+function ExcavatorImage() {
+  return (
+    <svg viewBox="0 0 260 170" className="h-40 w-56">
+      <ellipse cx="132" cy="143" rx="92" ry="13" fill="#dbe4ef" />
+      <rect x="73" y="109" width="125" height="18" rx="9" fill="#334155" />
+      <circle cx="95" cy="118" r="5" fill="#94a3b8" />
+      <circle cx="126" cy="118" r="5" fill="#94a3b8" />
+      <circle cx="158" cy="118" r="5" fill="#94a3b8" />
+      <rect x="88" y="78" width="78" height="32" rx="7" fill="#f59e0b" stroke="#92400e" strokeWidth="2" />
+      <rect x="137" y="54" width="40" height="38" rx="6" fill="#475569" />
+      <rect x="145" y="61" width="20" height="18" rx="3" fill="#cbd5e1" />
+      <path d="M100 80 L70 47" stroke="#f59e0b" strokeWidth="11" strokeLinecap="round" />
+      <path d="M70 47 L45 82" stroke="#f59e0b" strokeWidth="11" strokeLinecap="round" />
+      <path d="M45 82 L65 96" stroke="#334155" strokeWidth="9" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function WarehouseImage() {
+  return (
+    <svg viewBox="0 0 260 170" className="h-40 w-56">
+      <ellipse cx="130" cy="143" rx="92" ry="13" fill="#dbe4ef" />
+      <rect x="58" y="43" width="116" height="86" rx="5" fill="#334155" />
+      <rect x="69" y="55" width="32" height="25" rx="3" fill="#cbd5e1" />
+      <rect x="112" y="55" width="32" height="25" rx="3" fill="#cbd5e1" />
+      <rect x="69" y="91" width="32" height="25" rx="3" fill="#cbd5e1" />
+      <rect x="112" y="91" width="32" height="25" rx="3" fill="#cbd5e1" />
+      <rect x="153" y="90" width="48" height="38" rx="4" fill="#d97706" />
+      <rect x="162" y="63" width="42" height="32" rx="4" fill="#f59e0b" />
+    </svg>
+  );
+}
+
+function SettingsImage() {
+  return (
+    <svg viewBox="0 0 260 170" className="h-40 w-56">
+      <ellipse cx="130" cy="143" rx="82" ry="13" fill="#dbe4ef" />
+      <circle cx="130" cy="82" r="42" fill="#475569" />
+      <circle cx="130" cy="82" r="18" fill="#f8fafc" />
+      <rect x="123" y="12" width="14" height="28" rx="4" fill="#475569" />
+      <rect x="123" y="124" width="14" height="28" rx="4" fill="#475569" />
+      <rect x="60" y="75" width="28" height="14" rx="4" fill="#475569" />
+      <rect x="172" y="75" width="28" height="14" rx="4" fill="#475569" />
+    </svg>
+  );
+}
+
+function ConstructionBackground() {
+  return (
+    <svg viewBox="0 0 600 300" className="h-full w-full">
+      <path d="M40 270h500" stroke="#64748b" strokeWidth="4" />
+      <rect x="110" y="150" width="180" height="120" fill="#94a3b8" />
+      <path d="M80 120h250" stroke="#64748b" strokeWidth="5" />
+      <path d="M160 120v150" stroke="#64748b" strokeWidth="5" />
+      <path d="M160 120l-40 150" stroke="#64748b" strokeWidth="3" />
+      <path d="M160 120l45 150" stroke="#64748b" strokeWidth="3" />
+      <rect x="320" y="90" width="170" height="12" fill="#64748b" />
+    </svg>
+  );
+}
+
+function FiberBackground() {
+  return (
+    <svg viewBox="0 0 800 900" className="h-full w-full">
+      {Array.from({ length: 26 }).map((_, i) => (
+        <path
+          key={i}
+          d={`M780 ${60 + i * 28} C 520 ${160 + i * 8}, 480 ${
+            430 + i * 4
+          }, 120 ${850 - i * 10}`}
+          fill="none"
+          stroke="#3b82f6"
+          strokeWidth="2"
+          opacity="0.18"
+        />
+      ))}
+    </svg>
   );
 }
