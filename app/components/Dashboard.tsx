@@ -68,6 +68,56 @@ export default function Dashboard() {
     }
   }
 
+  function createAlerts() {
+    const today = new Date();
+    const next30Days = new Date();
+    next30Days.setDate(today.getDate() + 30);
+
+    const alerts: any[] = [];
+
+    vehicles.forEach((car) => {
+      checkDate(alerts, car, "STK", car.stk, today, next30Days);
+      checkDate(alerts, car, "EK", car.ek, today, next30Days);
+    });
+
+    return alerts;
+  }
+
+  function checkDate(
+    alerts: any[],
+    car: any,
+    type: string,
+    value: string | null,
+    today: Date,
+    next30Days: Date
+  ) {
+    if (!value) return;
+
+    const date = new Date(value);
+    const diffDays = Math.ceil(
+      (date.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+    );
+
+    const vehicleName = `${car.znacka || ""} ${car.model || ""}`.trim();
+    const spz = car.spz || "bez ŠPZ";
+
+    if (date < today) {
+      alerts.push({
+        level: "red",
+        text: `${type} po termíne: ${vehicleName || "Vozidlo"} (${spz})`,
+      });
+    } else if (date <= next30Days) {
+      alerts.push({
+        level: "orange",
+        text: `${type} končí o ${diffDays} dní: ${
+          vehicleName || "Vozidlo"
+        } (${spz})`,
+      });
+    }
+  }
+
+  const alerts = createAlerts();
+
   const modules = [
     {
       title: "Vozidlá",
@@ -162,7 +212,7 @@ export default function Dashboard() {
                     alt={module.title}
                     width={180}
                     height={130}
-                    className="object-contain transition duration-300 group-hover:scale-105"
+                    className="h-auto w-auto object-contain transition duration-300 group-hover:scale-105"
                     priority
                   />
                 </div>
@@ -180,6 +230,50 @@ export default function Dashboard() {
                 </p>
               </Link>
             ))}
+          </div>
+
+          <div className="mt-10 rounded-3xl bg-white/90 p-8 shadow-lg backdrop-blur">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-3xl font-black text-slate-950">
+                  Upozornenia STK / EK
+                </h3>
+                <p className="mt-2 text-slate-500">
+                  Automatická kontrola platnosti technických a emisných kontrol.
+                </p>
+              </div>
+
+              <div
+                className={`flex h-14 w-14 items-center justify-center rounded-2xl text-2xl font-black ${
+                  alerts.length > 0
+                    ? "bg-red-100 text-red-700"
+                    : "bg-green-100 text-green-700"
+                }`}
+              >
+                {alerts.length}
+              </div>
+            </div>
+
+            {alerts.length === 0 ? (
+              <div className="mt-6 rounded-2xl bg-green-50 p-5 text-green-800">
+                Momentálne nemáte žiadne upozornenia na STK ani EK.
+              </div>
+            ) : (
+              <div className="mt-6 grid gap-4">
+                {alerts.map((alert, index) => (
+                  <div
+                    key={index}
+                    className={`rounded-2xl p-5 font-semibold ${
+                      alert.level === "red"
+                        ? "bg-red-100 text-red-800"
+                        : "bg-orange-100 text-orange-800"
+                    }`}
+                  >
+                    {alert.level === "red" ? "🔴" : "🟠"} {alert.text}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </section>
       </div>
