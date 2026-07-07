@@ -235,12 +235,13 @@ export default function Dashboard() {
         <section className="w-full flex-1 px-4 pb-24 pt-6 lg:px-10 lg:py-16">
           <div className="flex items-start justify-between">
             <div>
-              <h2 className="text-5xl font-black tracking-tight text-slate-950">
-                Menu
-              </h2>
-              <p className="mt-3 text-xl text-slate-600">
-                Prehľad firemnej evidencie, techniky a skladu.
-              </p>
+              <p className="text-sm font-semibold text-slate-500 lg:text-base">
+  👤 Jaroslav Juriš
+</p>
+
+<h2 className="mt-1 text-3xl font-black tracking-tight text-slate-950 lg:text-5xl">
+  Dobrý večer 👋
+</h2>
             </div>
 
           
