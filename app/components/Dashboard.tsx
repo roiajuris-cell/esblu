@@ -203,8 +203,8 @@ export default function Dashboard() {
   }}
 />
 
-      <div className="relative flex min-h-screen">
-        <aside className="m-4 flex w-80 flex-col rounded-3xl bg-white/90 px-10 py-7 shadow-xl backdrop-blur">
+      <div className="relative flex min-h-screen flex-col lg:flex-row">
+        <aside className="hidden lg:flex m-4 w-80 flex-col rounded-3xl bg-white/90 px-10 py-7 shadow-xl backdrop-blur">
           <div className="flex items-center gap-3">
             <div className="grid h-12 w-12 place-items-center rounded-2xl bg-blue-600 shadow">
               <div className="h-7 w-7 rotate-45 rounded-md border-4 border-white" />
@@ -232,7 +232,7 @@ export default function Dashboard() {
           </button>
         </aside>
 
-        <section className="flex-1 px-10 py-16">
+        <section className="w-full flex-1 px-4 pb-24 pt-6 lg:px-10 lg:py-16">
           <div className="flex items-start justify-between">
             <div>
               <h2 className="text-5xl font-black tracking-tight text-slate-950">
