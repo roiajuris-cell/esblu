@@ -216,11 +216,11 @@ export default function Dashboard() {
           </div>
 
           <nav className="mt-12 space-y-3">
-            <SideLink active href="/" label="Menu" icon={<MenuIcon />} />
-            <SideLink href="/vozidla" label="Vozidlá" icon={<CarIcon />} />
-            <SideLink href="/stroje" label="Stroje" icon={<MachineIcon />} />
-            <SideLink href="/sklad" label="Sklad" icon={<WarehouseIcon />} />
-            <SideLink href="/nastavenia" label="Nastavenia" icon={<SettingsIcon />} />
+            <SideLink active href="/" label="Menu" image="/images/van.png" />
+            <SideLink href="/vozidla" label="Vozidlá" image="/images/van.png" />
+            <SideLink href="/stroje" label="Stroje" image="/images/excavator.png" />
+            <SideLink href="/sklad" label="Sklad" image="/images/warehouse.png" />
+            <SideLink href="/nastavenia" label="Nastavenia" image="/images/settings.png" />
           </nav>
 
           <button
@@ -286,12 +286,12 @@ export default function Dashboard() {
             )}
           </div>
 
-          <div className="mt-10 grid grid-cols-1 gap-8 md:grid-cols-2 xl:grid-cols-4">
+          <div className="mt-10 grid grid-cols-1 gap-6 md:grid-cols-2 2xl:grid-cols-4">
             {modules.map((module) => (
               <Link
                 key={module.href}
                 href={module.href}
-                className="group rounded-3xl bg-white/90 p-8 text-center shadow-lg transition duration-300 hover:-translate-y-1 hover:shadow-2xl"
+                className="group min-w-0 rounded-3xl bg-white/90 p-6 text-center shadow-lg transition duration-300 hover:-translate-y-1 hover:shadow-2xl"
               >
                 <div className="mx-auto flex h-40 items-center justify-center transition group-hover:scale-105">
   <Image
@@ -299,7 +299,7 @@ export default function Dashboard() {
     alt={module.title}
     width={180}
     height={130}
-    className="h-auto w-auto object-contain"
+    className="h-32 w-44 object-contain"
   />
 </div>
 
@@ -370,24 +370,33 @@ export default function Dashboard() {
 function SideLink({
   href,
   label,
-  icon,
+  image,
   active = false,
 }: {
   href: string;
   label: string;
-  icon: ReactNode;
+  image: string;
   active?: boolean;
 }) {
   return (
     <Link
       href={href}
-      className={`flex items-center gap-4 rounded-2xl px-4 py-4 text-lg font-semibold transition ${
+      className={`flex items-center gap-4 rounded-2xl px-4 py-3 text-lg font-semibold transition ${
         active
           ? "bg-blue-50 text-blue-600 shadow-sm"
           : "text-slate-700 hover:bg-slate-100"
       }`}
     >
-      <span className={active ? "text-blue-600" : "text-slate-500"}>{icon}</span>
+      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white shadow-sm">
+        <Image
+          src={image}
+          alt={label}
+          width={34}
+          height={34}
+          className="h-8 w-8 object-contain"
+        />
+      </div>
+
       {label}
     </Link>
   );
