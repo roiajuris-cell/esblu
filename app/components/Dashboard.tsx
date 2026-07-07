@@ -369,7 +369,12 @@ export default function Dashboard() {
               </div>
             )}
           </div>
-        </section>
+        </section> <button
+  onClick={logout}
+  className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-white/90 px-4 py-4 text-base font-bold text-red-600 shadow-lg backdrop-blur lg:hidden"
+>
+  🚪 Odhlásiť sa
+</button>
       </div>
     </main>
   );
