@@ -284,12 +284,12 @@ export default function Dashboard() {
             )}
           </div>
 
-          <div className="mt-10 grid grid-cols-1 gap-6 md:grid-cols-2 2xl:grid-cols-4">
+          <div className="mt-8 grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
             {modules.map((module) => (
               <Link
                 key={module.href}
                 href={module.href}
-                className="group min-w-0 rounded-3xl bg-white/90 p-6 text-center shadow-lg transition duration-300 hover:-translate-y-1 hover:shadow-2xl"
+                className="group min-w-0 rounded-3xl bg-white/90 p-5 text-center shadow-lg transition duration-300 hover:-translate-y-1 hover:shadow-2xl sm:p-6"
               >
                 <div className="mx-auto flex h-40 items-center justify-center transition group-hover:scale-105">
   <Image
@@ -297,8 +297,7 @@ export default function Dashboard() {
     alt={module.title}
     width={180}
     height={130}
-    className="h-32 w-44 object-contain"
-  />
+   className="h-28 w-40 object-contain sm:h-32 sm:w-44"  />
 </div>
 
                 <h3 className="mt-7 text-3xl font-black text-slate-950">
