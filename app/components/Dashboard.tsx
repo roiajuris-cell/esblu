@@ -196,12 +196,12 @@ export default function Dashboard() {
   return (
     <main className="relative min-h-screen overflow-hidden bg-slate-100 text-slate-900">
       <div className="absolute inset-0 bg-[linear-gradient(120deg,rgba(255,255,255,0.96),rgba(239,246,255,0.9))]" />
-      <div className="absolute bottom-0 left-72 h-80 w-[560px] opacity-20">
-        <ConstructionBackground />
-      </div>
-      <div className="absolute right-0 top-0 h-full w-[58%] opacity-35">
-        <FiberBackground />
-      </div>
+      <div
+  className="absolute inset-0 bg-cover bg-center opacity-20"
+  style={{
+    backgroundImage: "url('/images/background.png')",
+  }}
+/>
 
       <div className="relative flex min-h-screen">
         <aside className="m-4 flex w-72 flex-col rounded-3xl bg-white/90 p-7 shadow-xl backdrop-blur">
