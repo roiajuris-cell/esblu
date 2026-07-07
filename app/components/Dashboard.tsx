@@ -236,7 +236,7 @@ export default function Dashboard() {
           <div className="flex items-start justify-between">
             <div>
               <p className="text-sm font-semibold text-slate-500 lg:text-base">
-  👤 Jaroslav Juriš
+  👤 {companyName}
 </p>
 
 <h2 className="mt-1 text-3xl font-black tracking-tight text-slate-950 lg:text-5xl">
