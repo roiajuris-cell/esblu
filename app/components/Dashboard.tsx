@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
+import Image from "next/image"
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
@@ -170,25 +171,25 @@ export default function Dashboard() {
       title: "Vozidlá",
       subtitle: `${vehicles.length} uložených vozidiel`,
       href: "/vozidla",
-      image: <VanImage />,
+      image: "/images/van.png",
     },
     {
       title: "Stroje",
       subtitle: `${machines.length} uložených strojov`,
       href: "/stroje",
-      image: <ExcavatorImage />,
+      image: "/images/excavator.png",
     },
     {
       title: "Sklad",
       subtitle: `${items.length} skladových položiek`,
       href: "/sklad",
-      image: <WarehouseImage />,
+      image: "/images/warehouse.png",
     },
     {
       title: "Nastavenia",
       subtitle: "Nastavenia aplikácie",
       href: "/nastavenia",
-      image: <SettingsImage />,
+      image: "/images/settings.png",
     },
   ];
 
@@ -293,8 +294,14 @@ export default function Dashboard() {
                 className="group rounded-3xl bg-white/90 p-8 text-center shadow-lg transition duration-300 hover:-translate-y-1 hover:shadow-2xl"
               >
                 <div className="mx-auto flex h-40 items-center justify-center transition group-hover:scale-105">
-                  {module.image}
-                </div>
+  <Image
+    src={module.image}
+    alt={module.title}
+    width={180}
+    height={130}
+    className="h-auto w-auto object-contain"
+  />
+</div>
 
                 <h3 className="mt-7 text-3xl font-black text-slate-950">
                   {module.title}
