@@ -177,14 +177,20 @@ export default function Dashboard() {
     : [];
 
   const modules = [
-    {
-      title: "Vozidlá",
-      subtitle: `${vehicles.length} uložených vozidiel`,
-      href: "/vozidla",
-      image: "/images/van.png",
-    },
-    {
-      title: "Stroje",
+  {
+    title: "AI Evidencia",
+    subtitle: "Inteligentné spracovanie dokumentov",
+    href: "/ai-evidencia",
+    image: "/images/ai-evidencia.png",
+  },
+  {
+    title: "Vozidlá",
+    subtitle: `${vehicles.length} uložených vozidiel`,
+    href: "/vozidla",
+    image: "/images/van.png",
+  },
+  {
+    title: "Stroje",
       subtitle: `${machines.length} uložených strojov`,
       href: "/stroje",
       image: "/images/excavator.png",
