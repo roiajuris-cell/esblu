@@ -76,9 +76,26 @@ export default function AiEvidenciaPage() {
       if (!session) {
         throw new Error("Nie si prihlásený.");
       }
+let vehicleId = null;
 
+if (result.spz) {
+  const cleanSpz = result.spz.replace(/\s+/g, "").toLowerCase();
+
+  const { data: vehicles } = await supabase
+    .from("vehicles")
+    .select("id, spz")
+    .eq("user_id", session.user.id);
+
+  const matchedVehicle = vehicles?.find(
+    (vehicle) =>
+      vehicle.spz?.replace(/\s+/g, "").toLowerCase() === cleanSpz
+  );
+
+  vehicleId = matchedVehicle?.id || null;
+}
       const { error } = await supabase.from("ai_evidence").insert({
         user_id: session.user.id,
+        vehicle_id: vehicleId,
         spz: result.spz || null,
         document_type: result.documentType || null,
         movement_type: result.movementType || null,
@@ -106,6 +123,22 @@ export default function AiEvidenciaPage() {
       setIsSaving(false);
     }
   }
+  async function deleteRecord(id: string) {
+  if (!confirm("Naozaj chceš vymazať tento záznam?")) return;
+
+  const { error } = await supabase
+    .from("ai_evidence")
+    .delete()
+    .eq("id", id);
+
+  if (error) {
+    alert("Vymazanie zlyhalo.");
+    return;
+  }
+
+  setSelectedRecord(null);
+  loadRecords();
+}
 async function loadRecords() {
   const {
     data: { session },
@@ -303,7 +336,12 @@ async function loadRecords() {
       >
         Zavrieť
       </button>
-
+<button
+  onClick={() => deleteRecord(selectedRecord.id)}
+  className="mt-3 w-full rounded-2xl bg-red-600 py-4 font-bold text-white"
+>
+  🗑 Vymazať záznam
+</button>
     </div>
   </div>
 )}
