@@ -18,6 +18,19 @@ export default function AiEvidenciaPage() {
   const [error, setError] = useState("");
   const [records, setRecords] = useState<any[]>([]);
   const [selectedRecord, setSelectedRecord] = useState<any>(null);
+  const [selectedSpz, setSelectedSpz] = useState<string | null>(null);
+
+const groupedRecords = records.reduce((groups: any, record: any) => {
+  const spz = record.spz?.trim().toUpperCase() || "BEZ ŠPZ";
+
+  if (!groups[spz]) {
+    groups[spz] = [];
+  }
+
+  groups[spz].push(record);
+
+  return groups;
+}, {});
   async function handleFile(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -252,53 +265,106 @@ async function loadRecords() {
     </h2>
 
     <div className="mt-5 space-y-3">
-      {records.map((record) => (
-  <div
-    key={record.id}
-    className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"
-  >
-    <div className="flex items-start justify-between gap-4">
-      <div>
-        <p className="text-xs font-black uppercase tracking-wide text-blue-600">
-          📄 {record.document_type || "Doklad"}
-        </p>
+      {!selectedSpz &&
+  Object.entries(groupedRecords).map(([spz, items]: any) => (
+    <div
+      key={spz}
+      className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"
+    >
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <p className="text-xs font-black uppercase tracking-wide text-blue-600">
+            🚛 Vozidlo
+          </p>
 
-        <h3 className="mt-2 text-xl font-black text-slate-950">
-          {record.spz || "Bez ŠPZ"}
-        </h3>
+          <h3 className="mt-2 text-2xl font-black text-slate-950">
+            {spz}
+          </h3>
+
+          <p className="mt-1 text-sm text-slate-600">
+            {items.length} {items.length === 1 ? "doklad" : "dokladov"}
+          </p>
+        </div>
+
+        <button
+          onClick={() => setSelectedSpz(spz)}
+          className="rounded-2xl bg-blue-600 px-4 py-3 font-bold text-white"
+        >
+          Otvoriť
+        </button>
       </div>
-
-      <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">
-        {record.movement_type || "nezaradené"}
-      </span>
     </div>
+  ))}
 
-    <div className="mt-4 space-y-2 text-sm text-slate-600">
-      <p>🏗️ {record.construction_site || "Bez stavby"}</p>
-      <p>🏢 {record.supplier || "Bez dodávateľa"}</p>
-      <p>👤 {record.customer || "Bez zákazníka"}</p>
-      <p>📦 {record.material || "Bez materiálu"}</p>
-      <p>⚖️ {record.netto ? `${record.netto} t` : "Bez hmotnosti"}</p>
-      <p>
-        📅 {record.document_date || "Bez dátumu"}{" "}
-        {record.document_time || ""}
-      </p>
-    </div>
-
+{selectedSpz && (
+  <>
     <button
-  onClick={() => setSelectedRecord(record)}
-  className="mt-5 w-full rounded-2xl bg-blue-600 px-4 py-3 font-bold text-white hover:bg-blue-700"
->
-  📄 Otvoriť detail
-</button>
-  </div>
-))}
+      onClick={() => setSelectedSpz(null)}
+      className="mb-4 rounded-2xl bg-slate-200 px-4 py-3 font-bold text-slate-700"
+    >
+      ← Späť na všetky ŠPZ
+    </button>
+
+    <h3 className="mb-4 text-2xl font-black text-slate-950">
+      🚛 {selectedSpz}
+    </h3>
+
+    <div className="space-y-3">
+      {groupedRecords[selectedSpz]?.map((record: any) => (
+        <div
+          key={record.id}
+          className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"
+        >
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-xs font-black uppercase tracking-wide text-blue-600">
+                📄 {record.document_type || "Doklad"}
+              </p>
+
+              <h3 className="mt-2 text-xl font-black text-slate-950">
+                {record.spz || "Bez ŠPZ"}
+              </h3>
+            </div>
+
+            <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">
+              {record.movement_type || "nezaradené"}
+            </span>
+          </div>
+
+          <div className="mt-4 space-y-2 text-sm text-slate-600">
+            <p>🏗️ {record.construction_site || "Bez stavby"}</p>
+            <p>🏢 {record.supplier || "Bez dodávateľa"}</p>
+            <p>👤 {record.customer || "Bez zákazníka"}</p>
+            <p>📦 {record.material || "Bez materiálu"}</p>
+            <p>
+              ⚖️{" "}
+              {record.netto
+                ? `${record.netto} ${record.unit || "t"}`
+                : "Bez hmotnosti"}
+            </p>
+            <p>
+              📅 {record.document_date || "Bez dátumu"}{" "}
+              {record.document_time || ""}
+            </p>
+          </div>
+
+          <button
+            onClick={() => setSelectedRecord(record)}
+            className="mt-5 w-full rounded-2xl bg-blue-600 px-4 py-3 font-bold text-white hover:bg-blue-700"
+          >
+            📄 Otvoriť detail
+          </button>
+        </div>
+      ))}
+    </div>
+  </>
+)}
     </div>
   </div>
 )}
 {selectedRecord && (
-  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-    <div className="w-full max-w-2xl rounded-3xl bg-white p-8 shadow-2xl">
+  <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-3 sm:items-center sm:p-4">
+    <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white p-5 shadow-2xl sm:p-8">
 
       <div className="flex items-center justify-between">
         <h2 className="text-3xl font-black">
