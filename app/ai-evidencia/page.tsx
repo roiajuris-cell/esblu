@@ -180,24 +180,40 @@ async function loadRecords() {
           Odfotíš dokument a aplikácia rozpozná údaje.
         </p>
 
-        <label className="mt-10 flex cursor-pointer flex-col items-center justify-center rounded-3xl border-2 border-dashed border-blue-300 bg-blue-50 p-10 text-center hover:bg-blue-100">
-          <span className="text-5xl">📷</span>
-          <span className="mt-4 text-2xl font-black text-blue-700">
-  PRIDAŤ DOKUMENT
-</span>
+        <div className="mt-10 rounded-3xl border-2 border-dashed border-blue-300 bg-blue-50 p-6 text-center">
+  <span className="text-5xl">📄</span>
 
-<span className="mt-2 text-sm text-slate-500">
-  Odfotiť alebo vybrať zo zariadenia
-</span>
+  <h2 className="mt-4 text-2xl font-black text-blue-700">
+    PRIDAŤ DOKUMENT
+  </h2>
 
-          <input
-            type="file"
-            accept="image/*"
-            capture="environment"
-            className="hidden"
-            onChange={handleFile}
-          />
-        </label>
+  <p className="mt-2 text-sm text-slate-500">
+    Odfotiť nový doklad alebo vybrať fotku zo zariadenia
+  </p>
+
+  <div className="mt-6 grid grid-cols-2 gap-3">
+    <label className="cursor-pointer rounded-2xl bg-blue-600 px-4 py-4 font-bold text-white">
+      📷 Odfotiť
+      <input
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={handleFile}
+      />
+    </label>
+
+    <label className="cursor-pointer rounded-2xl bg-white px-4 py-4 font-bold text-blue-700 shadow">
+      🖼️ Galéria
+      <input
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleFile}
+      />
+    </label>
+  </div>
+</div>
 
         {fileName && (
           <div className="mt-8 rounded-2xl bg-slate-50 p-5">
