@@ -149,7 +149,14 @@ export default function SkladPage() {
 
   return (
     <main className="min-h-screen bg-slate-100 p-10">
-      <h1 className="text-4xl font-bold">📦 Sklad</h1>
+      <div className="flex items-center gap-4">
+  <img
+    src="/images/warehouse.png"
+    alt="Sklad"
+    className="h-20 w-20 object-contain"
+  />
+  <h1 className="text-4xl font-bold">Sklad</h1>
+</div>
 
       <p className="mt-4 text-slate-600">
         Evidencia náradia, materiálu a skladových zásob.

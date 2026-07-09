@@ -174,11 +174,17 @@ async function loadRecords() {
   return (
     <main className="min-h-screen bg-slate-100 p-6 lg:p-10">
       <div className="mx-auto max-w-3xl rounded-3xl bg-white p-8 shadow-xl">
-        <h1 className="text-4xl font-black text-slate-950">🤖 AI EVIDENCIA</h1>
+        <div className="flex items-center gap-4">
+  <img
+    src="/images/ai-evidencia.png"
+    alt="AI Evidencia"
+    className="h-16 w-16 object-contain"
+  />
+  <h1 className="text-4xl font-black text-slate-950">
+    AI EVIDENCIA
+  </h1>
+</div>
 
-        <p className="mt-3 text-slate-600">
-          Odfotíš dokument a aplikácia rozpozná údaje.
-        </p>
 
         <div className="mt-10 rounded-3xl border-2 border-dashed border-blue-300 bg-blue-50 p-6 text-center">
   <span className="text-5xl">📄</span>

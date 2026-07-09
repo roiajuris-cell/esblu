@@ -74,7 +74,14 @@ export default function NastaveniaPage() {
 
   return (
     <main className="min-h-screen bg-slate-100 p-10">
-      <h1 className="text-4xl font-bold">⚙️ Nastavenia</h1>
+      <div className="flex items-center gap-4">
+  <img
+    src="/images/settings.png"
+    alt="Nastavenia"
+    className="h-20 w-20 object-contain"
+  />
+  <h1 className="text-4xl font-bold">Nastavenia</h1>
+</div>
 
       <div className="mt-8 max-w-2xl rounded-2xl bg-white p-8 shadow">
         <h2 className="text-2xl font-bold">Firma</h2>
