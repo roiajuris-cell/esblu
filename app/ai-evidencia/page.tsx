@@ -188,7 +188,7 @@ async function loadRecords() {
   </h2>
 
   <p className="mt-2 text-sm text-slate-500">
-    Odfotiť nový doklad alebo vybrať fotku zo zariadenia
+    Odfotiť dokument alebo vybrať obrázok zo zariadenia
   </p>
 
   <div className="mt-6 grid grid-cols-2 gap-3">
