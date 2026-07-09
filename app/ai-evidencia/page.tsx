@@ -183,16 +183,16 @@ async function loadRecords() {
         <label className="mt-10 flex cursor-pointer flex-col items-center justify-center rounded-3xl border-2 border-dashed border-blue-300 bg-blue-50 p-10 text-center hover:bg-blue-100">
           <span className="text-5xl">📷</span>
           <span className="mt-4 text-2xl font-black text-blue-700">
-            ODFOTIŤ DOKUMENT
-          </span>
-          <span className="mt-2 text-sm text-slate-500">
-            Dodací list, vážny lístok, faktúra alebo iný doklad
-          </span>
+  PRIDAŤ DOKUMENT
+</span>
+
+<span className="mt-2 text-sm text-slate-500">
+  Odfotiť alebo vybrať zo zariadenia
+</span>
 
           <input
             type="file"
             accept="image/*"
-            capture="environment"
             className="hidden"
             onChange={handleFile}
           />
