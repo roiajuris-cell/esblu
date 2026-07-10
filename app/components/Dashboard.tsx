@@ -310,13 +310,13 @@ export default function Dashboard() {
   module.title === "Nastavenia" ? "col-span-2 h-32" : "h-44"
 }`}
               >
-                <div className="mx-auto flex h-14 items-center justify-center transition group-hover:scale-105 lg:h-32">
+                <div className="mx-auto flex h-24 items-center justify-center transition group-hover:scale-105 lg:h-32">
   <Image
     src={module.image}
     alt={module.title}
      width={220}
      height={150}
-     className="h-12 w-16 object-contain lg:h-32 lg:w-44" />
+     className="h-20 w-28 object-contain sm:h-24 sm:w-32 lg:h-32 lg:w-44" />
 </div>
                 <h3 className="mt-2 text-base font-bold text-slate-900 lg:mt-5 lg:text-3xl">
                   {module.title}
