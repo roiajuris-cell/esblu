@@ -228,11 +228,11 @@ export default function VozidlaPage() {
     alt="Vozidlá"
     className="h-20 w-20 object-contain"
   />
-  <h1 className="text-4xl font-bold">Vozidlá</h1>
+  <h1 className="text-4xl font-bold text-white drop-shadow-lg">Vozidlá</h1>
 </div>
 
-      <p className="mt-4 text-slate-600">
-        Tu bude evidencia firemných vozidiel.
+      <p className="mt-4 text-white/80">
+        Evidencia firemných vozidiel.
       </p>
 
       <div className="mt-8">
