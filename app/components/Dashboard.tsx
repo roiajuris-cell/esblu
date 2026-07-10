@@ -226,7 +226,7 @@ export default function Dashboard() {
               <div className="h-7 w-7 rotate-45 rounded-md border-4 border-white" />
             </div>
 
-            <h1 className="text-4xl font-black tracking-tight text-slate-950">
+            <h1 className="text-4xl font-black tracking-tight text-white drop-shadow-lg">
               {companyName}
             </h1>
           </div>
@@ -251,11 +251,11 @@ export default function Dashboard() {
         <section className="w-full flex-1 px-4 pb-24 pt-6 lg:px-10 lg:py-16">
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-sm font-semibold text-slate-500 lg:text-base">
+              <p className="text-sm font-semibold text-white/80 drop-shadow lg:text-base">
   👤 {companyName}
 </p>
 
-<h2 className="mt-1 text-3xl font-black tracking-tight text-slate-950 lg:text-5xl">
+<h2 className="mt-1 text-3xl font-black tracking-tight text-white drop-shadow-lg lg:text-5xl">
   {greeting}
 </h2>
             </div>
