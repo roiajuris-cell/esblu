@@ -172,15 +172,18 @@ async function loadRecords() {
   loadRecords();
 }, []);
   return (
-    <main className="min-h-screen bg-slate-100 p-6 lg:p-10">
-      <div className="mx-auto max-w-3xl rounded-3xl bg-white p-8 shadow-xl">
+    <main
+  className="min-h-screen bg-cover bg-center bg-fixed p-4 sm:p-6 lg:p-10"
+  style={{ backgroundImage: "url('/images/background-dark.png')" }}
+>
+      <div className="mx-auto max-w-3xl">
         <div className="flex items-center gap-4">
   <img
     src="/images/ai-evidencia.png"
     alt="AI Evidencia"
     className="h-16 w-16 object-contain"
   />
-  <h1 className="text-4xl font-black text-slate-950">
+  <h1 className="text-4xl font-bold text-white drop-shadow-lg">
     AI EVIDENCIA
   </h1>
 </div>
@@ -189,11 +192,11 @@ async function loadRecords() {
         <div className="mt-10 rounded-3xl border-2 border-dashed border-blue-300 bg-blue-50 p-6 text-center">
   <span className="text-5xl">📄</span>
 
-  <h2 className="mt-4 text-2xl font-black text-blue-700">
+  <h2 className="mt-4 text-2xl font-bold text-white drop-shadow-lg">
     PRIDAŤ DOKUMENT
   </h2>
 
-  <p className="mt-2 text-sm text-slate-500">
+  <p className="mt-2 text-white/80">
     Odfotiť dokument alebo vybrať obrázok zo zariadenia
   </p>
 
@@ -282,8 +285,8 @@ async function loadRecords() {
             </button>
           </div>
         )}{records.length > 0 && (
-  <div className="mt-8 rounded-3xl bg-white p-6 shadow-xl">
-    <h2 className="text-2xl font-black text-slate-950">
+      <div className="mt-10">
+    <h2 className="mb-4 text-2xl font-bold text-white drop-shadow-lg">
       Uložené doklady
     </h2>
 
@@ -328,7 +331,7 @@ async function loadRecords() {
       ← Späť na všetky ŠPZ
     </button>
 
-    <h3 className="mb-4 text-2xl font-black text-slate-950">
+    <h3 className="mb-4 text-2xl font-bold text-white drop-shadow-lg">
       🚛 {selectedSpz}
     </h3>
 
