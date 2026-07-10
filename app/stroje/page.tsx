@@ -318,7 +318,7 @@ export default function StrojePage() {
       )}
 
       <div className="mt-10">
-        <h2 className="mb-4 text-2xl font-bold">Uložené stroje</h2>
+        <h2 className="mb-4 text-2xl font-bold text-white drop-shadow-lg">Uložené stroje</h2>
 
         {machines.length === 0 ? (
           <div className="rounded-2xl bg-white p-6 shadow">
