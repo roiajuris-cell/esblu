@@ -192,17 +192,20 @@ export default function StrojePage() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-100 p-10">
+    <main
+  className="min-h-screen bg-cover bg-center bg-fixed p-4 sm:p-6 lg:p-10"
+  style={{ backgroundImage: "url('/images/background-dark.png')" }}
+>
       <div className="flex items-center gap-4">
   <img
     src="/images/excavator.png"
     alt="Stroje"
     className="h-20 w-20 object-contain"
   />
-  <h1 className="text-4xl font-bold">Stroje</h1>
+  <h1 className="text-4xl font-bold text-white drop-shadow-lg">Stroje</h1>
 </div>
 
-      <p className="mt-4 text-slate-600">
+      <p className="mt-4 text-white/80">
         Evidencia firemných strojov a techniky.
       </p>
 
@@ -218,7 +221,7 @@ export default function StrojePage() {
       </button>
 
       {showForm && (
-        <div className="mt-8 rounded-2xl bg-white p-6 shadow">
+        <div className="mt-8 rounded-2xl bg-white/45 border border-white/20 backdrop-blur-xl p-6 shadow-lg">
           <h2 className="mb-6 text-2xl font-bold">
             {editingId ? "Upraviť stroj" : "Pridať nový stroj"}
           </h2>
