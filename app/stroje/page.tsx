@@ -324,9 +324,9 @@ export default function StrojePage() {
 
         {machines.length === 0 ? (
           <div className="rounded-2xl border border-white/20 bg-white/45 p-6 shadow-lg backdrop-blur-xl">
-            <p className="text-slate-500">
-              Zatiaľ nie je uložený žiadny stroj.
-            </p>
+            <p className="font-medium text-white/90 drop-shadow">
+  Zatiaľ nie je uložený žiadny stroj.
+</p>
           </div>
           ) : (
          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
