@@ -73,18 +73,21 @@ export default function NastaveniaPage() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-100 p-10">
+    <main
+  className="min-h-screen bg-cover bg-center bg-fixed p-4 sm:p-6 lg:p-10"
+  style={{ backgroundImage: "url('/images/background-dark.png')" }}
+>
       <div className="flex items-center gap-4">
   <img
     src="/images/settings.png"
     alt="Nastavenia"
     className="h-20 w-20 object-contain"
   />
-  <h1 className="text-4xl font-bold">Nastavenia</h1>
+ <h1 className="text-4xl font-bold text-white drop-shadow-lg"> Nastavenia</h1>
 </div>
 
-      <div className="mt-8 max-w-2xl rounded-2xl bg-white p-8 shadow">
-        <h2 className="text-2xl font-bold">Firma</h2>
+      <div className="mt-8 max-w-2xl rounded-3xl border border-white/20 bg-white/45 p-8 shadow-lg backdrop-blur-xl">
+        <h2 className="text-2xl font-bold text-slate-900">Firma</h2>
 
         <div className="mt-6">
           <label className="mb-2 block font-semibold">Názov firmy</label>
