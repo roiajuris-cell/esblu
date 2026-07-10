@@ -315,7 +315,7 @@ export default function Dashboard() {
               <Link
                 key={module.href}
                 href={module.href}
-                className={`group min-w-0 rounded-2xl bg-white/55 border border-white/25 p-2 text-center shadow-lg backdrop-blur-md transition duration-300 hover:scale-105 ${
+                className={`group min-w-0 rounded-2xl bg-white/45 border border-white/20 p-2 text-center shadow-lg backdrop-blur-lg transition duration-300 hover:scale-105 ${
   module.title === "Nastavenia" ? "col-span-2 h-32" : "h-44"
 }`}
               >
