@@ -148,17 +148,22 @@ export default function SkladPage() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-100 p-10">
+    <main
+  className="min-h-screen bg-cover bg-center bg-fixed p-4 sm:p-6 lg:p-10"
+  style={{ backgroundImage: "url('/images/background-dark.png')" }}
+>
       <div className="flex items-center gap-4">
   <img
     src="/images/warehouse.png"
     alt="Sklad"
     className="h-20 w-20 object-contain"
   />
-  <h1 className="text-4xl font-bold">Sklad</h1>
+  <h1 className="text-4xl font-bold text-white drop-shadow-lg">
+  Sklad
+</h1>
 </div>
 
-      <p className="mt-4 text-slate-600">
+      <p className="mt-4 text-white/80">
         Evidencia náradia, materiálu a skladových zásob.
       </p>
 
@@ -174,7 +179,7 @@ export default function SkladPage() {
       </button>
 
       {showForm && (
-        <div className="mt-8 rounded-2xl bg-white p-6 shadow">
+        <div className="mt-8 rounded-2xl border border-white/20 bg-white/45 p-6 shadow-lg backdrop-blur-xl">
           <h2 className="mb-6 text-2xl font-bold">
             {editingId ? "Upraviť položku" : "Pridať položku"}
           </h2>
@@ -246,12 +251,14 @@ export default function SkladPage() {
         </div>
       )}
 
-      <div className="mt-10">
-        <h2 className="mb-4 text-2xl font-bold">Skladové položky</h2>
+        <div className="mt-10">
+  <h2 className="mb-4 text-2xl font-bold text-white drop-shadow-lg">
+    Uložené položky
+  </h2>
 
         {items.length === 0 ? (
-          <div className="rounded-2xl bg-white p-6 shadow">
-            <p className="text-slate-500">Zatiaľ nie je uložená žiadna položka.</p>
+         <div className="rounded-2xl border border-white/20 bg-white/45 p-6 shadow-lg backdrop-blur-xl"> 
+           <p className="font-medium text-white/90 drop-shadow"> Zatiaľ nie je uložená žiadna položka.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
