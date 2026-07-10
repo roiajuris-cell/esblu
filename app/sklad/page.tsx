@@ -5,6 +5,8 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
 export default function SkladPage() {
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [userId, setUserId] = useState("");
   const [items, setItems] = useState<any[]>([]);
   const [showForm, setShowForm] = useState(false);
@@ -26,7 +28,13 @@ export default function SkladPage() {
   useEffect(() => {
     checkUser();
   }, []);
+function inventoryPhotoUrl(path: string) {
+  const { data } = supabase.storage
+    .from("inventory-photos")
+    .getPublicUrl(path);
 
+  return data.publicUrl;
+}
   async function checkUser() {
     const {
       data: { session },
@@ -55,12 +63,48 @@ export default function SkladPage() {
       return;
     }
 
-    setItems(data || []);
+    const itemIds = (data || []).map((item) => item.id);
+
+let photosData: any[] = [];
+
+if (itemIds.length > 0) {
+  const { data: photos } = await supabase
+    .from("inventory_photos")
+    .select("*")
+    .in("inventory_item_id", itemIds)
+    .eq("user_id", currentUserId)
+    .order("created_at", { ascending: false });
+
+  photosData = photos || [];
+}
+
+const itemsWithPhotos = (data || []).map((item) => {
+  const firstPhoto = photosData.find(
+    (photo) => photo.inventory_item_id === item.id
+  );
+
+  return {
+    ...item,
+    first_photo_url: firstPhoto
+      ? inventoryPhotoUrl(firstPhoto.file_path)
+      : null,
+  };
+});
+
+setItems(itemsWithPhotos);
   }
 
   function updateItem(key: string, value: string) {
     setItem((prev) => ({ ...prev, [key]: value }));
   }
+  function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
+  const file = e.target.files?.[0];
+
+  if (!file) return;
+
+  setPhotoFile(file);
+  setPhotoPreview(URL.createObjectURL(file));
+}
 
   async function saveItem() {
     if (!item.name) {
@@ -86,25 +130,73 @@ export default function SkladPage() {
       notes: item.notes || null,
     };
 
-    const { error } = editingId
-      ? await supabase
-          .from("inventory_items")
-          .update(payload)
-          .eq("id", editingId)
-          .eq("user_id", userId)
-      : await supabase.from("inventory_items").insert(payload);
+    try {
+  let savedItemId = editingId;
 
-    setIsSaving(false);
+  if (editingId) {
+    const { error } = await supabase
+      .from("inventory_items")
+      .update(payload)
+      .eq("id", editingId)
+      .eq("user_id", userId);
 
-    if (error) {
-      alert("Chyba pri ukladaní položky: " + error.message);
-      return;
-    }
+    if (error) throw error;
+  } else {
+    const { data, error } = await supabase
+      .from("inventory_items")
+      .insert(payload)
+      .select("id")
+      .single();
 
-    setItem(emptyItem);
-    setEditingId(null);
-    setShowForm(false);
-    loadItems();
+    if (error) throw error;
+
+    savedItemId = data.id;
+  }
+
+  if (photoFile && savedItemId) {
+    const fileExtension =
+      photoFile.name.split(".").pop()?.toLowerCase() || "jpg";
+
+    const filePath =
+      `${userId}/${savedItemId}/${Date.now()}.${fileExtension}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from("inventory-photos")
+      .upload(filePath, photoFile, {
+        cacheControl: "3600",
+        upsert: false,
+        contentType: photoFile.type,
+      });
+
+    if (uploadError) throw uploadError;
+
+    const { error: photoError } = await supabase
+      .from("inventory_photos")
+      .insert({
+        inventory_item_id: savedItemId,
+        user_id: userId,
+        file_path: filePath,
+      });
+
+    if (photoError) throw photoError;
+  }
+
+  setItem(emptyItem);
+  setEditingId(null);
+  setShowForm(false);
+  setPhotoFile(null);
+
+  if (photoPreview) {
+    URL.revokeObjectURL(photoPreview);
+  }
+
+  setPhotoPreview(null);
+  await loadItems();
+} catch (error: any) {
+  alert("Chyba pri ukladaní položky: " + error.message);
+} finally {
+  setIsSaving(false);
+}
   }
 
   function editItem(row: any) {
@@ -236,7 +328,38 @@ export default function SkladPage() {
             value={item.notes}
             onChange={(e) => updateItem("notes", e.target.value)}
           />
+          <div className="mt-5 grid grid-cols-2 gap-3">
+  <label className="cursor-pointer rounded-xl bg-blue-600 px-4 py-3 text-center font-semibold text-white hover:bg-blue-700">
+    📷 Odfotiť
+    <input
+      type="file"
+      accept="image/*"
+      capture="environment"
+      className="hidden"
+      onChange={handlePhotoChange}
+    />
+  </label>
 
+  <label className="cursor-pointer rounded-xl border bg-white px-4 py-3 text-center font-semibold text-blue-700 shadow hover:bg-slate-100">
+    🖼️ Galéria
+    <input
+      type="file"
+      accept="image/*"
+      className="hidden"
+      onChange={handlePhotoChange}
+    />
+  </label>
+</div>
+
+{photoPreview && (
+  <div className="mt-4">
+    <img
+      src={photoPreview}
+      alt="Náhľad fotografie"
+      className="h-48 w-full rounded-xl object-cover"
+    />
+  </div>
+)}
           <button
             onClick={saveItem}
             disabled={isSaving}
@@ -266,7 +389,22 @@ export default function SkladPage() {
               <div
                 key={row.id}
                 className="rounded-2xl border bg-white p-6 shadow-sm"
-              >
+              >{row.first_photo_url ? (
+  <img
+    src={row.first_photo_url}
+    alt={row.name || "Fotografia položky"}
+    className="mb-4 h-56 w-full rounded-xl object-cover"
+  />
+) : (
+  <div className="mb-4 flex h-56 w-full items-center justify-center rounded-xl border-2 border-dashed border-slate-300 bg-slate-100">
+    <div className="text-center text-slate-500">
+      <div className="text-6xl">📦</div>
+      <p className="mt-2 text-sm font-medium">
+        Bez fotografie
+      </p>
+    </div>
+  </div>
+)}
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <h3 className="text-2xl font-bold">
