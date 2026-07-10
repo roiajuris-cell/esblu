@@ -328,14 +328,14 @@ export default function StrojePage() {
               Zatiaľ nie je uložený žiadny stroj.
             </p>
           </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+          ) : (
+         <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
             {machines.map((item) => (
               <div
                 key={item.id}
                 className="overflow-hidden rounded-2xl border border-white/20 bg-white/45 backdrop-blur-xl shadow-lg"
               >
-                {item.first_photo_url ? (S
+                {item.first_photo_url ? (
                   <img
                     src={item.first_photo_url}
                     alt={item.name || "Fotografia stroja"}
