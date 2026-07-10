@@ -331,7 +331,7 @@ export default function StrojePage() {
             {machines.map((item) => (
               <div
                 key={item.id}
-                className="overflow-hidden rounded-2xl border bg-white shadow-sm"
+                className="overflow-hidden rounded-2xl border border-white/20 bg-white/45 backdrop-blur-xl shadow-lg"
               >
                 {item.first_photo_url ? (
                   <img
