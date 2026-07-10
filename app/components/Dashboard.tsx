@@ -215,7 +215,7 @@ export default function Dashboard() {
       <div
   className="absolute inset-0 bg-[length:100%_100%] bg-center opacity-45"
   style={{
-    backgroundImage: "url('/images/background.png')",
+    backgroundImage: "url('/images/background-dark.png')",
   }}
 />
 
