@@ -346,7 +346,7 @@ export default function Dashboard() {
             ))}
           </div>
 
-          <div className="mt-10 rounded-3xl bg-white/90 p-8 shadow-lg backdrop-blur">
+          <div className="mt-10 rounded-3xl bg-white/45 border border-white/20 p-8 shadow-xl backdrop-blur-xl">
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="text-3xl font-black text-slate-950">
