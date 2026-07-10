@@ -192,11 +192,11 @@ async function loadRecords() {
         <div className="mt-10 rounded-3xl border-2 border-dashed border-blue-300 bg-blue-50 p-6 text-center">
   <span className="text-5xl">📄</span>
 
-  <h2 className="mt-4 text-2xl font-bold text-white drop-shadow-lg">
+  <h2 className="mt-4 text-2xl font-bold text-slate-900">
     PRIDAŤ DOKUMENT
   </h2>
 
-  <p className="mt-2 text-white/80">
+  <p className="mt-2 text-slate-700">
     Odfotiť dokument alebo vybrať obrázok zo zariadenia
   </p>
 
