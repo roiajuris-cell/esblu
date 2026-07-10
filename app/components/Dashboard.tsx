@@ -312,11 +312,15 @@ export default function Dashboard() {
               >
                 <div className="mx-auto flex h-24 items-center justify-center transition group-hover:scale-105 lg:h-32">
   <Image
-    src={module.image}
+  src={module.image}
+  width={module.title === "Nastavenia" ? 110 : 220}
+  height={module.title === "Nastavenia" ? 110 : 150}
     alt={module.title}
-     width={220}
-     height={150}
-     className="h-20 w-28 object-contain sm:h-24 sm:w-32 lg:h-32 lg:w-44" />
+     className={
+  module.title === "Nastavenia"
+    ? "h-16 w-16 object-contain"
+    : "h-20 w-28 object-contain sm:h-24 sm:w-32 lg:h-32 lg:w-44"
+} />
 </div>
                 <h3 className="mt-2 text-base font-bold text-slate-900 lg:mt-5 lg:text-3xl">
                   {module.title}
