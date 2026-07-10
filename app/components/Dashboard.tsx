@@ -324,17 +324,18 @@ export default function Dashboard() {
   src={module.image}
   width={module.title === "Nastavenia" ? 110 : 220}
   height={module.title === "Nastavenia" ? 110 : 150}
-    alt={module.title}
-      />
+  alt={module.title}
+  className={
+    module.title === "Nastavenia"
+      ? "h-16 w-16 object-contain"
+      : "h-24 w-32 object-contain sm:h-28 sm:w-40 lg:h-36 lg:w-48"
+  }
+/>
 </div>
                 <h3 className="mt-2 text-base font-bold text-slate-900 lg:mt-5 lg:text-3xl">
                   {module.title}
                 </h3>
-className={
-  module.title === "Nastavenia"
-    ? "h-16 w-16 object-contain"
-    : "h-24 w-32 object-contain sm:h-28 sm:w-40 lg:h-36 lg:w-48"
-}
+
                 <p className="mt-1 min-h-8 text-sm leading-snug text-slate-500">
                   {module.subtitle}
                 </p>
