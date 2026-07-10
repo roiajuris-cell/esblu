@@ -149,16 +149,30 @@ export default function MachineDetailPage() {
         <div className="flex items-center justify-between">
           <h2 className="text-2xl font-bold">📷 Galéria</h2>
 
-          <label className="cursor-pointer rounded-xl bg-blue-600 px-5 py-3 text-white hover:bg-blue-700">
-            {isUploading ? "Nahrávam..." : "➕ Pridať fotografiu"}
-            <input
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={uploadPhoto}
-              disabled={isUploading}
-            />
-          </label>
+          <div className="flex gap-3">
+  <label className="cursor-pointer rounded-xl bg-blue-600 px-5 py-3 text-white hover:bg-blue-700">
+    {isUploading ? "Nahrávam..." : "📷 Odfotiť"}
+    <input
+      type="file"
+      accept="image/*"
+      capture="environment"
+      className="hidden"
+      onChange={uploadPhoto}
+      disabled={isUploading}
+    />
+  </label>
+
+  <label className="cursor-pointer rounded-xl bg-white px-5 py-3 text-slate-700 border">
+    🖼️ Galéria
+    <input
+      type="file"
+      accept="image/*"
+      className="hidden"
+      onChange={uploadPhoto}
+      disabled={isUploading}
+    />
+  </label>
+</div>
         </div>
 
         {photos.length === 0 ? (
