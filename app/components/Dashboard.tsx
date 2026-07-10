@@ -301,23 +301,23 @@ export default function Dashboard() {
             )}
           </div>
 
-          <div className="mt-5 grid grid-cols-2 gap-3 lg:mt-14 lg:grid-cols-4 lg:gap-8">
+            <div className="mt-4 grid grid-cols-2 gap-2 sm:gap-3 lg:mt-14 lg:grid-cols-4 lg:gap-8">
             {modules.map((module) => (
               <Link
                 key={module.href}
                 href={module.href}
-                className="group min-w-0 rounded-2xl bg-white/90 p-3 text-center shadow-lg transition duration-300 hover:-translate-y-1 hover:shadow-2xl lg:rounded-3xl lg:p-6"
+                className="group min-w-0 rounded-2xl bg-white/80 backdrop-blur-sm p-2 text-center shadow-xl transition duration-300 hover:scale-105"
               >
                 <div className="mx-auto flex h-20 items-center justify-center transition group-hover:scale-105 lg:h-40">
   <Image
     src={module.image}
     alt={module.title}
-    width={180}
-    height={130}
-   className="h-16 w-24 object-contain lg:h-32 lg:w-44"  />
+     width={220}
+     height={150}
+     className="h-14 w-20 object-contain sm:h-16 sm:w-24 lg:h-32 lg:w-44" />
 </div>
 
-                <h3 className="mt-7 text-3xl font-black text-slate-950">
+                <h3 className="mt-3 text-lg font-bold text-slate-900 lg:mt-7 lg:text-3xl">
                   {module.title}
                 </h3>
 
