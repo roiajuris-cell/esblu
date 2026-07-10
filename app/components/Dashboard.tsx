@@ -306,22 +306,23 @@ export default function Dashboard() {
               <Link
                 key={module.href}
                 href={module.href}
-                className="group min-w-0 rounded-2xl bg-white/80 backdrop-blur-sm p-2 text-center shadow-xl transition duration-300 hover:scale-105"
+                className={`group min-w-0 rounded-2xl bg-white/80 p-2 text-center shadow-xl backdrop-blur-sm transition duration-300 hover:scale-105 ${
+  module.title === "Nastavenia" ? "col-span-2 h-32" : "h-44"
+}`}
               >
-                <div className="mx-auto flex h-20 items-center justify-center transition group-hover:scale-105 lg:h-40">
+                <div className="mx-auto flex h-14 items-center justify-center transition group-hover:scale-105 lg:h-32">
   <Image
     src={module.image}
     alt={module.title}
      width={220}
      height={150}
-     className="h-14 w-20 object-contain sm:h-16 sm:w-24 lg:h-32 lg:w-44" />
+     className="h-12 w-16 object-contain lg:h-32 lg:w-44" />
 </div>
-
-                <h3 className="mt-3 text-lg font-bold text-slate-900 lg:mt-7 lg:text-3xl">
+                <h3 className="mt-2 text-base font-bold text-slate-900 lg:mt-5 lg:text-3xl">
                   {module.title}
                 </h3>
 
-                <p className="mt-3 min-h-12 text-lg leading-relaxed text-slate-500">
+                <p className="mt-1 min-h-8 text-sm leading-snug text-slate-500">
                   {module.subtitle}
                 </p>
 
