@@ -340,7 +340,7 @@ export default function Dashboard() {
                   {module.title}
                 </h3>
 
-                <p className="mt-1 min-h-8 text-sm leading-snug text-slate-500">
+                <p className="mt-1 min-h-8 text-sm leading-snug text-slate-700">
                   {module.subtitle}
                 </p>
 
