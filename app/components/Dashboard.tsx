@@ -259,6 +259,13 @@ export default function Dashboard() {
   {greeting}
 </h2>
             </div>
+            <Link
+  href="/nastavenia"
+  aria-label="Otvoriť nastavenia"
+  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/85 text-2xl font-black text-slate-800 shadow-lg backdrop-blur-sm transition hover:scale-105"
+>
+  ☰
+</Link>
 
           
           </div>
@@ -302,7 +309,9 @@ export default function Dashboard() {
           </div>
 
             <div className="mt-4 grid grid-cols-2 gap-2 sm:gap-3 lg:mt-14 lg:grid-cols-4 lg:gap-8">
-            {modules.map((module) => (
+            {modules
+  .filter((module) => module.title !== "Nastavenia")
+  .map((module) => (
               <Link
                 key={module.href}
                 href={module.href}
