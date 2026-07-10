@@ -357,7 +357,7 @@ export default function Dashboard() {
                 <h3 className="text-3xl font-black text-slate-950">
                   Upozornenia STK / EK
                 </h3>
-                <p className="mt-2 text-slate-500">
+                <p className="mt-2 text-slate-700">
                   Automatická kontrola platnosti technických a emisných kontrol.
                 </p>
               </div>
