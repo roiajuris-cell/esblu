@@ -325,16 +325,16 @@ export default function Dashboard() {
   width={module.title === "Nastavenia" ? 110 : 220}
   height={module.title === "Nastavenia" ? 110 : 150}
     alt={module.title}
-     className={
-  module.title === "Nastavenia"
-    ? "h-16 w-16 object-contain"
-    : "h-20 w-28 object-contain sm:h-24 sm:w-32 lg:h-32 lg:w-44"
-} />
+      />
 </div>
                 <h3 className="mt-2 text-base font-bold text-slate-900 lg:mt-5 lg:text-3xl">
                   {module.title}
                 </h3>
-
+className={
+  module.title === "Nastavenia"
+    ? "h-16 w-16 object-contain"
+    : "h-24 w-32 object-contain sm:h-28 sm:w-40 lg:h-36 lg:w-48"
+}
                 <p className="mt-1 min-h-8 text-sm leading-snug text-slate-500">
                   {module.subtitle}
                 </p>
