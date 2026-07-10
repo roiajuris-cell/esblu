@@ -318,10 +318,12 @@ export default function StrojePage() {
       )}
 
       <div className="mt-10">
-        <h2 className="mb-4 text-2xl font-bold text-white drop-shadow-lg">Uložené stroje</h2>
+        <h2 className="mb-4 text-2xl font-bold text-white drop-shadow-lg">
+  Uložené stroje
+</h2>
 
         {machines.length === 0 ? (
-          <div className="rounded-2xl bg-white p-6 shadow">
+          <div className="rounded-2xl border border-white/20 bg-white/45 p-6 shadow-lg backdrop-blur-xl">
             <p className="text-slate-500">
               Zatiaľ nie je uložený žiadny stroj.
             </p>
@@ -333,7 +335,7 @@ export default function StrojePage() {
                 key={item.id}
                 className="overflow-hidden rounded-2xl border border-white/20 bg-white/45 backdrop-blur-xl shadow-lg"
               >
-                {item.first_photo_url ? (
+                {item.first_photo_url ? (S
                   <img
                     src={item.first_photo_url}
                     alt={item.name || "Fotografia stroja"}
