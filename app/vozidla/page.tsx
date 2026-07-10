@@ -218,7 +218,10 @@ export default function VozidlaPage() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-100 p-10">
+    <main
+  className="min-h-screen bg-cover bg-center bg-fixed p-4 sm:p-6 lg:p-10"
+  style={{ backgroundImage: "url('/images/background-dark.png')" }}
+>
       <div className="flex items-center gap-4">
   <img
     src="/images/van.png"
@@ -245,7 +248,7 @@ export default function VozidlaPage() {
       </div>
 
       {imagePreview && (
-        <div className="mt-8 rounded-2xl bg-white p-6 shadow">
+        <div className="mt-8 rounded-2xl bg-white/45 border border-white/20 backdrop-blur-xl p-6 shadow-lg">
           <h2 className="mb-4 text-2xl font-bold">
             Náhľad technického preukazu
           </h2>
