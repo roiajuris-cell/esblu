@@ -213,7 +213,7 @@ export default function Dashboard() {
     <main className="relative min-h-screen overflow-hidden bg-slate-100 text-slate-900">
       <div className="absolute inset-0 bg-[linear-gradient(120deg,rgba(255,255,255,0.65),rgba(239,246,255,0.45))]" />
       <div
-  className="absolute inset-0 bg-[length:100%_100%] bg-center opacity-45"
+   className="absolute inset-0 bg-cover bg-center bg-no-repeat"
   style={{
     backgroundImage: "url('/images/background-dark.png')",
   }}
