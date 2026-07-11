@@ -56,7 +56,46 @@ Ak ide o vážny lístok:
 - netto = netto
 - documentDate = dátum váženia
 - documentTime = čas váženia
+- materialOriginal = presný názov materiálu tak, ako je uvedený na doklade
+- materialCategory = jednotná kategória materiálu
+- documentLanguage = jazyk dokladu
+- confidenceScore = istota rozpoznania od 0 do 1
+- sourceLocation = miesto, odkiaľ materiál pochádza
+- destinationLocation = miesto, kam materiál smeruje
+- reviewStatus = stav kontroly údajov
 
+materialCategory musí byť jedna z hodnôt:
+- piesok
+- kamenivo
+- asfalt
+- stavebný odpad
+- zemina
+- betón
+- iné
+
+documentLanguage musí byť jedna z hodnôt:
+- sk
+- cs
+- de
+- en
+- iné
+
+reviewStatus musí byť jedna z hodnôt:
+- confirmed
+- needs_review
+- pending
+
+Ak je neistá ŠPZ, smer pohybu, materiál alebo netto, nastav reviewStatus na "needs_review".
+
+Pri kategorizácii materiálu zachovaj presný názov v materialOriginal.
+
+Príklady kategorizácie:
+- Sand, Füllsand, Písek, Piesok -> piesok
+- Splitt, Kies, Schotter, Kamenivo, Štrk -> kamenivo
+- Asphalt, AC8, AC32, Asphaltaufbruch -> asfalt
+- Bauschutt, Recyclingmaterial, Stavebný odpad -> stavebný odpad
+- Erde, Boden, Zemina -> zemina
+- Beton, Concrete, Betón -> betón
 Ak ide o dodací list:
 - supplier = dodávateľ
 - customer = odberateľ
@@ -92,6 +131,13 @@ Vráť iba čistý JSON.
   "constructionSite": "",
   "documentNumber": "",
   "material": "",
+  "materialOriginal": "",
+"materialCategory": "",
+"documentLanguage": "",
+"confidenceScore": "",
+"sourceLocation": "",
+"destinationLocation": "",
+"reviewStatus": "",
   "quantity": "",
   "unit": "",
   "brutto": "",

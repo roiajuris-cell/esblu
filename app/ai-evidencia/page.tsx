@@ -31,6 +31,94 @@ const groupedRecords = records.reduce((groups: any, record: any) => {
 
   return groups;
 }, {});
+const summary = records.reduce(
+  (acc: any, record: any) => {
+    const movementType = (record.movement_type || "")
+      .toLowerCase()
+      .trim();
+
+    const weight =
+      Number(record.netto) ||
+      Number(record.quantity) ||
+      0;
+
+    const category =
+      record.material_category ||
+      record.material_original ||
+      record.material ||
+      "iné";
+
+    if (movementType === "dovoz") {
+      acc.totalImport += weight;
+      acc.importCount += 1;
+      acc.importByMaterial[category] =
+        (acc.importByMaterial[category] || 0) + weight;
+    }
+  
+    if (movementType === "vývoz" || movementType === "vyvoz") {
+      acc.totalExport += weight;
+      acc.exportCount += 1;
+      acc.exportByMaterial[category] =
+        (acc.exportByMaterial[category] || 0) + weight;
+    }
+
+    return acc;
+  },
+  {
+    totalImport: 0,
+    totalExport: 0,
+    importCount: 0,
+    exportCount: 0,
+    importByMaterial: {},
+    exportByMaterial: {},
+  }
+);
+const summaryBySpz = records.reduce((groups: any, record: any) => {
+  const spz =
+    record.spz?.trim().toUpperCase() || "BEZ ŠPZ";
+
+  const movementType = (record.movement_type || "")
+    .toLowerCase()
+    .trim();
+
+  const weight =
+    Number(record.netto) ||
+    Number(record.quantity) ||
+    0;
+
+  const category =
+    record.material_category ||
+    record.material_original ||
+    record.material ||
+    "iné";
+
+  if (!groups[spz]) {
+    groups[spz] = {
+      totalImport: 0,
+      totalExport: 0,
+      importCount: 0,
+      exportCount: 0,
+      importByMaterial: {},
+      exportByMaterial: {},
+    };
+  }
+
+  if (movementType === "dovoz") {
+    groups[spz].totalImport += weight;
+    groups[spz].importCount += 1;
+    groups[spz].importByMaterial[category] =
+      (groups[spz].importByMaterial[category] || 0) + weight;
+  }
+
+  if (movementType === "vývoz" || movementType === "vyvoz") {
+    groups[spz].totalExport += weight;
+    groups[spz].exportCount += 1;
+    groups[spz].exportByMaterial[category] =
+      (groups[spz].exportByMaterial[category] || 0) + weight;
+  }
+
+  return groups;
+}, {});
   async function handleFile(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -55,7 +143,14 @@ const groupedRecords = records.reduce((groups: any, record: any) => {
         throw new Error(data.error || "AI spracovanie zlyhalo.");
       }
 
-      setResult(data.data);
+      const scannedResult = data.data;
+
+const resolvedMovementType = resolveMovementType(scannedResult);
+
+setResult({
+  ...scannedResult,
+  movementType: resolvedMovementType || "",
+});
     } catch (err: any) {
       setError(err.message || "Nastala neznáma chyba.");
     } finally {
@@ -74,7 +169,70 @@ const groupedRecords = records.reduce((groups: any, record: any) => {
     if (value === "" || value === null || value === undefined) return null;
     return Number(String(value).replace(",", "."));
   }
+function normalizeText(value?: string | null) {
+  return (value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
 
+function resolveMovementType(result: any): string | null {
+  const supplier = normalizeText(result.supplier);
+  const material = normalizeText(
+    result.materialOriginal || result.material
+  );
+  const rawText = normalizeText(result.rawText);
+
+  const combinedText = `${supplier} ${material} ${rawText}`;
+
+  // BRZ – odvoz stavebného odpadu zo stavby do recyklačného centra
+  if (
+    combinedText.includes("brz") ||
+    combinedText.includes("recycling-zentrum")
+  ) {
+    if (
+      combinedText.includes("bauschutt") ||
+      combinedText.includes("boden") ||
+      combinedText.includes("abfall") ||
+      combinedText.includes("recyclingmaterial")
+    ) {
+      return "vývoz";
+    }
+  }
+
+  // STIX – nový asfalt na stavbu
+  if (supplier.includes("stix")) {
+    if (
+      combinedText.includes("ac8") ||
+      combinedText.includes("ac 8") ||
+      combinedText.includes("ac32") ||
+      combinedText.includes("ac 32") ||
+      combinedText.includes("asphaltmischgut")
+    ) {
+      return "dovoz";
+    }
+
+    // Starý vybúraný asfalt odvážaný zo stavby
+    if (combinedText.includes("asphaltaufbruch")) {
+      return "vývoz";
+    }
+  }
+
+  // Doris Kaffenberger – piesok, štrk a splitt privážaný na stavbu
+  if (
+    supplier.includes("kaffenberger") &&
+    (
+      combinedText.includes("sand") ||
+      combinedText.includes("kies") ||
+      combinedText.includes("splitt")
+    )
+  ) {
+    return "dovoz";
+  }
+
+  return result.movementType || null;
+}
   async function saveEvidence() {
     if (!result) return;
 
@@ -91,30 +249,54 @@ const groupedRecords = records.reduce((groups: any, record: any) => {
       }
 let vehicleId = null;
 
-if (result.spz) {
-  const cleanSpz = result.spz.replace(/\s+/g, "").toLowerCase();
+let canonicalSpz: string | null = null;
 
-  const { data: vehicles } = await supabase
+if (result.spz) {
+  const normalizeSpz = (value: string) =>
+    value
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, "");
+
+  const cleanSpz = normalizeSpz(result.spz);
+
+  const { data: vehicles, error: vehiclesError } = await supabase
     .from("vehicles")
     .select("id, spz")
     .eq("user_id", session.user.id);
 
+  if (vehiclesError) {
+    console.error("Chyba pri načítaní vozidiel:", vehiclesError);
+  }
+
   const matchedVehicle = vehicles?.find(
     (vehicle) =>
-      vehicle.spz?.replace(/\s+/g, "").toLowerCase() === cleanSpz
+      vehicle.spz && normalizeSpz(vehicle.spz) === cleanSpz
   );
 
-  vehicleId = matchedVehicle?.id || null;
+  vehicleId = matchedVehicle?.id ?? null;
+
+  // Pri existujúcom vozidle použijeme vždy ŠPZ uloženú vo Vozidlách.
+  // Inak uložíme jednotnú normalizovanú hodnotu.
+  canonicalSpz = matchedVehicle?.spz?.trim().toUpperCase() ?? cleanSpz;
 }
+const resolvedMovementType = resolveMovementType(result);
       const { error } = await supabase.from("ai_evidence").insert({
         user_id: session.user.id,
         vehicle_id: vehicleId,
-        spz: result.spz || null,
+        spz: canonicalSpz,
         document_type: result.documentType || null,
-        movement_type: result.movementType || null,
+        movement_type: resolvedMovementType,
         supplier: result.supplier || null,
         document_number: result.documentNumber || null,
         material: result.material || null,
+        material_original: result.materialOriginal || null,
+material_category: result.materialCategory || null,
+document_language: result.documentLanguage || null,
+confidence_score: toNumber(result.confidenceScore),
+source_location: result.sourceLocation || null,
+destination_location: result.destinationLocation || null,
+review_status: result.reviewStatus || "pending",
         quantity: toNumber(result.quantity),
         unit: result.unit || null,
         brutto: toNumber(result.brutto),
@@ -284,7 +466,207 @@ async function loadRecords() {
               {isSaving ? "Ukladám..." : "💾 Uložiť do evidencie"}
             </button>
           </div>
-        )}{records.length > 0 && (
+          )}
+         {records.length > 0 && (
+  <div className="mt-10">
+    <h2 className="mb-4 text-2xl font-bold text-white drop-shadow-lg">
+      Prehľad materiálu
+    </h2>
+
+    <div className="grid gap-4 md:grid-cols-2">
+      <div className="rounded-3xl border border-green-200 bg-white p-6 shadow-sm">
+        <p className="text-sm font-bold uppercase tracking-wide text-green-700">
+          Dovoz
+        </p>
+
+        <p className="mt-2 text-4xl font-black text-slate-950">
+          {summary.totalImport.toFixed(2)} t
+        </p>
+
+        <p className="mt-1 text-sm text-slate-600">
+          {summary.importCount} dokladov
+        </p>
+
+        <div className="mt-5 space-y-2">
+          {Object.entries(summary.importByMaterial).map(
+            ([material, weight]: any) => (
+              <div
+                key={material}
+                className="flex items-center justify-between rounded-xl bg-green-50 px-4 py-3"
+              >
+                <span className="font-semibold text-slate-800">
+                  {material}
+                </span>
+
+                <span className="font-black text-green-700">
+                  {Number(weight).toFixed(2)} t
+                </span>
+              </div>
+            )
+          )}
+
+          {Object.keys(summary.importByMaterial).length === 0 && (
+            <p className="text-sm text-slate-500">
+              Zatiaľ nie je evidovaný žiadny dovoz.
+            </p>
+          )}
+        </div>
+      </div>
+
+      <div className="rounded-3xl border border-orange-200 bg-white p-6 shadow-sm">
+        <p className="text-sm font-bold uppercase tracking-wide text-orange-700">
+          Vývoz
+        </p>
+
+        <p className="mt-2 text-4xl font-black text-slate-950">
+          {summary.totalExport.toFixed(2)} t
+        </p>
+
+        <p className="mt-1 text-sm text-slate-600">
+          {summary.exportCount} dokladov
+        </p>
+
+        <div className="mt-5 space-y-2">
+          {Object.entries(summary.exportByMaterial).map(
+            ([material, weight]: any) => (
+              <div
+                key={material}
+                className="flex items-center justify-between rounded-xl bg-orange-50 px-4 py-3"
+              >
+                <span className="font-semibold text-slate-800">
+                  {material}
+                </span>
+
+                <span className="font-black text-orange-700">
+                  {Number(weight).toFixed(2)} t
+                </span>
+              </div>
+            )
+          )}
+
+          {Object.keys(summary.exportByMaterial).length === 0 && (
+            <p className="text-sm text-slate-500">
+              Zatiaľ nie je evidovaný žiadny vývoz.
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  </div>
+  )}
+  {records.length > 0 && (
+  <div className="mt-10">
+    <h2 className="mb-4 text-2xl font-bold text-white drop-shadow-lg">
+      Prehľad podľa ŠPZ
+    </h2>
+
+    <div className="space-y-5">
+      {Object.entries(summaryBySpz).map(
+        ([spz, vehicleSummary]: any) => (
+          <div
+            key={spz}
+            className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm"
+          >
+            <div className="mb-5 flex items-center justify-between gap-4">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wide text-blue-600">
+                  Vozidlo
+                </p>
+
+                <h3 className="text-2xl font-black text-slate-950">
+                  {spz}
+                </h3>
+              </div>
+
+              <p className="text-sm text-slate-500">
+                {vehicleSummary.importCount +
+                  vehicleSummary.exportCount}{" "}
+                dokladov
+              </p>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="rounded-2xl bg-green-50 p-5">
+                <p className="text-sm font-bold uppercase text-green-700">
+                  Dovoz
+                </p>
+
+                <p className="mt-2 text-3xl font-black text-slate-950">
+                  {vehicleSummary.totalImport.toFixed(2)} t
+                </p>
+
+                <div className="mt-4 space-y-2">
+                  {Object.entries(
+                    vehicleSummary.importByMaterial
+                  ).map(([material, weight]: any) => (
+                    <div
+                      key={material}
+                      className="flex justify-between rounded-xl bg-white px-3 py-2"
+                    >
+                      <span className="font-semibold text-slate-700">
+                        {material}
+                      </span>
+
+                      <span className="font-black text-green-700">
+                        {Number(weight).toFixed(2)} t
+                      </span>
+                    </div>
+                  ))}
+
+                  {Object.keys(
+                    vehicleSummary.importByMaterial
+                  ).length === 0 && (
+                    <p className="text-sm text-slate-500">
+                      Žiadny dovoz.
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-2xl bg-orange-50 p-5">
+                <p className="text-sm font-bold uppercase text-orange-700">
+                  Vývoz
+                </p>
+
+                <p className="mt-2 text-3xl font-black text-slate-950">
+                  {vehicleSummary.totalExport.toFixed(2)} t
+                </p>
+
+                <div className="mt-4 space-y-2">
+                  {Object.entries(
+                    vehicleSummary.exportByMaterial
+                  ).map(([material, weight]: any) => (
+                    <div
+                      key={material}
+                      className="flex justify-between rounded-xl bg-white px-3 py-2"
+                    >
+                      <span className="font-semibold text-slate-700">
+                        {material}
+                      </span>
+
+                      <span className="font-black text-orange-700">
+                        {Number(weight).toFixed(2)} t
+                      </span>
+                    </div>
+                  ))}
+
+                  {Object.keys(
+                    vehicleSummary.exportByMaterial
+                  ).length === 0 && (
+                    <p className="text-sm text-slate-500">
+                      Žiadny vývoz.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )
+      )}
+    </div>
+  </div>
+)}
+    {records.length > 0 && (
       <div className="mt-10">
     <h2 className="mb-4 text-2xl font-bold text-white drop-shadow-lg">
       Uložené doklady
