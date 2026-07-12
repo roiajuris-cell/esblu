@@ -217,22 +217,65 @@ setItems(itemsWithPhotos);
   }
 
   async function deleteItem(id: string) {
-    const confirmed = confirm("Naozaj chceš vymazať túto skladovú položku?");
-    if (!confirmed) return;
+  const confirmed = confirm(
+    "Naozaj chceš vymazať túto skladovú položku?"
+  );
 
-    const { error } = await supabase
-      .from("inventory_items")
-      .delete()
-      .eq("id", id)
-      .eq("user_id", userId);
+  if (!confirmed) return;
 
-    if (error) {
-      alert("Chyba pri mazaní položky: " + error.message);
+  const { data: itemPhotos, error: photosError } = await supabase
+    .from("inventory_photos")
+    .select("file_path")
+    .eq("inventory_item_id", id)
+    .eq("user_id", userId);
+
+  if (photosError) {
+    console.error(
+      "Chyba pri načítaní fotografií skladovej položky:",
+      photosError
+    );
+    alert("Nepodarilo sa načítať fotografie skladovej položky.");
+    return;
+  }
+
+  const photoPaths = (itemPhotos || [])
+    .map((photo: any) => photo.file_path)
+    .filter(Boolean);
+
+  if (photoPaths.length > 0) {
+   console.log("INVENTORY PHOTO PATHS FULL:", JSON.stringify(photoPaths));
+    const { data: removedFiles, error: storageError } = await supabase.storage
+  .from("inventory-photos")
+  .remove(photoPaths);
+
+console.log("INVENTORY DELETE RESULT:", {
+  removedFiles,
+  storageError,
+});
+
+    if (storageError) {
+      console.error(
+        "Chyba pri mazaní fotografií zo Storage:",
+        storageError
+      );
+      alert("Fotografie položky sa nepodarilo vymazať z úložiska.");
       return;
     }
-
-    loadItems();
   }
+
+  const { error: deleteError } = await supabase
+    .from("inventory_items")
+    .delete()
+    .eq("id", id)
+    .eq("user_id", userId);
+
+  if (deleteError) {
+    alert("Chyba pri mazaní položky: " + deleteError.message);
+    return;
+  }
+
+  loadItems();
+}
 
   function isLowStock(row: any) {
     if (row.min_quantity === null || row.min_quantity === undefined) return false;
