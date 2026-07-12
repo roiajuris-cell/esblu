@@ -168,22 +168,54 @@ export default function StrojePage() {
   }
 
   async function deleteMachine(id: string) {
-    const confirmed = confirm("Naozaj chceš vymazať tento stroj?");
-    if (!confirmed) return;
+  const confirmed = confirm("Naozaj chceš vymazať tento stroj?");
+  if (!confirmed) return;
 
-    const { error } = await supabase
-      .from("machines")
-      .delete()
-      .eq("id", id)
-      .eq("user_id", userId);
+  // Najprv načítame všetky fotografie stroja,
+  // aby sme poznali ich cesty v Storage.
+  const { data: machinePhotos, error: photosError } = await supabase
+    .from("machine_photos")
+    .select("file_path")
+    .eq("machine_id", id)
+    .eq("user_id", userId);
 
-    if (error) {
-      alert("Chyba pri mazaní stroja: " + error.message);
+  if (photosError) {
+    console.error("Chyba pri načítaní fotografií stroja:", photosError);
+    alert("Nepodarilo sa načítať fotografie stroja.");
+    return;
+  }
+
+  const photoPaths = (machinePhotos || [])
+    .map((photo: any) => photo.file_path)
+    .filter(Boolean);
+
+  // Najprv vymažeme súbory zo Storage.
+  if (photoPaths.length > 0) {
+    const { error: storageError } = await supabase.storage
+      .from("machine-photos")
+      .remove(photoPaths);
+
+    if (storageError) {
+      console.error("Chyba pri mazaní fotografií zo Storage:", storageError);
+      alert("Fotografie stroja sa nepodarilo vymazať z úložiska.");
       return;
     }
-
-    loadMachines();
   }
+
+  // Potom vymažeme stroj z databázy.
+  const { error: deleteError } = await supabase
+    .from("machines")
+    .delete()
+    .eq("id", id)
+    .eq("user_id", userId);
+
+  if (deleteError) {
+    alert("Chyba pri mazaní stroja: " + deleteError.message);
+    return;
+  }
+
+  loadMachines();
+}
 
   function cancelEdit() {
     setEditingId(null);
