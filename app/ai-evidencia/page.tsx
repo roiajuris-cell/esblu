@@ -10,14 +10,75 @@ function Info({ title, value }: { title: string; value: any }) {
     </div>
   );
 }
+async function compressImage(file: File): Promise<File> {
+  const imageUrl = URL.createObjectURL(file);
+
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const img = new Image();
+
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error("Obrázok sa nepodarilo načítať."));
+      img.src = imageUrl;
+    });
+
+    const maxDimension = 1800;
+    const scale = Math.min(
+      1,
+      maxDimension / Math.max(image.width, image.height)
+    );
+
+    const width = Math.round(image.width * scale);
+    const height = Math.round(image.height * scale);
+
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+
+    const context = canvas.getContext("2d");
+
+    if (!context) {
+      throw new Error("Nepodarilo sa pripraviť kompresiu obrázka.");
+    }
+
+    context.drawImage(image, 0, 0, width, height);
+
+    const blob = await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob(
+        (result) => {
+          if (result) {
+            resolve(result);
+          } else {
+            reject(new Error("Obrázok sa nepodarilo skomprimovať."));
+          }
+        },
+        "image/webp",
+        0.8
+      );
+    });
+
+    const originalName =
+      file.name.replace(/\.[^/.]+$/, "") || "dokument";
+
+    return new File([blob], `${originalName}.webp`, {
+      type: "image/webp",
+      lastModified: Date.now(),
+    });
+  } finally {
+    URL.revokeObjectURL(imageUrl);
+  }
+}
 export default function AiEvidenciaPage() {
   const [fileName, setFileName] = useState("");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState("");
   const [records, setRecords] = useState<any[]>([]);
   const [selectedRecord, setSelectedRecord] = useState<any>(null);
+  const [documentPhotoUrl, setDocumentPhotoUrl] =
+  useState<string | null>(null);
   const [selectedSpz, setSelectedSpz] = useState<string | null>(null);
 
 const groupedRecords = records.reduce((groups: any, record: any) => {
@@ -124,13 +185,25 @@ const summaryBySpz = records.reduce((groups: any, record: any) => {
     if (!file) return;
 
     setFileName(file.name);
-    setResult(null);
-    setError("");
-    setIsProcessing(true);
+setResult(null);
+setSelectedFile(null);
+setError("");
+setIsProcessing(true);
 
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
+try {
+  const compressedFile = await compressImage(file);
+
+  setSelectedFile(compressedFile);
+
+  console.log("Pôvodná veľkosť:", file.size, "bytes");
+  console.log(
+    "Komprimovaná veľkosť:",
+    compressedFile.size,
+    "bytes"
+  );
+
+  const formData = new FormData();
+  formData.append("file", compressedFile);
 
       const response = await fetch("/api/scan-vehicle-doc", {
         method: "POST",
@@ -247,6 +320,30 @@ function resolveMovementType(result: any): string | null {
       if (!session) {
         throw new Error("Nie si prihlásený.");
       }
+      let photoPath: string | null = null;
+
+if (selectedFile) {
+  const safeSpz = (result.spz || "bez-spz")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "");
+
+  const uniqueName = `${Date.now()}-${crypto.randomUUID()}.webp`;
+
+  photoPath = `${session.user.id}/${safeSpz}/${uniqueName}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from("ai-evidence-documents")
+    .upload(photoPath, selectedFile, {
+      contentType: selectedFile.type || "image/webp",
+      cacheControl: "3600",
+      upsert: false,
+    });
+
+  if (uploadError) {
+    throw new Error(`Fotku sa nepodarilo uložiť: ${uploadError.message}`);
+  }
+}
 let vehicleId = null;
 
 let canonicalSpz: string | null = null;
@@ -306,6 +403,7 @@ review_status: result.reviewStatus || "pending",
         customer: result.customer || null,
         document_date: result.documentDate || null,
         document_time: result.documentTime || null,
+        photo_url: photoPath,
         raw_text: result.rawText || null,
       });
 
@@ -321,20 +419,55 @@ review_status: result.reviewStatus || "pending",
   async function deleteRecord(id: string) {
   if (!confirm("Naozaj chceš vymazať tento záznam?")) return;
 
-  const { error } = await supabase
+  // Najprv zistíme, či má záznam uloženú fotografiu.
+  const { data: record, error: recordError } = await supabase
+    .from("ai_evidence")
+    .select("photo_url")
+    .eq("id", id)
+    .single();
+
+  if (recordError) {
+    console.error("Chyba pri načítaní záznamu:", recordError);
+    alert("Záznam sa nepodarilo načítať.");
+    return;
+  }
+
+  // Vymažeme databázový záznam.
+  const { error: deleteError } = await supabase
     .from("ai_evidence")
     .delete()
     .eq("id", id);
 
-  if (error) {
-    alert("Vymazanie zlyhalo.");
+  if (deleteError) {
+    console.error("Chyba pri mazaní záznamu:", deleteError);
+    alert("Vymazanie záznamu zlyhalo.");
     return;
   }
 
+  // Ak existuje fotografia, vymažeme ju aj zo Storage.
+  if (record?.photo_url) {
+    const { error: photoDeleteError } = await supabase.storage
+      .from("ai-evidence-documents")
+      .remove([record.photo_url]);
+
+    if (photoDeleteError) {
+      console.error(
+        "Záznam bol vymazaný, ale fotografia zostala v Storage:",
+        photoDeleteError
+      );
+
+      alert(
+        "Záznam bol vymazaný, ale fotografiu sa nepodarilo odstrániť z úložiska."
+      );
+    }
+  }
+
   setSelectedRecord(null);
-  loadRecords();
+  setDocumentPhotoUrl(null);
+  await loadRecords();
 }
-async function loadRecords() {
+
+  async function loadRecords() {
   const {
     data: { session },
   } = await supabase.auth.getSession();
@@ -350,9 +483,38 @@ async function loadRecords() {
   if (!error && data) {
     setRecords(data);
   }
-}useEffect(() => {
+}
+useEffect(() => {
+  async function loadDocumentPhoto() {
+    setDocumentPhotoUrl(null);
+
+    console.log("PHOTO PATH:", selectedRecord?.photo_url);
+
+    if (!selectedRecord?.photo_url) {
+      return;
+    }
+
+    const { data, error } = await supabase.storage
+      .from("ai-evidence-documents")
+      .createSignedUrl(selectedRecord.photo_url, 3600);
+
+    console.log("SIGNED URL RESULT:", { data, error });
+
+    if (error) {
+      console.error("Chyba pri načítaní fotografie:", error);
+      return;
+    }
+
+    setDocumentPhotoUrl(data.signedUrl);
+  }
+
+  loadDocumentPhoto();
+}, [selectedRecord]);
+
+useEffect(() => {
   loadRecords();
 }, []);
+
   return (
     <main
   className="min-h-screen bg-cover bg-center bg-fixed p-4 sm:p-6 lg:p-10"
@@ -803,11 +965,35 @@ async function loadRecords() {
         <Info title="Čas" value={selectedRecord.document_time} />
 
       </div>
+      {selectedRecord.photo_url && (
+  <div className="mt-5">
+    <p className="mb-2 text-sm font-bold text-slate-700">
+      Originálny dokument
+    </p>
 
+    {documentPhotoUrl ? (
+      <a
+        href={documentPhotoUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        <img
+          src={documentPhotoUrl}
+          alt="Originálny dokument"
+          className="max-h-[500px] w-full rounded-2xl border border-slate-200 object-contain"
+        />
+      </a>
+    ) : (
+      <p className="text-sm text-slate-500">
+        Načítavam fotografiu...
+      </p>
+    )}
+  </div>
+)}
       <button
         onClick={() => setSelectedRecord(null)}
         className="mt-8 w-full rounded-2xl bg-blue-600 py-4 font-bold text-white"
-      >
+      > 
         Zavrieť
       </button>
 <button
