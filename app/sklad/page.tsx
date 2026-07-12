@@ -315,15 +315,11 @@ setItems(itemsWithPhotos);
     .filter(Boolean);
 
   if (photoPaths.length > 0) {
-   console.log("INVENTORY PHOTO PATHS FULL:", JSON.stringify(photoPaths));
-    const { data: removedFiles, error: storageError } = await supabase.storage
+  
+    const { error: storageError } = await supabase.storage
   .from("inventory-photos")
   .remove(photoPaths);
 
-console.log("INVENTORY DELETE RESULT:", {
-  removedFiles,
-  storageError,
-});
 
     if (storageError) {
       console.error(
