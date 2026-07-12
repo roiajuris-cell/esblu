@@ -3,7 +3,63 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+async function compressImage(file: File): Promise<File> {
+  const imageUrl = URL.createObjectURL(file);
 
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const img = new Image();
+
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error("Fotografiu sa nepodarilo načítať."));
+      img.src = imageUrl;
+    });
+
+    const maxDimension = 1600;
+    const scale = Math.min(
+      1,
+      maxDimension / Math.max(image.width, image.height)
+    );
+
+    const width = Math.round(image.width * scale);
+    const height = Math.round(image.height * scale);
+
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+
+    const context = canvas.getContext("2d");
+
+    if (!context) {
+      throw new Error("Nepodarilo sa pripraviť kompresiu fotografie.");
+    }
+
+    context.drawImage(image, 0, 0, width, height);
+
+    const blob = await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob(
+        (result) => {
+          if (result) {
+            resolve(result);
+          } else {
+            reject(new Error("Fotografiu sa nepodarilo skomprimovať."));
+          }
+        },
+        "image/webp",
+        0.78
+      );
+    });
+
+    const baseName = file.name.replace(/\.[^/.]+$/, "");
+
+    return new File([blob], `${baseName}.webp`, {
+      type: "image/webp",
+      lastModified: Date.now(),
+    });
+  } finally {
+    URL.revokeObjectURL(imageUrl);
+  }
+}
 export default function SkladPage() {
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
@@ -97,13 +153,29 @@ setItems(itemsWithPhotos);
   function updateItem(key: string, value: string) {
     setItem((prev) => ({ ...prev, [key]: value }));
   }
-  function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handlePhotoChange(
+  e: React.ChangeEvent<HTMLInputElement>
+) {
   const file = e.target.files?.[0];
 
   if (!file) return;
 
-  setPhotoFile(file);
-  setPhotoPreview(URL.createObjectURL(file));
+  try {
+    const compressedFile = await compressImage(file);
+
+    setPhotoFile(compressedFile);
+    setPhotoPreview(URL.createObjectURL(compressedFile));
+
+    console.log("Pôvodná veľkosť:", file.size, "bytes");
+    console.log(
+      "Komprimovaná veľkosť:",
+      compressedFile.size,
+      "bytes"
+    );
+  } catch (error) {
+    console.error("Chyba pri kompresii fotografie:", error);
+    alert("Fotografiu sa nepodarilo spracovať.");
+  }
 }
 
   async function saveItem() {
