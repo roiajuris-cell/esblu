@@ -3,7 +3,66 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+async function compressImage(file: File): Promise<File> {
+  const imageUrl = URL.createObjectURL(file);
 
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const img = new Image();
+
+      img.onload = () => resolve(img);
+      img.onerror = () =>
+        reject(new Error("Fotografiu sa nepodarilo načítať."));
+
+      img.src = imageUrl;
+    });
+
+    const maxDimension = 1600;
+
+    const scale = Math.min(
+      1,
+      maxDimension / Math.max(image.width, image.height)
+    );
+
+    const width = Math.round(image.width * scale);
+    const height = Math.round(image.height * scale);
+
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+
+    const context = canvas.getContext("2d");
+
+    if (!context) {
+      throw new Error("Nepodarilo sa pripraviť kompresiu fotografie.");
+    }
+
+    context.drawImage(image, 0, 0, width, height);
+
+    const blob = await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob(
+        (result) => {
+          if (result) {
+            resolve(result);
+          } else {
+            reject(new Error("Fotografiu sa nepodarilo skomprimovať."));
+          }
+        },
+        "image/webp",
+        0.78
+      );
+    });
+
+    const baseName = file.name.replace(/\.[^/.]+$/, "");
+
+    return new File([blob], `${baseName}.webp`, {
+      type: "image/webp",
+      lastModified: Date.now(),
+    });
+  } finally {
+    URL.revokeObjectURL(imageUrl);
+  }
+}
 export default function MachineDetailPage() {
   const { id } = useParams();
   const machineId = String(id);
@@ -56,45 +115,77 @@ export default function MachineDetailPage() {
     setPhotos(data || []);
   }
 
-  async function uploadPhoto(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (!file) return;
+  async function uploadPhoto(
+  event: React.ChangeEvent<HTMLInputElement>
+) {
+  const originalFile = event.target.files?.[0];
 
-    if (!userId) {
-      alert("Nie si prihlásený.");
-      return;
-    }
+  if (!originalFile || !userId || !machineId) return;
 
-    setIsUploading(true);
+  setIsUploading(true);
 
-    const filePath = `${userId}/${machineId}/${Date.now()}-${file.name}`;
+  try {
+    const compressedFile = await compressImage(originalFile);
+
+    console.log(
+      "Pôvodná veľkosť fotografie stroja:",
+      originalFile.size,
+      "bytes"
+    );
+
+    console.log(
+      "Komprimovaná veľkosť fotografie stroja:",
+      compressedFile.size,
+      "bytes"
+    );
+
+    const filePath =
+      `${userId}/${machineId}/${Date.now()}-${compressedFile.name}`;
 
     const { error: uploadError } = await supabase.storage
       .from("machine-photos")
-      .upload(filePath, file);
+      .upload(filePath, compressedFile, {
+        cacheControl: "3600",
+        upsert: false,
+        contentType: compressedFile.type,
+      });
 
     if (uploadError) {
-      setIsUploading(false);
-      alert("Chyba pri nahrávaní fotky: " + uploadError.message);
-      return;
+      throw uploadError;
     }
 
-    const { error: dbError } = await supabase.from("machine_photos").insert({
-      user_id: userId,
-      machine_id: machineId,
-      file_path: filePath,
-    });
-
-    setIsUploading(false);
+    const { error: dbError } = await supabase
+      .from("machine_photos")
+      .insert({
+        user_id: userId,
+        machine_id: machineId,
+        file_path: filePath,
+      });
 
     if (dbError) {
-      alert("Chyba pri ukladaní fotky: " + dbError.message);
-      return;
+      // Ak zlyhá zápis do databázy, odstránime už nahraný súbor.
+      await supabase.storage
+        .from("machine-photos")
+        .remove([filePath]);
+
+      throw dbError;
     }
 
-    loadPhotos();
-  }
+    await loadPhotos();
+  } catch (error: any) {
+    console.error("Chyba pri nahrávaní fotografie stroja:", error);
 
+    alert(
+      "Chyba pri nahrávaní fotky: " +
+        (error?.message || "Neznáma chyba")
+    );
+  } finally {
+    setIsUploading(false);
+
+    // Umožní znovu vybrať aj tú istú fotografiu.
+    event.target.value = "";
+  }
+}
   async function deletePhoto(photo: any) {
     const confirmed = confirm("Naozaj chceš vymazať túto fotografiu?");
     if (!confirmed) return;
