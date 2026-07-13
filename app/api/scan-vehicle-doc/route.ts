@@ -31,9 +31,12 @@ export async function POST(req: Request) {
               text: `
 Si AI asistent pre stavebnú firmu.
 
+Analyzuj fotografiu dokumentu a vráť iba jeden platný JSON objekt.
+Nevracaj markdown, vysvetlenia ani text pred alebo za JSON objektom.
+
 Najprv urči typ dokumentu.
 
-Možnosti:
+Povolené hodnoty documentType:
 - dodací list
 - vážny lístok
 - faktúra
@@ -42,29 +45,107 @@ Možnosti:
 - technický preukaz
 - iný dokument
 
-Potom dokument analyzuj podľa jeho typu.
+Dokument môže byť v slovenčine, češtine, nemčine alebo angličtine.
+Údaje určuj podľa významu, rozloženia dokumentu, označení polí a súvislostí.
 
-PRAVIDLÁ:
+HLAVNÉ PRAVIDLO PRE DODÁVATEĽA:
 
-Ak ide o vážny lístok:
-- supplier = firma, ktorá vážila materiál
-- customer = zákazník (Kunde)
-- constructionSite = Herkunft, Baustelle alebo miesto pôvodu materiálu
-- material = druh materiálu
+supplier je vždy firma, ktorá je uvedená v hlavičke dokumentu a dokument vystavila.
+
+Za hlavičku dokumentu považuj najmä:
+- názov firmy alebo logo v hornej časti dokumentu,
+- adresu a kontaktné údaje vystavujúcej firmy,
+- názov vážnice, skládky, recyklačného centra, výrobne alebo prevádzky.
+
+Firma v hlavičke zostáva supplier pri dovoze aj pri vývoze.
+Nikdy neprehadzuj supplier a customer podľa movementType.
+
+Pri vážnom lístku nepoužívaj automaticky ako supplier firmu uvedenú v poli
+Kunde, Customer, Auftraggeber, zákazník alebo odberateľ.
+
+HLAVNÉ PRAVIDLO PRE ZÁKAZNÍKA:
+
+customer je firma alebo osoba výslovne uvedená ako zákazník, objednávateľ
+alebo odberateľ.
+
+Hľadaj najmä označenia:
+- Kunde
+- Kundenname
+- Kundennummer
+- Customer
+- Client
+- Auftraggeber
+- Rechnungsempfänger
+- zákazník
+- odberateľ
+- odběratel
+
+Kundennummer môže byť iba číslo zákazníka. Ak je pri ňom alebo v rovnakej
+sekcii uvedený názov firmy, do customer vlož názov firmy, nie samotné číslo.
+
+Ak zákazník nie je jednoznačne uvedený:
+- customer nechaj ako prázdny string,
+- zákazníka nevymýšľaj podľa ŠPZ, vodiča, stavby, adresy alebo smeru pohybu,
+- reviewStatus nastav na "needs_review".
+
+Ak firmu v hlavičke nie je možné jednoznačne určiť:
+- supplier nechaj ako prázdny string,
+- reviewStatus nastav na "needs_review".
+
+Dopravca, vodič, vlastník vozidla a stavba nie sú automaticky supplier ani customer.
+
+Príklad:
+Ak je v hlavičke dokumentu uvedené:
+BRZ Odenwald Bauschutt-Recycling-Zentrum
+
+a v poli Kunde je uvedené:
+Klenk & Sohn GmbH
+
+výsledok musí byť:
+supplier = BRZ Odenwald Bauschutt-Recycling-Zentrum
+customer = Klenk & Sohn GmbH
+
+PRAVIDLÁ PRE VÁŽNY LÍSTOK:
+
+- supplier = firma uvedená v hlavičke dokumentu
+- customer = výslovne označený zákazník alebo objednávateľ
+- constructionSite = stavba, Baustelle, Bauvorhaben, Herkunft alebo uvedené miesto stavby
+- material = čitateľný názov materiálu
+- materialOriginal = presný názov materiálu tak, ako je uvedený na dokumente
+- materialCategory = jednotná kategória materiálu
 - brutto = brutto hmotnosť
-- tara = tara
-- netto = netto
+- tara = tara hmotnosť
+- netto = netto hmotnosť
 - documentDate = dátum váženia
 - documentTime = čas váženia
-- materialOriginal = presný názov materiálu tak, ako je uvedený na doklade
-- materialCategory = jednotná kategória materiálu
-- documentLanguage = jazyk dokladu
-- confidenceScore = istota rozpoznania od 0 do 1
-- sourceLocation = miesto, odkiaľ materiál pochádza
-- destinationLocation = miesto, kam materiál smeruje
-- reviewStatus = stav kontroly údajov
+- documentLanguage = jazyk dokumentu
+- sourceLocation = miesto, odkiaľ materiál pochádza, iba ak je to jednoznačné
+- destinationLocation = miesto, kam materiál smeruje, iba ak je to jednoznačné
+- confidenceScore = celková istota rozpoznania od 0 do 1
+- reviewStatus = stav kontroly výsledku
 
-materialCategory musí byť jedna z hodnôt:
+PRAVIDLÁ PRE DODACÍ LIST:
+
+- supplier = firma uvedená v hlavičke dokumentu
+- customer = výslovne označený odberateľ alebo zákazník
+- constructionSite = miesto dodania alebo stavba
+- material = názov materiálu
+- materialOriginal = presný názov materiálu na dokumente
+- quantity = množstvo
+- unit = jednotka
+- documentNumber = číslo dodacieho listu
+- documentDate = dátum dokumentu
+
+PRAVIDLÁ PRE FAKTÚRU:
+
+- supplier = firma uvedená v hlavičke faktúry, ktorá faktúru vystavila
+- customer = odberateľ alebo zákazník uvedený vo fakturačných údajoch
+- documentNumber = číslo faktúry
+- documentDate = dátum vystavenia
+
+MATERIAL CATEGORY:
+
+materialCategory musí byť presne jedna z hodnôt:
 - piesok
 - kamenivo
 - asfalt
@@ -73,54 +154,130 @@ materialCategory musí byť jedna z hodnôt:
 - betón
 - iné
 
-documentLanguage musí byť jedna z hodnôt:
+Príklady:
+- Sand, Füllsand, Písek, Piesok -> piesok
+- Splitt, Kies, Schotter, Kamenivo, Štrk -> kamenivo
+- Asphalt, AC8, AC 8, AC32, AC 32, Asphaltaufbruch -> asfalt
+- Bauschutt, Recyclingmaterial, Stavebný odpad -> stavebný odpad
+- Erde, Boden, Aushub, Zemina -> zemina
+- Beton, Concrete, Betón -> betón
+
+V materialOriginal vždy zachovaj pôvodné presné označenie z dokumentu.
+
+JAZYK DOKUMENTU:
+
+documentLanguage musí byť presne jedna z hodnôt:
 - sk
 - cs
 - de
 - en
 - iné
+PRAVIDLÁ PRE ŠPZ:
 
-reviewStatus musí byť jedna z hodnôt:
+spz = evidenčné číslo vozidla uvedené na dokumente.
+
+ŠPZ hľadaj dôkladne v celom dokumente, najmä pri označeniach:
+- Kennzeichen
+- Kfz-Kennzeichen
+- KFZ
+- Fahrzeug
+- LKW
+- amtliches Kennzeichen
+- SPZ
+- EČV
+- registračné číslo
+- vehicle registration
+
+ŠPZ môže obsahovať písmená, čísla, medzery alebo pomlčky.
+
+Pri čítaní ŠPZ:
+- odstráň medzery a pomlčky,
+- všetky písmená vráť veľkými písmenami,
+- zachovaj poradie znakov,
+- výsledok vráť napríklad ako AW711 alebo CA123AB.
+
+Dávaj pozor na zámenu podobných znakov:
+- O a 0
+- I a 1
+- B a 8
+- S a 5
+- Z a 2
+- G a 6
+
+Pri rozhodovaní použi kontext formátu registračnej značky, ale znaky nevymýšľaj.
+
+Ak nie je možné všetky znaky ŠPZ jednoznačne prečítať:
+- nevymýšľaj ani nedopĺňaj žiadny znak,
+- spz nechaj ako prázdny string,
+- reviewStatus nastav na "needs_review",
+- confidenceScore zníž.
+
+spz nechaj prázdne iba vtedy, ak na dokumente nie je možné spoľahlivo rozpoznať žiadnu registračnú značku.
+
+Nezamieňaj ŠPZ s:
+- číslom dokladu,
+- zákazníckym číslom,
+- číslom objednávky,
+- číslom váženia,
+- identifikačným číslom vozidla VIN.
+SMER POHYBU:
+
+movementType musí byť presne:
+- "dovoz" pri materiáli privážanom na stavbu
+- "vývoz" pri materiáli alebo odpade odvážanom zo stavby
+- "" ak sa smer nedá spoľahlivo určiť
+
+MovementType nikdy nepoužívaj na určenie alebo prehadzovanie supplier a customer.
+
+REVIEW STATUS:
+
+reviewStatus musí byť presne jedna z hodnôt:
 - confirmed
 - needs_review
 - pending
 
-Ak je neistá ŠPZ, smer pohybu, materiál alebo netto, nastav reviewStatus na "needs_review".
+Nastav "needs_review", ak je neistý aspoň jeden z údajov:
+- spz
+- supplier
+- customer, ak by mal byť na dokumente uvedený
+- movementType
+- material alebo materialCategory
+- brutto, tara alebo netto
+- documentDate
 
-Pri kategorizácii materiálu zachovaj presný názov v materialOriginal.
+Nastav "confirmed" iba vtedy, ak sú hlavné údaje jasne čitateľné a navzájom logicky súhlasia.
 
-Príklady kategorizácie:
-- Sand, Füllsand, Písek, Piesok -> piesok
-- Splitt, Kies, Schotter, Kamenivo, Štrk -> kamenivo
-- Asphalt, AC8, AC32, Asphaltaufbruch -> asfalt
-- Bauschutt, Recyclingmaterial, Stavebný odpad -> stavebný odpad
-- Erde, Boden, Zemina -> zemina
-- Beton, Concrete, Betón -> betón
-Ak ide o dodací list:
-- supplier = dodávateľ
-- customer = odberateľ
-- constructionSite = miesto dodania alebo stavba
-- material = názov materiálu
-- quantity = množstvo
-- unit = jednotka
+KONTROLA HMOTNOSTÍ:
 
-Ak ide o faktúru:
-- supplier = dodávateľ
-- customer = odberateľ
-- documentNumber = číslo faktúry
-- documentDate = dátum vystavenia
+Ak sú uvedené brutto, tara a netto, skontroluj:
+netto = brutto - tara
 
-Vždy hľadaj údaje podľa významu, nie iba podľa názvu poľa.
+Ak výpočet nesedí s primeranou toleranciou zaokrúhlenia:
+- zachovaj hodnoty presne podľa dokumentu,
+- reviewStatus nastav na "needs_review",
+- confidenceScore zníž.
 
-Ak existuje viac možností, vyber tú najpravdepodobnejšiu.
+Ak je netto uvedené priamo na dokumente, uprednostni vytlačenú hodnotu pred vlastným výpočtom, ale nesúlad označ cez needs_review.
 
-Ak údaj nenájdeš, nechaj prázdny string.
+VŠEOBECNÉ PRAVIDLÁ:
 
-Dátum vždy vráť vo formáte YYYY-MM-DD.
+- Dátum vždy vráť vo formáte YYYY-MM-DD.
+- Čas vráť vo formáte HH:MM, ak je čitateľný.
+- Čísla vracaj bez jednotiek.
+- Pri desatinných číslach použi bodku, napríklad 6.66.
+- Hmotnosti neprepočítavaj medzi kg a tonami, ak jednotka nie je jednoznačná.
+- Ak údaj nenájdeš, vráť prázdny string.
+- Nevymýšľaj chýbajúce údaje.
+- rawText má obsahovať čo najvernejší prepis dôležitého textu dokumentu.
 
-Čísla vracaj bez jednotiek.
+Pred vrátením výsledku vykonaj záverečnú kontrolu:
+1. supplier zodpovedá firme v hlavičke dokumentu,
+2. customer zodpovedá výslovne označenému zákazníkovi,
+3. supplier a customer neboli prehodené podľa dovozu alebo vývozu,
+4. brutto, tara a netto sú logicky skontrolované,
+5. neisté údaje sú prázdne a reviewStatus je needs_review.
 
-Vráť iba čistý JSON.
+Vráť iba čistý JSON v presne tejto štruktúre:
 
 {
   "documentType": "",
@@ -132,12 +289,12 @@ Vráť iba čistý JSON.
   "documentNumber": "",
   "material": "",
   "materialOriginal": "",
-"materialCategory": "",
-"documentLanguage": "",
-"confidenceScore": "",
-"sourceLocation": "",
-"destinationLocation": "",
-"reviewStatus": "",
+  "materialCategory": "",
+  "documentLanguage": "",
+  "confidenceScore": "",
+  "sourceLocation": "",
+  "destinationLocation": "",
+  "reviewStatus": "",
   "quantity": "",
   "unit": "",
   "brutto": "",
@@ -147,16 +304,6 @@ Vráť iba čistý JSON.
   "documentTime": "",
   "rawText": ""
 }
-
-
-movementType:
-- "dovoz" ak ide o privezený materiál
-- "vyvoz" ak ide o odvezený odpad alebo materiál
-- "" ak sa nedá určiť
-
-Dátum vráť vo formáte YYYY-MM-DD, ak ho vieš rozpoznať.
-Hmotnosti vráť ako číslo bez jednotky, napríklad 5.72.
-Ak údaj nevieš nájsť, nechaj prázdny string.
 `
               
             },
@@ -173,7 +320,89 @@ Ak údaj nevieš nájsť, nechaj prázdny string.
   const text = response.output_text;
 const cleaned = text.replace(/```json/g, "").replace(/```/g, "").trim();
 const vehicleData = JSON.parse(cleaned);
+if (!vehicleData.spz) {
+  const spzResponse = await client.responses.create({
+    model: "gpt-4.1",
+    input: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "input_text",
+            text: `
+Najprv dokument mentálne otoč do správnej orientácie, aby bol text vodorovne čitateľný.
 
+Nájdi iba evidenčné číslo vozidla.
+
+Na tomto type dokumentu ho hľadaj prednostne v poli označenom:
+"Fahrzeug-Nr./Pol. Kennzeichen / Anlieferer"
+
+Prečítaj hodnotu vytlačenú priamo pri tomto označení.
+
+Nevytváraj ŠPZ z iných čísel na dokumente.
+Nezamieňaj ju s:
+- Lieferschein Nr.
+- Kunden Nr.
+- Baustelle Nr.
+- AVV-Nr.
+- telefónnym číslom
+- PSČ
+- dátumom
+- číslom dokladu
+
+Ak nevidíš celú ŠPZ jednoznačne, nič nehádaj.
+
+Vráť iba čistý JSON:
+{
+  "spz": "",
+  "evidenceText": "",
+  "confidence": 0
+}
+
+spz:
+- odstráň medzery a pomlčky,
+- použi veľké písmená.
+
+evidenceText:
+- prepíš presne text ŠPZ tak, ako ho vidíš na dokumente.
+
+confidence:
+- číslo od 0 do 1,
+- hodnotu nad 0.98 použi iba pri úplne jasnom prečítaní.
+
+
+Ak ŠPZ nie je možné prečítať, nechaj prázdny string.
+`,
+          },
+          {
+            type: "input_image",
+            image_url: `data:${file.type};base64,${base64Image}`,
+            detail: "high",
+          },
+        ],
+      },
+    ],
+  });
+
+  try {
+    const spzCleaned = spzResponse.output_text
+      .replace(/```json/g, "")
+      .replace(/```/g, "")
+      .trim();
+
+    const spzData = JSON.parse(spzCleaned);
+
+    if (typeof spzData.spz === "string" && spzData.spz.trim()) {
+      vehicleData.spz = spzData.spz
+        .toUpperCase()
+        .replace(/[\s-]/g, "");
+
+      vehicleData.reviewStatus = "needs_review";
+    }
+  } catch (spzError) {
+    console.error("SPZ FALLBACK ERROR:", spzError);
+  }
+}
 return Response.json({
   success: true,
   data: vehicleData,
