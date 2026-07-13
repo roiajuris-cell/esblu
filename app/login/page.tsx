@@ -7,87 +7,181 @@ import { supabase } from "@/lib/supabase";
 export default function LoginPage() {
   const router = useRouter();
 
+  const [mode, setMode] = useState<"login" | "register">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
+  function validateEmail(value: string) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+  }
+
   async function login() {
+    const normalizedEmail = email.trim().toLowerCase();
+
+    if (!validateEmail(normalizedEmail)) {
+      alert("Zadaj platnú e-mailovú adresu.");
+      return;
+    }
+
+    if (!password) {
+      alert("Zadaj heslo.");
+      return;
+    }
+
     setLoading(true);
 
     const { error } = await supabase.auth.signInWithPassword({
-      email,
+      email: normalizedEmail,
       password,
     });
 
     setLoading(false);
 
     if (error) {
-      alert("Chyba pri prihlásení: " + error.message);
+      alert("Prihlásenie sa nepodarilo. Skontroluj e-mail a heslo.");
       return;
     }
 
     router.push("/");
+    router.refresh();
   }
 
   async function register() {
+    const normalizedEmail = email.trim().toLowerCase();
+
+    if (!validateEmail(normalizedEmail)) {
+      alert("Zadaj platnú e-mailovú adresu.");
+      return;
+    }
+
+    if (password.length < 8) {
+      alert("Heslo musí mať minimálne 8 znakov.");
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      alert("Heslá sa nezhodujú.");
+      return;
+    }
+
     setLoading(true);
 
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-    });
+    const { data, error } = await supabase.auth.signUp({
+  email: normalizedEmail,
+  password,
+  options: {
+    emailRedirectTo: "https://esblu.com/login",
+  },
+});
 
     setLoading(false);
 
     if (error) {
-      alert("Chyba pri registrácii: " + error.message);
+      alert("Registrácia sa nepodarila: " + error.message);
       return;
     }
 
-    alert("Registrácia prebehla. Teraz sa môžeš prihlásiť.");
+    setPassword("");
+    setConfirmPassword("");
+
+    if (data.session) {
+      alert("Účet bol vytvorený. Teraz si prihlásený.");
+      router.push("/");
+      router.refresh();
+      return;
+    }
+
+    alert(
+      "Registrácia prebehla úspešne. Skontroluj svoj e-mail a potvrď registráciu."
+    );
+
+    setMode("login");
+  }
+
+  function switchMode() {
+    setMode((currentMode) =>
+      currentMode === "login" ? "register" : "login"
+    );
+
+    setPassword("");
+    setConfirmPassword("");
   }
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-100 p-6">
       <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow">
-        <h1 className="text-3xl font-bold text-slate-900">Prihlásenie</h1>
+        <h1 className="text-3xl font-bold text-slate-900">
+          {mode === "login" ? "Prihlásenie" : "Registrácia firmy"}
+        </h1>
 
         <p className="mt-2 text-slate-500">
-          Prihlás sa do aplikácie Esblu.
+          {mode === "login"
+            ? "Prihlás sa do aplikácie Esblu."
+            : "Vytvor nový účet pre svoju firmu."}
         </p>
 
         <div className="mt-6 space-y-4">
           <input
             type="email"
             placeholder="E-mail"
+            autoComplete="email"
             className="w-full rounded-xl border p-3"
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            onChange={(event) => setEmail(event.target.value)}
+            disabled={loading}
           />
 
           <input
             type="password"
             placeholder="Heslo"
+            autoComplete={
+              mode === "login" ? "current-password" : "new-password"
+            }
             className="w-full rounded-xl border p-3"
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            onChange={(event) => setPassword(event.target.value)}
+            disabled={loading}
           />
+
+          {mode === "register" && (
+            <input
+              type="password"
+              placeholder="Potvrdenie hesla"
+              autoComplete="new-password"
+              className="w-full rounded-xl border p-3"
+              value={confirmPassword}
+              onChange={(event) =>
+                setConfirmPassword(event.target.value)
+              }
+              disabled={loading}
+            />
+          )}
         </div>
 
         <button
-          onClick={login}
+          type="button"
+          onClick={mode === "login" ? login : register}
           disabled={loading}
-          className="mt-6 w-full rounded-xl bg-blue-600 px-6 py-3 text-white hover:bg-blue-700 disabled:bg-gray-400"
+          className="mt-6 w-full rounded-xl bg-blue-600 px-6 py-3 font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-400"
         >
-          {loading ? "Pracujem..." : "Prihlásiť sa"}
+          {loading
+            ? "Pracujem..."
+            : mode === "login"
+              ? "Prihlásiť sa"
+              : "Vytvoriť účet"}
         </button>
 
         <button
-          onClick={register}
+          type="button"
+          onClick={switchMode}
           disabled={loading}
-          className="mt-3 w-full rounded-xl bg-slate-900 px-6 py-3 text-white hover:bg-slate-800 disabled:bg-gray-400"
+          className="mt-3 w-full rounded-xl border border-slate-300 px-6 py-3 font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-gray-400"
         >
-          Vytvoriť účet
+          {mode === "login"
+            ? "Nemáš účet? Registrovať firmu"
+            : "Už máš účet? Prihlásiť sa"}
         </button>
       </div>
     </main>
