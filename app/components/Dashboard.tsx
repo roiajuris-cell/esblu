@@ -24,6 +24,7 @@ export default function Dashboard() {
   const [machines, setMachines] = useState<any[]>([]);
   const [items, setItems] = useState<any[]>([]);
   const [companyName, setCompanyName] = useState("ESBLU");
+  const [companyLogoUrl, setCompanyLogoUrl] = useState("");
   const [search, setSearch] = useState("");
   const greeting = getGreeting();
   useEffect(() => {
@@ -66,7 +67,7 @@ export default function Dashboard() {
 
     const { data: settingsData } = await supabase
       .from("settings")
-      .select("*")
+      .select("company_name, logo_path")
       .eq("user_id", currentUserId)
       .limit(1)
       .single();
@@ -78,6 +79,15 @@ export default function Dashboard() {
     if (settingsData?.company_name) {
       setCompanyName(settingsData.company_name);
     }
+    if (settingsData?.logo_path) {
+  const { data: logoData } = supabase.storage
+    .from("company-logos")
+    .getPublicUrl(settingsData.logo_path);
+
+  setCompanyLogoUrl(logoData.publicUrl);
+} else {
+  setCompanyLogoUrl("");
+}
   }
 
   function createAlerts() {
@@ -252,7 +262,23 @@ export default function Dashboard() {
           <div className="flex items-start justify-between">
             <div>
               <p className="text-sm font-semibold text-white/80 drop-shadow lg:text-base">
-  👤 {companyName}
+  <div className="flex items-center gap-3">
+  {companyLogoUrl ? (
+    <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/30 bg-white shadow">
+      <img
+        src={companyLogoUrl}
+        alt={`Logo ${companyName}`}
+        className="h-full w-full object-contain"
+      />
+    </div>
+  ) : (
+    <span className="text-2xl">👤</span>
+  )}
+
+  <p className="text-sm font-semibold text-white/80 drop-shadow-lg lg:text-base">
+    {companyName}
+  </p>
+</div>
 </p>
 
 <h2 className="mt-1 text-3xl font-black tracking-tight text-white drop-shadow-lg lg:text-5xl">
