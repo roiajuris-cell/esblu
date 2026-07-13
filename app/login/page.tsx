@@ -189,11 +189,19 @@ async function resetPassword() {
         </div>
 
         <button
-          type="button"
-          onClick={mode === "login" ? login : register}
-          disabled={loading}
-          className="mt-6 w-full rounded-xl bg-blue-600 px-6 py-3 font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-400"
-        >{mode === "login" && (
+  type="button"
+  onClick={mode === "login" ? login : register}
+  disabled={loading}
+  className="mt-6 w-full rounded-xl bg-blue-600 px-6 py-3 font-semibold text-white hover:bg-blue-700 disabled:bg-gray-400"
+>
+  {loading
+    ? "Pracujem..."
+    : mode === "login"
+      ? "Prihlásiť sa"
+      : "Vytvoriť účet"}
+</button>
+
+{mode === "login" && (
   <button
     type="button"
     onClick={resetPassword}
@@ -205,12 +213,6 @@ async function resetPassword() {
       : "Zabudol si heslo?"}
   </button>
 )}
-          {loading
-            ? "Pracujem..."
-            : mode === "login"
-              ? "Prihlásiť sa"
-              : "Vytvoriť účet"}
-        </button>
 
         <button
           type="button"
