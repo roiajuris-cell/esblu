@@ -12,6 +12,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
 
   function validateEmail(value: string) {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
@@ -99,7 +100,34 @@ export default function LoginPage() {
 
     setMode("login");
   }
+async function resetPassword() {
+  const normalizedEmail = email.trim().toLowerCase();
 
+  if (!validateEmail(normalizedEmail)) {
+    alert("Najprv zadaj platnú e-mailovú adresu.");
+    return;
+  }
+
+  setResetLoading(true);
+
+  const { error } = await supabase.auth.resetPasswordForEmail(
+    normalizedEmail,
+    {
+      redirectTo: "https://esblu.com/reset-hesla",
+    }
+  );
+
+  setResetLoading(false);
+
+  if (error) {
+    alert("E-mail na obnovu hesla sa nepodarilo odoslať: " + error.message);
+    return;
+  }
+
+  alert(
+    "Odkaz na vytvorenie nového hesla bol odoslaný. Skontroluj aj priečinok Spam."
+  );
+}
   function switchMode() {
     setMode((currentMode) =>
       currentMode === "login" ? "register" : "login"
@@ -165,7 +193,18 @@ export default function LoginPage() {
           onClick={mode === "login" ? login : register}
           disabled={loading}
           className="mt-6 w-full rounded-xl bg-blue-600 px-6 py-3 font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-400"
-        >
+        >{mode === "login" && (
+  <button
+    type="button"
+    onClick={resetPassword}
+    disabled={loading || resetLoading}
+    className="mt-3 w-full text-center text-sm font-semibold text-blue-700 hover:underline disabled:text-gray-400"
+  >
+    {resetLoading
+      ? "Odosielam odkaz..."
+      : "Zabudol si heslo?"}
+  </button>
+)}
           {loading
             ? "Pracujem..."
             : mode === "login"
