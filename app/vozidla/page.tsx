@@ -4,12 +4,129 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import VehicleCard from "../components/VehicleCard";
 
+type RegistrationSide = "front" | "back";
+
+type RegistrationData = {
+  spz: string | null;
+  vin: string | null;
+  znacka: string | null;
+  model: string | null;
+  datumPrvejEvidencie: string | null;
+  rokVyroby: string | null;
+  kategoriaVozidla: string | null;
+  druhVozidla: string | null;
+  palivo: string | null;
+  objemMotora: string | null;
+  vykon: string | null;
+  farba: string | null;
+  prevadzkovaHmotnost: string | null;
+  najvacsiaPripustnaCelkovaHmotnost: string | null;
+  pocetMiest: string | null;
+  cisloTechnickehoPreukazu: string | null;
+};
+
+const vehicleFieldMappings = [
+  { source: "spz", target: "spz", label: "ŠPZ" },
+  { source: "vin", target: "vin", label: "VIN" },
+  { source: "znacka", target: "znacka", label: "Značka" },
+  { source: "model", target: "model", label: "Model" },
+  {
+    source: "datumPrvejEvidencie",
+    target: "datumPrvejEvidencie",
+    label: "Dátum prvej evidencie",
+  },
+  { source: "rokVyroby", target: "rokVyroby", label: "Rok výroby" },
+  { source: "palivo", target: "palivo", label: "Palivo" },
+  {
+    source: "objemMotora",
+    target: "objemMotora",
+    label: "Objem motora",
+  },
+  { source: "vykon", target: "vykon", label: "Výkon" },
+  { source: "farba", target: "farba", label: "Farba" },
+  {
+    source: "prevadzkovaHmotnost",
+    target: "hmotnost",
+    label: "Prevádzková hmotnosť",
+  },
+  { source: "pocetMiest", target: "pocetMiest", label: "Počet miest" },
+] as const;
+
+async function compressRegistrationImage(file: File): Promise<File> {
+  if (!file.type.startsWith("image/")) {
+    throw new Error("Vybraný súbor nie je obrázok.");
+  }
+
+  const imageUrl = URL.createObjectURL(file);
+
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const img = new Image();
+
+      img.onload = () => resolve(img);
+      img.onerror = () =>
+        reject(new Error("Fotografiu sa nepodarilo načítať."));
+      img.src = imageUrl;
+    });
+
+    const maxDimension = 1800;
+    const scale = Math.min(
+      1,
+      maxDimension / Math.max(image.width, image.height)
+    );
+    const width = Math.max(1, Math.round(image.width * scale));
+    const height = Math.max(1, Math.round(image.height * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+
+    const context = canvas.getContext("2d");
+
+    if (!context) {
+      throw new Error("Nepodarilo sa pripraviť kompresiu fotografie.");
+    }
+
+    context.drawImage(image, 0, 0, width, height);
+
+    const blob = await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob(
+        (result) => {
+          if (result) {
+            resolve(result);
+          } else {
+            reject(new Error("Fotografiu sa nepodarilo skomprimovať."));
+          }
+        },
+        "image/webp",
+        0.8
+      );
+    });
+
+    const baseName = file.name.replace(/\.[^/.]+$/, "") || "technicky-preukaz";
+
+    return new File([blob], `${baseName}.webp`, {
+      type: "image/webp",
+      lastModified: Date.now(),
+    });
+  } finally {
+    URL.revokeObjectURL(imageUrl);
+  }
+}
+
 export default function VozidlaPage() {
   const [userId, setUserId] = useState("");
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [frontFile, setFrontFile] = useState<File | null>(null);
+  const [frontPreview, setFrontPreview] = useState<string | null>(null);
+  const [backFile, setBackFile] = useState<File | null>(null);
+  const [backPreview, setBackPreview] = useState<string | null>(null);
+  const [isPreparingFront, setIsPreparingFront] = useState(false);
+  const [isPreparingBack, setIsPreparingBack] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [scanError, setScanError] = useState("");
+  const [scanMessage, setScanMessage] = useState("");
+  const [registrationData, setRegistrationData] =
+    useState<RegistrationData | null>(null);
   const [vehicle, setVehicle] = useState<any | null>(null);
   const [vehicles, setVehicles] = useState<any[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -17,6 +134,18 @@ export default function VozidlaPage() {
   useEffect(() => {
     checkUser();
   }, []);
+
+  useEffect(() => {
+    return () => {
+      if (frontPreview) URL.revokeObjectURL(frontPreview);
+    };
+  }, [frontPreview]);
+
+  useEffect(() => {
+    return () => {
+      if (backPreview) URL.revokeObjectURL(backPreview);
+    };
+  }, [backPreview]);
 
   async function checkUser() {
     const {
@@ -49,14 +178,66 @@ export default function VozidlaPage() {
     setVehicles(data || []);
   }
 
-  function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
+  function clearRegistrationResult() {
+    setScanError("");
+    setScanMessage("");
+    setRegistrationData(null);
+  }
+
+  function clearRegistrationImages() {
+    setFrontFile(null);
+    setFrontPreview(null);
+    setBackFile(null);
+    setBackPreview(null);
+    clearRegistrationResult();
+  }
+
+  async function handleRegistrationFileChange(
+    side: RegistrationSide,
+    event: React.ChangeEvent<HTMLInputElement>
+  ) {
     const file = event.target.files?.[0];
+    event.target.value = "";
+
     if (!file) return;
 
-    setSelectedFile(file);
-    setImagePreview(URL.createObjectURL(file));
-    setVehicle(null);
-    setEditingId(null);
+    const setPreparing =
+      side === "front" ? setIsPreparingFront : setIsPreparingBack;
+    setPreparing(true);
+    clearRegistrationResult();
+
+    try {
+      const compressedFile = await compressRegistrationImage(file);
+      const previewUrl = URL.createObjectURL(compressedFile);
+
+      if (side === "front") {
+        setFrontFile(compressedFile);
+        setFrontPreview(previewUrl);
+      } else {
+        setBackFile(compressedFile);
+        setBackPreview(previewUrl);
+      }
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Fotografiu sa nepodarilo spracovať.";
+      setScanError(message);
+    } finally {
+      setPreparing(false);
+    }
+  }
+
+  function removeRegistrationImage(side: RegistrationSide) {
+    if (side === "front") {
+      setFrontFile(null);
+      setFrontPreview(null);
+    } else {
+      setBackFile(null);
+      setBackPreview(null);
+    }
+
+    clearRegistrationResult();
   }
 
   function updateVehicle(key: string, value: string) {
@@ -67,35 +248,103 @@ export default function VozidlaPage() {
   }
 
   async function handleAiProcess() {
-    if (!selectedFile) {
-      alert("Najprv nahraj fotku technického preukazu.");
+    if (!frontFile) {
+      setScanError("Najprv pridaj prednú stranu technického preukazu.");
       return;
     }
 
     setIsProcessing(true);
-    setVehicle(null);
+    setScanError("");
+    setScanMessage("");
 
-    const formData = new FormData();
-    formData.append("file", selectedFile);
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
 
-    const response = await fetch("/api/scan-vehicle-doc", {
-      method: "POST",
-      body: formData,
-    });
+      if (!session) {
+        throw new Error("Na AI načítanie musíš byť prihlásený.");
+      }
 
-    const data = await response.json();
+      const formData = new FormData();
+      formData.append("front", frontFile);
 
-    if (data.success) {
-      setVehicle({
-        ...data.data,
-        stk: "",
-        ek: "",
+      if (backFile) {
+        formData.append("back", backFile);
+      }
+
+      const response = await fetch("/api/scan-vehicle-registration", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: formData,
       });
-    } else {
-      alert(data.error || "AI spracovanie zlyhalo.");
-    }
+      const data = await response.json();
 
-    setIsProcessing(false);
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "AI spracovanie zlyhalo.");
+      }
+
+      const extracted = data.data as RegistrationData;
+      const currentVehicle = vehicle || {};
+      const conflicts = vehicleFieldMappings.filter(({ source, target }) => {
+        const extractedValue = extracted[source];
+        const currentValue = currentVehicle[target];
+
+        return (
+          extractedValue !== null &&
+          String(currentValue ?? "").trim() !== "" &&
+          String(currentValue).trim().toLocaleLowerCase("sk") !==
+            extractedValue.trim().toLocaleLowerCase("sk")
+        );
+      });
+
+      const overwriteConflicts =
+        conflicts.length === 0 ||
+        window.confirm(
+          `AI našla odlišné hodnoty v poliach: ${conflicts
+            .map(({ label }) => label)
+            .join(", ")}.\n\nChceš tieto existujúce hodnoty prepísať?`
+        );
+
+      setVehicle((current: Record<string, unknown> | null) => {
+        const next: Record<string, unknown> = {
+          stk: "",
+          ek: "",
+          ...(current || {}),
+        };
+
+        vehicleFieldMappings.forEach(({ source, target }) => {
+          const extractedValue = extracted[source];
+
+          if (extractedValue === null) return;
+
+          const hasCurrentValue = String(next[target] ?? "").trim() !== "";
+
+          if (!hasCurrentValue || overwriteConflicts) {
+            next[target] = extractedValue;
+          }
+        });
+
+        return next;
+      });
+
+      setRegistrationData(extracted);
+      setScanMessage(
+        conflicts.length > 0 && !overwriteConflicts
+          ? "AI údaje boli načítané. Existujúce odlišné hodnoty zostali zachované. Pred uložením všetko skontroluj."
+          : "AI údaje boli načítané. Pred uložením vozidla ich dôkladne skontroluj."
+      );
+    } catch (error) {
+      setScanError(
+        error instanceof Error
+          ? error.message
+          : "AI načítanie technického preukazu zlyhalo."
+      );
+    } finally {
+      setIsProcessing(false);
+    }
   }
 
   function vehiclePayload() {
@@ -147,8 +396,7 @@ export default function VozidlaPage() {
       alert("Vozidlo bolo upravené.");
       setEditingId(null);
       setVehicle(null);
-      setImagePreview(null);
-      setSelectedFile(null);
+      clearRegistrationImages();
       loadVehicles();
       return;
     }
@@ -164,15 +412,13 @@ export default function VozidlaPage() {
 
     alert("Vozidlo bolo uložené.");
     setVehicle(null);
-    setImagePreview(null);
-    setSelectedFile(null);
+    clearRegistrationImages();
     loadVehicles();
   }
 
   function handleEdit(car: any) {
     setEditingId(car.id);
-    setImagePreview(null);
-    setSelectedFile(null);
+    clearRegistrationImages();
 
     setVehicle({
       spz: car.spz || "",
@@ -215,7 +461,23 @@ export default function VozidlaPage() {
   function cancelEdit() {
     setEditingId(null);
     setVehicle(null);
+    clearRegistrationImages();
   }
+
+  const additionalRegistrationFields = registrationData
+    ? [
+        ["Kategória vozidla", registrationData.kategoriaVozidla],
+        ["Druh vozidla", registrationData.druhVozidla],
+        [
+          "Najväčšia prípustná celková hmotnosť",
+          registrationData.najvacsiaPripustnaCelkovaHmotnost,
+        ],
+        [
+          "Číslo technického preukazu",
+          registrationData.cisloTechnickehoPreukazu,
+        ],
+      ].filter(([, value]) => value)
+    : [];
 
   return (
     <main
@@ -235,39 +497,183 @@ export default function VozidlaPage() {
         Evidencia firemných vozidiel.
       </p>
 
-      <div className="mt-8">
-        <label className="cursor-pointer rounded-xl bg-blue-600 px-6 py-3 text-white hover:bg-blue-700">
-          📷 Odfotiť technický preukaz
-          <input
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={handleFileChange}
-          />
-        </label>
-      </div>
+      <div className="mt-8 rounded-2xl border border-white/20 bg-white/45 p-6 shadow-lg backdrop-blur-xl">
+        <h2 className="text-2xl font-bold">Načítať technický preukaz</h2>
+        <p className="mt-2 text-sm text-slate-700">
+          Fotografie sa použijú iba na AI načítanie a nikam sa trvalo
+          neukladajú. Predná strana je povinná, zadná je voliteľná.
+        </p>
 
-      {imagePreview && (
-        <div className="mt-8 rounded-2xl bg-white/45 border border-white/20 backdrop-blur-xl p-6 shadow-lg">
-          <h2 className="mb-4 text-2xl font-bold">
-            Náhľad technického preukazu
-          </h2>
+        <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <section className="rounded-2xl bg-white/80 p-5 shadow-sm">
+            <h3 className="text-lg font-bold">Predná strana</h3>
+            <p className="mt-1 text-sm text-slate-600">Povinná fotografia</p>
 
-          <img
-            src={imagePreview}
-            alt="Nahratý technický preukaz"
-            className="max-w-xl rounded-xl border"
-          />
+            <div className="mt-4 flex flex-wrap gap-3">
+              <label className="cursor-pointer rounded-xl bg-blue-600 px-4 py-3 font-medium text-white hover:bg-blue-700">
+                {isPreparingFront ? "Pripravujem..." : "📷 Odfotiť"}
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  className="hidden"
+                  disabled={isProcessing || isPreparingFront}
+                  onChange={(event) =>
+                    handleRegistrationFileChange("front", event)
+                  }
+                />
+              </label>
 
-          <button
-            onClick={handleAiProcess}
-            disabled={isProcessing}
-            className="mt-6 rounded-xl bg-green-600 px-6 py-3 text-white hover:bg-green-700 disabled:bg-gray-400"
-          >
-            {isProcessing ? "Spracovávam..." : "🤖 Spracovať cez AI"}
-          </button>
+              <label className="cursor-pointer rounded-xl border bg-white px-4 py-3 font-medium text-slate-700 hover:bg-slate-50">
+                🖼️ Vybrať z galérie
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  disabled={isProcessing || isPreparingFront}
+                  onChange={(event) =>
+                    handleRegistrationFileChange("front", event)
+                  }
+                />
+              </label>
+            </div>
+
+            {frontPreview ? (
+              <div className="mt-4">
+                <img
+                  src={frontPreview}
+                  alt="Predná strana technického preukazu"
+                  className="h-64 w-full rounded-xl border bg-white object-contain"
+                />
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-xs text-slate-500">
+                    Novým výberom fotografiu vymeníš.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => removeRegistrationImage("front")}
+                    disabled={isProcessing}
+                    className="rounded-lg bg-red-600 px-3 py-2 text-sm text-white hover:bg-red-700 disabled:bg-gray-400"
+                  >
+                    Odstrániť
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-4 rounded-xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500">
+                Predná strana zatiaľ nie je vybraná.
+              </div>
+            )}
+          </section>
+
+          <section className="rounded-2xl bg-white/80 p-5 shadow-sm">
+            <h3 className="text-lg font-bold">Zadná strana</h3>
+            <p className="mt-1 text-sm text-slate-600">Voliteľná fotografia</p>
+
+            <div className="mt-4 flex flex-wrap gap-3">
+              <label className="cursor-pointer rounded-xl bg-blue-600 px-4 py-3 font-medium text-white hover:bg-blue-700">
+                {isPreparingBack ? "Pripravujem..." : "📷 Odfotiť"}
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  className="hidden"
+                  disabled={isProcessing || isPreparingBack}
+                  onChange={(event) =>
+                    handleRegistrationFileChange("back", event)
+                  }
+                />
+              </label>
+
+              <label className="cursor-pointer rounded-xl border bg-white px-4 py-3 font-medium text-slate-700 hover:bg-slate-50">
+                🖼️ Vybrať z galérie
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  disabled={isProcessing || isPreparingBack}
+                  onChange={(event) =>
+                    handleRegistrationFileChange("back", event)
+                  }
+                />
+              </label>
+            </div>
+
+            {backPreview ? (
+              <div className="mt-4">
+                <img
+                  src={backPreview}
+                  alt="Zadná strana technického preukazu"
+                  className="h-64 w-full rounded-xl border bg-white object-contain"
+                />
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-xs text-slate-500">
+                    Novým výberom fotografiu vymeníš.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => removeRegistrationImage("back")}
+                    disabled={isProcessing}
+                    className="rounded-lg bg-red-600 px-3 py-2 text-sm text-white hover:bg-red-700 disabled:bg-gray-400"
+                  >
+                    Odstrániť
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-4 rounded-xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500">
+                Zadná strana zatiaľ nie je vybraná.
+              </div>
+            )}
+          </section>
         </div>
-      )}
+
+        <button
+          type="button"
+          onClick={handleAiProcess}
+          disabled={
+            !frontFile ||
+            isProcessing ||
+            isPreparingFront ||
+            isPreparingBack
+          }
+          className="mt-6 rounded-xl bg-green-600 px-6 py-3 font-medium text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:bg-gray-400"
+        >
+          {isProcessing
+            ? "Načítavam údaje..."
+            : "🤖 Načítať údaje pomocou AI"}
+        </button>
+
+        {scanError && (
+          <p className="mt-4 rounded-xl bg-red-100 p-4 text-sm font-medium text-red-700">
+            {scanError}
+          </p>
+        )}
+
+        {scanMessage && (
+          <p className="mt-4 rounded-xl bg-green-100 p-4 text-sm font-medium text-green-800">
+            {scanMessage}
+          </p>
+        )}
+
+        {additionalRegistrationFields.length > 0 && (
+          <div className="mt-5 rounded-2xl bg-white/80 p-5">
+            <h3 className="font-bold">Ďalšie načítané údaje</h3>
+            <p className="mt-1 text-xs text-slate-500">
+              Tieto údaje zatiaľ nemajú polia v databáze a pri uložení vozidla
+              sa neuložia.
+            </p>
+            <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+              {additionalRegistrationFields.map(([label, value]) => (
+                <div key={label} className="rounded-xl bg-slate-100 p-3">
+                  <p className="text-xs text-slate-500">{label}</p>
+                  <p className="mt-1 font-semibold text-slate-900">{value}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
 
       {vehicle && (
         <div className="mt-8 rounded-2xl bg-white p-6 shadow">
