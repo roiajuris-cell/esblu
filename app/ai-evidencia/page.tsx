@@ -6,6 +6,33 @@ import {
   exportAiEvidenceToExcel,
   type AiEvidenceExcelRecord,
 } from "@/lib/export-ai-evidence-excel";
+import { normalizeSpz } from "@/lib/normalize-spz";
+import { normalizeWeightUnit } from "@/lib/normalize-weight-unit";
+
+const WITHOUT_SPZ_GROUP = "BEZ ŠPZ";
+
+function getSpzGroupKey(value: unknown): string {
+  if (value === WITHOUT_SPZ_GROUP) return WITHOUT_SPZ_GROUP;
+  return normalizeSpz(value) || WITHOUT_SPZ_GROUP;
+}
+
+function formatRecordWeight(
+  record: Pick<AiEvidenceExcelRecord, "netto" | "quantity" | "unit">
+): string {
+  const hasNetto =
+    record.netto !== null &&
+    record.netto !== undefined &&
+    record.netto !== "";
+  const value = hasNetto ? record.netto : record.quantity;
+
+  if (value === null || value === undefined || value === "") {
+    return "Bez hmotnosti";
+  }
+
+  const unit = normalizeWeightUnit(record.unit);
+  return unit ? `${value} ${unit}` : `${value} bez jednotky`;
+}
+
 function Info({ title, value }: { title: string; value: any }) {
   return (
     <div className="rounded-2xl bg-slate-100 p-4">
@@ -91,7 +118,7 @@ export default function AiEvidenciaPage() {
   } | null>(null);
 
 const groupedRecords = records.reduce((groups: any, record: any) => {
-  const spz = record.spz?.trim().toUpperCase() || "BEZ ŠPZ";
+  const spz = getSpzGroupKey(record.spz);
 
   if (!groups[spz]) {
     groups[spz] = [];
@@ -106,8 +133,8 @@ const visibleDocuments = records.filter((record) => {
     return true;
   }
 
-  const recordSpz = record.spz?.trim().toUpperCase() || "BEZ ŠPZ";
-  return recordSpz === selectedSpz;
+  const recordSpz = getSpzGroupKey(record.spz);
+  return recordSpz === getSpzGroupKey(selectedSpz);
 });
 const summary = records.reduce(
   (acc: any, record: any) => {
@@ -152,8 +179,7 @@ const summary = records.reduce(
   }
 );
 const summaryBySpz = records.reduce((groups: any, record: any) => {
-  const spz =
-    record.spz?.trim().toUpperCase() || "BEZ ŠPZ";
+  const spz = getSpzGroupKey(record.spz);
 
   const movementType = (record.movement_type || "")
     .toLowerCase()
@@ -275,6 +301,7 @@ const resolvedMovementType = resolveMovementType(scannedResult);
 
 setResult({
   ...scannedResult,
+  spz: normalizeSpz(scannedResult.spz),
   movementType: resolvedMovementType || "",
 });
     } catch (err: any) {
@@ -373,17 +400,37 @@ function resolveMovementType(result: any): string | null {
       if (!session) {
         throw new Error("Nie si prihlásený.");
       }
+      const normalizedResultSpz = normalizeSpz(result.spz);
+      let vehicleId = null;
+      let canonicalSpz = normalizedResultSpz;
+
+      if (normalizedResultSpz) {
+        const { data: vehicles, error: vehiclesError } = await supabase
+          .from("vehicles")
+          .select("id, spz")
+          .eq("user_id", session.user.id);
+
+        if (vehiclesError) {
+          console.error("Chyba pri načítaní vozidiel:", vehiclesError);
+        }
+
+        const matchedVehicle = vehicles?.find(
+          (vehicle) => normalizeSpz(vehicle.spz) === normalizedResultSpz
+        );
+
+        vehicleId = matchedVehicle?.id ?? null;
+        canonicalSpz =
+          normalizeSpz(matchedVehicle?.spz) ?? normalizedResultSpz;
+      }
+
       let photoPath: string | null = null;
 
 if (selectedFile) {
-  const safeSpz = (result.spz || "bez-spz")
-    .trim()
-    .toUpperCase()
-    .replace(/[^A-Z0-9]/g, "");
+  const storageSpz = canonicalSpz || "BEZSPZ";
 
   const uniqueName = `${Date.now()}-${crypto.randomUUID()}.webp`;
 
-  photoPath = `${session.user.id}/${safeSpz}/${uniqueName}`;
+  photoPath = `${session.user.id}/${storageSpz}/${uniqueName}`;
 
   const { error: uploadError } = await supabase.storage
     .from("ai-evidence-documents")
@@ -396,39 +443,6 @@ if (selectedFile) {
   if (uploadError) {
     throw new Error(`Fotku sa nepodarilo uložiť: ${uploadError.message}`);
   }
-}
-let vehicleId = null;
-
-let canonicalSpz: string | null = null;
-
-if (result.spz) {
-  const normalizeSpz = (value: string) =>
-    value
-      .trim()
-      .toUpperCase()
-      .replace(/[^A-Z0-9]/g, "");
-
-  const cleanSpz = normalizeSpz(result.spz);
-
-  const { data: vehicles, error: vehiclesError } = await supabase
-    .from("vehicles")
-    .select("id, spz")
-    .eq("user_id", session.user.id);
-
-  if (vehiclesError) {
-    console.error("Chyba pri načítaní vozidiel:", vehiclesError);
-  }
-
-  const matchedVehicle = vehicles?.find(
-    (vehicle) =>
-      vehicle.spz && normalizeSpz(vehicle.spz) === cleanSpz
-  );
-
-  vehicleId = matchedVehicle?.id ?? null;
-
-  // Pri existujúcom vozidle použijeme vždy ŠPZ uloženú vo Vozidlách.
-  // Inak uložíme jednotnú normalizovanú hodnotu.
-  canonicalSpz = matchedVehicle?.spz?.trim().toUpperCase() ?? cleanSpz;
 }
 const resolvedMovementType = resolveMovementType(result);
       const { error } = await supabase.from("ai_evidence").insert({
@@ -448,7 +462,7 @@ source_location: result.sourceLocation || null,
 destination_location: result.destinationLocation || null,
 review_status: result.reviewStatus || "pending",
         quantity: toNumber(result.quantity),
-        unit: result.unit || null,
+        unit: normalizeWeightUnit(result.unit),
         brutto: toNumber(result.brutto),
         tara: toNumber(result.tara),
         netto: toNumber(result.netto),
@@ -961,9 +975,7 @@ useEffect(() => {
             <p>📦 {record.material || "Bez materiálu"}</p>
             <p>
               ⚖️{" "}
-              {record.netto
-                ? `${record.netto} ${record.unit || "t"}`
-                : "Bez hmotnosti"}
+              {formatRecordWeight(record)}
             </p>
             <p>
               📅 {record.document_date || "Bez dátumu"}{" "}
@@ -1051,9 +1063,14 @@ useEffect(() => {
         <Info title="Zákazník" value={selectedRecord.customer} />
         <Info title="Stavba" value={selectedRecord.construction_site} />
         <Info title="Materiál" value={selectedRecord.material} />
+        <Info title="Množstvo" value={selectedRecord.quantity} />
         <Info title="Brutto" value={selectedRecord.brutto} />
         <Info title="Tara" value={selectedRecord.tara} />
         <Info title="Netto" value={selectedRecord.netto} />
+        <Info
+          title="Jednotka"
+          value={normalizeWeightUnit(selectedRecord.unit) || "bez jednotky"}
+        />
         <Info title="Dátum" value={selectedRecord.document_date} />
         <Info title="Čas" value={selectedRecord.document_time} />
 

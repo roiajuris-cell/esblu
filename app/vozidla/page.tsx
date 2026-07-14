@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { normalizeSpz } from "@/lib/normalize-spz";
 import VehicleCard from "../components/VehicleCard";
 
 type RegistrationSide = "front" | "back";
@@ -286,7 +287,11 @@ export default function VozidlaPage() {
         throw new Error(data.error || "AI spracovanie zlyhalo.");
       }
 
-      const extracted = data.data as RegistrationData;
+      const extractedData = data.data as RegistrationData;
+      const extracted: RegistrationData = {
+        ...extractedData,
+        spz: normalizeSpz(extractedData.spz),
+      };
       const currentVehicle = vehicle || {};
       const conflicts = vehicleFieldMappings.filter(({ source, target }) => {
         const extractedValue = extracted[source];
@@ -350,7 +355,7 @@ export default function VozidlaPage() {
   function vehiclePayload() {
     return {
       user_id: userId,
-      spz: vehicle.spz || null,
+      spz: normalizeSpz(vehicle.spz),
       vin: vehicle.vin || null,
       znacka: vehicle.znacka || null,
       model: vehicle.model || null,

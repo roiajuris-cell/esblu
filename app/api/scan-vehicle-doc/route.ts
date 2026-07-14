@@ -1,4 +1,6 @@
 import OpenAI from "openai";
+import { normalizeSpz } from "@/lib/normalize-spz";
+import { normalizeWeightUnit } from "@/lib/normalize-weight-unit";
 
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY!,
@@ -116,6 +118,7 @@ PRAVIDLÁ PRE VÁŽNY LÍSTOK:
 - brutto = brutto hmotnosť
 - tara = tara hmotnosť
 - netto = netto hmotnosť
+- unit = spoločná jednotka uvedená pri brutto, tara alebo netto; vráť "kg" alebo "t" iba vtedy, keď je na dokumente jasne čitateľná
 - documentDate = dátum váženia
 - documentTime = čas váženia
 - documentLanguage = jazyk dokumentu
@@ -132,7 +135,7 @@ PRAVIDLÁ PRE DODACÍ LIST:
 - material = názov materiálu
 - materialOriginal = presný názov materiálu na dokumente
 - quantity = množstvo
-- unit = jednotka
+- unit = jednotka uvedená pri quantity; vráť "kg" alebo "t" iba vtedy, keď je na dokumente jasne čitateľná
 - documentNumber = číslo dodacieho listu
 - documentDate = dátum dokumentu
 
@@ -264,6 +267,8 @@ VŠEOBECNÉ PRAVIDLÁ:
 - Dátum vždy vráť vo formáte YYYY-MM-DD.
 - Čas vráť vo formáte HH:MM, ak je čitateľný.
 - Čísla vracaj bez jednotiek.
+- Ak je pri brutto, tara, netto alebo quantity jasne uvedená jednotka, vždy ju vráť v samostatnom poli unit.
+- unit normalizuj na "kg" alebo "t". Ak jednotka nie je čitateľná alebo uvedená, nechaj unit prázdne a nevymýšľaj ju.
 - Pri desatinných číslach použi bodku, napríklad 6.66.
 - Hmotnosti neprepočítavaj medzi kg a tonami, ak jednotka nie je jednoznačná.
 - Ak údaj nenájdeš, vráť prázdny string.
@@ -320,6 +325,8 @@ Vráť iba čistý JSON v presne tejto štruktúre:
   const text = response.output_text;
 const cleaned = text.replace(/```json/g, "").replace(/```/g, "").trim();
 const vehicleData = JSON.parse(cleaned);
+vehicleData.spz = normalizeSpz(vehicleData.spz);
+vehicleData.unit = normalizeWeightUnit(vehicleData.unit);
 if (!vehicleData.spz) {
   const spzResponse = await client.responses.create({
     model: "gpt-4.1",
@@ -392,10 +399,10 @@ Ak ŠPZ nie je možné prečítať, nechaj prázdny string.
 
     const spzData = JSON.parse(spzCleaned);
 
-    if (typeof spzData.spz === "string" && spzData.spz.trim()) {
-      vehicleData.spz = spzData.spz
-        .toUpperCase()
-        .replace(/[\s-]/g, "");
+    const normalizedFallbackSpz = normalizeSpz(spzData.spz);
+
+    if (normalizedFallbackSpz) {
+      vehicleData.spz = normalizedFallbackSpz;
 
       vehicleData.reviewStatus = "needs_review";
     }
@@ -403,6 +410,7 @@ Ak ŠPZ nie je možné prečítať, nechaj prázdny string.
     console.error("SPZ FALLBACK ERROR:", spzError);
   }
 }
+vehicleData.spz = normalizeSpz(vehicleData.spz);
 return Response.json({
   success: true,
   data: vehicleData,

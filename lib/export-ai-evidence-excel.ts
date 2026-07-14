@@ -1,4 +1,8 @@
 import type { Workbook, Worksheet } from "exceljs";
+import { normalizeSpz } from "@/lib/normalize-spz";
+import { normalizeWeightUnit } from "@/lib/normalize-weight-unit";
+
+export { normalizeWeightUnit } from "@/lib/normalize-weight-unit";
 
 export type AiEvidenceExcelRecord = {
   id: string;
@@ -22,7 +26,7 @@ export type AiEvidenceExcelRecord = {
   photo_url: string | null;
   raw_text: string | null;
   created_at: string | null;
-  quantity?: number | string | null;
+  quantity: number | string | null;
 };
 
 type ExportResult = {
@@ -100,14 +104,16 @@ function toFiniteNumber(
   return Number.isFinite(value) ? value : null;
 }
 
-function getEffectiveNetto(record: AiEvidenceExcelRecord): number | null {
+export function getEffectiveNetto(
+  record: AiEvidenceExcelRecord
+): number | null {
   return toFiniteNumber(record.netto) ?? toFiniteNumber(record.quantity);
 }
 
-function getMovementDirection(
-  movementType: string | null
+export function normalizeMovementType(
+  value: string | null | undefined
 ): "import" | "export" | null {
-  const normalizedMovement = normalizeText(movementType);
+  const normalizedMovement = normalizeText(value).replace(/\s/g, "");
 
   if (["dovoz", "import", "prijem", "inbound"].includes(normalizedMovement)) {
     return "import";
@@ -156,38 +162,11 @@ function getLocalDateFilePart(date: Date): string {
   )}`;
 }
 
-function getTons(
-  netto: number | string | null,
-  unit: string | null
-): number | null {
-  const numericNetto = toFiniteNumber(netto);
-  if (numericNetto === null) return null;
+function convertWeightToTons(value: number, unit: string | null): number | null {
+  const normalizedUnit = normalizeWeightUnit(unit);
 
-  const normalizedUnit = normalizeText(unit).replace(/\./g, "");
-
-  if (
-    ["kg", "kilogram", "kilogramy", "kilogramov", "kilograms"].includes(
-      normalizedUnit
-    )
-  ) {
-    return numericNetto / 1000;
-  }
-
-  if (
-    [
-      "t",
-      "tona",
-      "tony",
-      "ton",
-      "tonach",
-      "tons",
-      "tonne",
-      "tonnes",
-    ].includes(normalizedUnit)
-  ) {
-    return numericNetto;
-  }
-
+  if (normalizedUnit === "kg") return value / 1000;
+  if (normalizedUnit === "t") return value;
   return null;
 }
 
@@ -316,7 +295,7 @@ function calculateVehicleNettoSummary(
     const effectiveNetto = getEffectiveNetto(record);
     if (effectiveNetto === null) return;
 
-    const tons = getTons(effectiveNetto, record.unit);
+    const tons = convertWeightToTons(effectiveNetto, record.unit);
     if (tons === null) {
       const unitLabel = record.unit?.trim() || "Bez jednotky";
       const unitKey = normalizeText(unitLabel) || "bez jednotky";
@@ -332,15 +311,15 @@ function calculateVehicleNettoSummary(
       return;
     }
 
-    summary.totalTons += tons;
-
-    const direction = getMovementDirection(record.movement_type);
+    const direction = normalizeMovementType(record.movement_type);
     if (direction === "import") {
       summary.totalImportTons += tons;
     } else if (direction === "export") {
       summary.totalExportTons += tons;
     }
   });
+
+  summary.totalTons = summary.totalImportTons + summary.totalExportTons;
 
   return summary;
 }
@@ -373,7 +352,7 @@ function addVehicleSummary(
 }
 
 function getSpzGroupName(record: AiEvidenceExcelRecord): string {
-  return record.spz?.trim().toUpperCase() || "Bez ŠPZ";
+  return normalizeSpz(record.spz) || "Bez ŠPZ";
 }
 
 function sanitizeWorksheetName(name: string): string {
@@ -487,7 +466,7 @@ export async function exportAiEvidenceToExcel(
     const effectiveNetto = getEffectiveNetto(record);
     if (effectiveNetto === null) return;
 
-    const tons = getTons(effectiveNetto, record.unit);
+    const tons = convertWeightToTons(effectiveNetto, record.unit);
     if (tons !== null) {
       const material =
         record.material?.trim() ||

@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { createClient } from "@supabase/supabase-js";
+import { normalizeSpz } from "@/lib/normalize-spz";
 
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY!,
@@ -111,6 +112,10 @@ function normalizeRegistrationData(value: unknown) {
   return Object.fromEntries(
     registrationFields.map((field) => {
       const fieldValue = source[field];
+
+      if (field === "spz") {
+        return [field, normalizeSpz(fieldValue)];
+      }
 
       return [
         field,
