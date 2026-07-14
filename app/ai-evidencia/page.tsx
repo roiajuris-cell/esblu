@@ -2,6 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import {
+  exportAiEvidenceToExcel,
+  type AiEvidenceExcelRecord,
+} from "@/lib/export-ai-evidence-excel";
 function Info({ title, value }: { title: string; value: any }) {
   return (
     <div className="rounded-2xl bg-slate-100 p-4">
@@ -75,11 +79,16 @@ export default function AiEvidenciaPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState("");
-  const [records, setRecords] = useState<any[]>([]);
+  const [records, setRecords] = useState<AiEvidenceExcelRecord[]>([]);
   const [selectedRecord, setSelectedRecord] = useState<any>(null);
   const [documentPhotoUrl, setDocumentPhotoUrl] =
   useState<string | null>(null);
   const [selectedSpz, setSelectedSpz] = useState<string | null>(null);
+  const [exportLoading, setExportLoading] = useState(false);
+  const [exportFeedback, setExportFeedback] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
 
 const groupedRecords = records.reduce((groups: any, record: any) => {
   const spz = record.spz?.trim().toUpperCase() || "BEZ ŠPZ";
@@ -92,6 +101,14 @@ const groupedRecords = records.reduce((groups: any, record: any) => {
 
   return groups;
 }, {});
+const visibleDocuments = records.filter((record) => {
+  if (!selectedSpz) {
+    return true;
+  }
+
+  const recordSpz = record.spz?.trim().toUpperCase() || "BEZ ŠPZ";
+  return recordSpz === selectedSpz;
+});
 const summary = records.reduce(
   (acc: any, record: any) => {
     const movementType = (record.movement_type || "")
@@ -180,6 +197,42 @@ const summaryBySpz = records.reduce((groups: any, record: any) => {
 
   return groups;
 }, {});
+  async function handleExportExcel() {
+    if (exportLoading) return;
+
+    if (visibleDocuments.length === 0) {
+      setExportFeedback({
+        type: "error",
+        text: "Nie sú dostupné žiadne dokumenty na export.",
+      });
+      return;
+    }
+
+    setExportLoading(true);
+    setExportFeedback(null);
+
+    try {
+      const { exportedCount, fileName } = await exportAiEvidenceToExcel(
+        visibleDocuments
+      );
+
+      setExportFeedback({
+        type: "success",
+        text: `Exportovaných ${exportedCount} záznamov do súboru ${fileName}.`,
+      });
+    } catch (exportError: unknown) {
+      console.error("Chyba pri exporte Excelu:", exportError);
+      setExportFeedback({
+        type: "error",
+        text:
+          exportError instanceof Error
+            ? exportError.message
+            : "Excel sa nepodarilo vygenerovať. Skús to znova.",
+      });
+    } finally {
+      setExportLoading(false);
+    }
+  }
   async function handleFile(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -932,6 +985,46 @@ useEffect(() => {
     </div>
   </div>
 )}
+    <div className="mt-10 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-2xl font-black text-slate-950">
+            Export dokumentov
+          </h2>
+          <p className="mt-1 text-sm text-slate-600">
+            Exportuje všetky načítané dokumenty rozdelené podľa ŠPZ.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={handleExportExcel}
+          disabled={exportLoading || visibleDocuments.length === 0}
+          aria-busy={exportLoading}
+          className="rounded-2xl bg-emerald-600 px-5 py-4 font-black text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {exportLoading ? "Generujem Excel..." : "Exportovať dokumenty"}
+        </button>
+      </div>
+
+      {visibleDocuments.length === 0 && (
+        <p className="mt-4 rounded-xl bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
+          Nie sú dostupné žiadne dokumenty na export.
+        </p>
+      )}
+
+      {exportFeedback && (
+        <p
+          className={`mt-4 rounded-xl px-4 py-3 text-sm font-semibold ${
+            exportFeedback.type === "success"
+              ? "bg-emerald-50 text-emerald-800"
+              : "bg-red-50 text-red-700"
+          }`}
+        >
+          {exportFeedback.text}
+        </p>
+      )}
+    </div>
 {selectedRecord && (
   <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-3 sm:items-center sm:p-4">
     <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white p-5 shadow-2xl sm:p-8">
