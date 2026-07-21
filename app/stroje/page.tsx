@@ -15,6 +15,7 @@ export default function StrojePage() {
   const [machines, setMachines] = useState<any[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [deletingMachineId, setDeletingMachineId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const saveInProgressRef = useRef(false);
   const {
@@ -210,55 +211,141 @@ export default function StrojePage() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  async function deleteMachine(id: string) {
-  const confirmed = confirm("Naozaj chceš vymazať tento stroj?");
-  if (!confirmed) return;
+  async function deleteMachine(machineId: string) {
+    if (deletingMachineId) return;
 
-  // Najprv načítame všetky fotografie stroja,
-  // aby sme poznali ich cesty v Storage.
-  const { data: machinePhotos, error: photosError } = await supabase
-    .from("machine_photos")
-    .select("file_path")
-    .eq("machine_id", id)
-    .eq("user_id", userId);
+    const confirmed = confirm("Naozaj chceš vymazať tento stroj?");
+    if (!confirmed) return;
 
-  if (photosError) {
-    console.error("Chyba pri načítaní fotografií stroja:", photosError);
-    alert("Nepodarilo sa načítať fotografie stroja.");
-    return;
-  }
+    setDeletingMachineId(machineId);
 
-  const photoPaths = (machinePhotos || [])
-    .map((photo: any) => photo.file_path)
-    .filter(Boolean);
+    try {
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
 
-  // Najprv vymažeme súbory zo Storage.
-  if (photoPaths.length > 0) {
-    const { error: storageError } = await supabase.storage
-      .from("machine-photos")
-      .remove(photoPaths);
+      if (userError || !user) {
+        throw new Error("Nie ste prihlásený. Prihláste sa a skúste to znova.");
+      }
 
-    if (storageError) {
-      console.error("Chyba pri mazaní fotografií zo Storage:", storageError);
-      alert("Fotografie stroja sa nepodarilo vymazať z úložiska.");
-      return;
+      const { data: machinePhotos, error: photosError } = await supabase
+        .from("machine_photos")
+        .select("id, file_path")
+        .eq("machine_id", machineId)
+        .eq("user_id", user.id);
+
+      if (photosError) throw photosError;
+
+      const photoPaths = Array.from(
+        new Set(
+          (machinePhotos || [])
+            .map((photo) => photo.file_path)
+            .filter((path): path is string => Boolean(path))
+        )
+      );
+
+      let { data: deletedMachines, error: deleteMachineError } = await supabase
+          .from("machines")
+          .delete()
+          .eq("id", machineId)
+          .eq("user_id", user.id)
+          .select("id");
+
+      // Pri RESTRICT foreign key najprv bezpečne odstránime DB riadky fotiek
+      // a rovnaký presný delete stroja zopakujeme. Bez tejto vetvy by stroj
+      // zostal v databáze po už odstránených súboroch zo Storage.
+      if (deleteMachineError?.code === "23503") {
+        const { error: restrictedPhotosError } = await supabase
+          .from("machine_photos")
+          .delete()
+          .eq("machine_id", machineId)
+          .eq("user_id", user.id)
+          .select("id");
+
+        if (restrictedPhotosError) throw restrictedPhotosError;
+
+        const retryResult = await supabase
+          .from("machines")
+          .delete()
+          .eq("id", machineId)
+          .eq("user_id", user.id)
+          .select("id");
+
+        deletedMachines = retryResult.data;
+        deleteMachineError = retryResult.error;
+      }
+
+      if (deleteMachineError) throw deleteMachineError;
+
+      if (deletedMachines?.length !== 1) {
+        throw new Error(
+          "Stroj sa v databáze nevymazal. Záznam neexistuje alebo na jeho vymazanie nemáte oprávnenie."
+        );
+      }
+
+      // Ak databáza nemá ON DELETE CASCADE, odstránime riadky fotografií
+      // explicitne. Pri existujúcom cascade bude tento delete bezpečne prázdny.
+      const { error: deletePhotosError } = await supabase
+        .from("machine_photos")
+        .delete()
+        .eq("machine_id", machineId)
+        .eq("user_id", user.id)
+        .select("id");
+
+      if (deletePhotosError) throw deletePhotosError;
+
+      const { data: remainingPhotos, error: verifyPhotosError } = await supabase
+        .from("machine_photos")
+        .select("id")
+        .eq("machine_id", machineId)
+        .eq("user_id", user.id);
+
+      if (verifyPhotosError) throw verifyPhotosError;
+
+      if ((remainingPhotos || []).length > 0) {
+        throw new Error(
+          "Stroj bol vymazaný, ale databázové záznamy fotografií sa nepodarilo odstrániť."
+        );
+      }
+
+      // UI obnovíme až po potvrdenom vymazaní databázových záznamov.
+      await Promise.all([
+        loadMachines(user.id),
+        refreshPlanUsage(),
+      ]);
+
+      // Storage čistíme až nakoniec. Jeho chyba nesmie zakryť úspešný DB delete.
+      if (photoPaths.length > 0) {
+        const { error: storageError } = await supabase.storage
+          .from("machine-photos")
+          .remove(photoPaths);
+
+        if (storageError) {
+          console.error(
+            "Stroj bol vymazaný, ale fotografie sa nepodarilo odstrániť zo Storage:",
+            storageError
+          );
+          alert(
+            "Stroj bol vymazaný, ale niektoré súbory fotografií sa nepodarilo odstrániť z úložiska."
+          );
+        }
+      }
+    } catch (deleteError: unknown) {
+      console.error("Chyba pri mazaní stroja:", deleteError);
+      const message =
+        deleteError instanceof Error
+          ? deleteError.message
+          : typeof deleteError === "object" &&
+              deleteError !== null &&
+              "message" in deleteError
+            ? String(deleteError.message)
+            : "Neznáma chyba.";
+      alert("Chyba pri mazaní stroja: " + message);
+    } finally {
+      setDeletingMachineId(null);
     }
   }
-
-  // Potom vymažeme stroj z databázy.
-  const { error: deleteError } = await supabase
-    .from("machines")
-    .delete()
-    .eq("id", id)
-    .eq("user_id", userId);
-
-  if (deleteError) {
-    alert("Chyba pri mazaní stroja: " + deleteError.message);
-    return;
-  }
-
-  await Promise.all([loadMachines(), refreshPlanUsage()]);
-}
 
   function cancelEdit() {
     setEditingId(null);
@@ -475,9 +562,12 @@ export default function StrojePage() {
 
                     <button
                       onClick={() => deleteMachine(item.id)}
-                      className="rounded-xl bg-red-600 px-4 py-2 text-white hover:bg-red-700"
+                      disabled={deletingMachineId !== null}
+                      className="rounded-xl bg-red-600 px-4 py-2 text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-gray-400"
                     >
-                      Vymazať
+                      {deletingMachineId === item.id
+                        ? "Mažem..."
+                        : "Vymazať"}
                     </button>
                   </div>
                 </div>

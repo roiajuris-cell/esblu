@@ -71,6 +71,7 @@ export default function MachineDetailPage() {
   const [machine, setMachine] = useState<any>(null);
   const [photos, setPhotos] = useState<any[]>([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [deletingPhotoId, setDeletingPhotoId] = useState<string | null>(null);
 
   useEffect(() => {
     checkUser();
@@ -187,18 +188,85 @@ export default function MachineDetailPage() {
   }
 }
   async function deletePhoto(photo: any) {
+    if (deletingPhotoId) return;
+
+    const photoId = String(photo?.id || "");
+
+    if (!photoId) {
+      alert("Fotografia nemá platné databázové ID.");
+      return;
+    }
+
     const confirmed = confirm("Naozaj chceš vymazať túto fotografiu?");
     if (!confirmed) return;
 
-    await supabase.storage.from("machine-photos").remove([photo.file_path]);
+    setDeletingPhotoId(photoId);
 
-    await supabase
-      .from("machine_photos")
-      .delete()
-      .eq("id", photo.id)
-      .eq("user_id", userId);
+    try {
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
 
-    loadPhotos();
+      if (userError || !user) {
+        throw new Error("Nie ste prihlásený. Prihláste sa a skúste to znova.");
+      }
+
+      const { data: deletedPhotos, error: deletePhotoError } = await supabase
+        .from("machine_photos")
+        .delete()
+        .eq("id", photoId)
+        .eq("machine_id", machineId)
+        .eq("user_id", user.id)
+        .select("id, file_path");
+
+      if (deletePhotoError) throw deletePhotoError;
+
+      if (deletedPhotos?.length !== 1) {
+        throw new Error(
+          "Fotografia sa v databáze nevymazala. Záznam neexistuje alebo na jeho vymazanie nemáte oprávnenie."
+        );
+      }
+
+      // UI aktualizujeme až po potvrdenom databázovom delete.
+      setPhotos((currentPhotos) =>
+        currentPhotos.filter(
+          (currentPhoto) => String(currentPhoto.id) !== photoId
+        )
+      );
+
+      const deletedFilePath = deletedPhotos[0].file_path;
+
+      // Storage čistíme až po vymazaní DB riadku a aktualizácii UI.
+      if (deletedFilePath) {
+        const { error: storageError } = await supabase.storage
+          .from("machine-photos")
+          .remove([deletedFilePath]);
+
+        if (storageError) {
+          console.error(
+            "Databázový záznam fotografie bol vymazaný, ale Storage cleanup zlyhal:",
+            storageError
+          );
+          alert(
+            "Fotografia bola odstránená z evidencie, ale jej súbor sa nepodarilo odstrániť z úložiska."
+          );
+        }
+      }
+    } catch (deleteError: unknown) {
+      console.error("Chyba pri mazaní fotografie stroja:", deleteError);
+      const message =
+        deleteError instanceof Error
+          ? deleteError.message
+          : typeof deleteError === "object" &&
+              deleteError !== null &&
+              "message" in deleteError
+            ? String(deleteError.message)
+            : "Neznáma chyba.";
+      alert("Chyba pri mazaní fotografie: " + message);
+    } finally {
+      setDeletingPhotoId(null);
+    }
   }
 
   function photoUrl(path: string) {
@@ -282,9 +350,12 @@ export default function MachineDetailPage() {
 
                 <button
                   onClick={() => deletePhoto(photo)}
-                  className="mt-3 w-full rounded-xl bg-red-600 px-4 py-2 text-white hover:bg-red-700"
+                  disabled={deletingPhotoId !== null}
+                  className="mt-3 w-full rounded-xl bg-red-600 px-4 py-2 text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-gray-400"
                 >
-                  🗑 Vymazať
+                  {deletingPhotoId === String(photo.id)
+                    ? "Mažem..."
+                    : "🗑 Vymazať"}
                 </button>
               </div>
             ))}
