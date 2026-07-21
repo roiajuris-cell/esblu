@@ -1,6 +1,7 @@
 "use client";
 
 import { ChangeEvent, useEffect, useState } from "react";
+import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 
 export default function NastaveniaPage() {
@@ -547,6 +548,41 @@ export default function NastaveniaPage() {
               ? "Mením heslo..."
               : "Zmeniť heslo"}
           </button>
+        </section>
+
+        <section className="rounded-3xl border border-white/20 bg-white/45 p-8 shadow-lg backdrop-blur-xl">
+          <h2 className="text-2xl font-bold text-slate-900">
+            Právne informácie
+          </h2>
+
+          <p className="mt-2 text-sm text-slate-700">
+            Verejné informácie o pravidlách používania služby a spracúvaní
+            osobných údajov.
+          </p>
+
+          <nav
+            aria-label="Právne a kontaktné informácie"
+            className="mt-6 grid gap-3"
+          >
+            <Link
+              href="/ochrana-osobnych-udajov"
+              className="rounded-xl border border-slate-300 bg-white/80 px-5 py-3 font-semibold text-blue-700 transition hover:bg-white"
+            >
+              Zásady ochrany osobných údajov
+            </Link>
+            <Link
+              href="/podmienky-pouzivania"
+              className="rounded-xl border border-slate-300 bg-white/80 px-5 py-3 font-semibold text-blue-700 transition hover:bg-white"
+            >
+              Podmienky používania Esblu
+            </Link>
+            <Link
+              href="/kontakt"
+              className="rounded-xl border border-slate-300 bg-white/80 px-5 py-3 font-semibold text-blue-700 transition hover:bg-white"
+            >
+              Kontakt
+            </Link>
+          </nav>
         </section>
       </div>
     </main>

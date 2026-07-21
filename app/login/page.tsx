@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
@@ -188,6 +189,26 @@ async function resetPassword() {
           )}
         </div>
 
+        {mode === "register" && (
+          <p className="mt-4 text-sm leading-6 text-slate-600">
+            Registráciou potvrdzujete, že ste sa oboznámili s{" "}
+            <Link
+              href="/podmienky-pouzivania"
+              className="font-semibold text-blue-700 hover:underline"
+            >
+              Podmienkami používania
+            </Link>{" "}
+            a{" "}
+            <Link
+              href="/ochrana-osobnych-udajov"
+              className="font-semibold text-blue-700 hover:underline"
+            >
+              Zásadami ochrany osobných údajov
+            </Link>
+            .
+          </p>
+        )}
+
         <button
   type="button"
   onClick={mode === "login" ? login : register}
@@ -224,6 +245,21 @@ async function resetPassword() {
             ? "Nemáš účet? Registrovať firmu"
             : "Už máš účet? Prihlásiť sa"}
         </button>
+
+        <nav
+          aria-label="Právne a kontaktné informácie"
+          className="mt-6 flex flex-wrap justify-center gap-x-4 gap-y-2 border-t border-slate-200 pt-5 text-center text-xs font-medium text-slate-600"
+        >
+          <Link href="/ochrana-osobnych-udajov" className="hover:text-blue-700 hover:underline">
+            Ochrana osobných údajov
+          </Link>
+          <Link href="/podmienky-pouzivania" className="hover:text-blue-700 hover:underline">
+            Podmienky používania
+          </Link>
+          <Link href="/kontakt" className="hover:text-blue-700 hover:underline">
+            Kontakt
+          </Link>
+        </nav>
       </div>
     </main>
   );
