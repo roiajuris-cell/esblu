@@ -4,6 +4,22 @@ import { ChangeEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 
+const feedbackSubject = "Spätná väzba k Esblu";
+const feedbackBody = `Dobrý deň,
+
+používam testovaciu verziu Esblu a chcem poslať spätnú väzbu.
+
+Čo som robil:
+
+Čo sa stalo alebo čo mi chýba:
+
+Zariadenie alebo prehliadač:
+
+Ďakujem.`;
+const feedbackMailto = `mailto:info@esblu.com?subject=${encodeURIComponent(
+  feedbackSubject
+)}&body=${encodeURIComponent(feedbackBody)}`;
+
 export default function NastaveniaPage() {
   const [userId, setUserId] = useState("");
   const [companyName, setCompanyName] = useState("");
@@ -548,6 +564,29 @@ export default function NastaveniaPage() {
               ? "Mením heslo..."
               : "Zmeniť heslo"}
           </button>
+        </section>
+
+        <section className="rounded-3xl border border-white/20 bg-white/45 p-8 shadow-lg backdrop-blur-xl">
+          <h2 className="text-2xl font-bold text-slate-900">
+            Spätná väzba
+          </h2>
+
+          <p className="mt-2 leading-7 text-slate-700">
+            Našli ste chybu, niečo vám chýba alebo máte návrh na zlepšenie?
+            Napíšte nám. Vaša spätná väzba pomáha zlepšovať testovaciu verziu
+            Esblu.
+          </p>
+
+          <a
+            href={feedbackMailto}
+            className="mt-6 inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-blue-600 px-6 py-3 text-center font-semibold text-white transition hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 sm:w-auto"
+          >
+            Poslať spätnú väzbu
+          </a>
+
+          <p className="mt-3 text-sm leading-6 text-slate-600">
+            Do správy nevkladajte heslá ani citlivé osobné údaje.
+          </p>
         </section>
 
         <section className="rounded-3xl border border-white/20 bg-white/45 p-8 shadow-lg backdrop-blur-xl">
