@@ -1,8 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import PlanLimitNotice from "@/app/components/PlanLimitNotice";
+import { usePlanUsage } from "@/hooks/use-plan-usage";
+import {
+  PLAN_LIMIT_MESSAGE,
+  isPlanLimitReachedError,
+} from "@/lib/plan-limits";
 async function compressImage(file: File): Promise<File> {
   const imageUrl = URL.createObjectURL(file);
 
@@ -68,6 +74,15 @@ export default function SkladPage() {
   const [showForm, setShowForm] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const saveInProgressRef = useRef(false);
+  const {
+    usage: planUsage,
+    limit: planLimit,
+    isLimited: isPlanLimited,
+    loading: planUsageLoading,
+    refresh: refreshPlanUsage,
+  } = usePlanUsage("inventory_items");
+  const isItemCreationUnavailable = planUsageLoading || isPlanLimited;
 
   const emptyItem = {
     name: "",
@@ -179,6 +194,8 @@ setItems(itemsWithPhotos);
 }
 
   async function saveItem() {
+    if (saveInProgressRef.current) return;
+
     if (!item.name) {
       alert("Vyplň názov položky.");
       return;
@@ -189,6 +206,7 @@ setItems(itemsWithPhotos);
       return;
     }
 
+    saveInProgressRef.current = true;
     setIsSaving(true);
 
     const payload = {
@@ -202,6 +220,8 @@ setItems(itemsWithPhotos);
       notes: item.notes || null,
     };
 
+    let createdNewItem = false;
+
     try {
   let savedItemId = editingId;
 
@@ -214,6 +234,13 @@ setItems(itemsWithPhotos);
 
     if (error) throw error;
   } else {
+    const latestUsage = await refreshPlanUsage();
+
+    if (latestUsage?.isLimited) {
+      alert(PLAN_LIMIT_MESSAGE);
+      return;
+    }
+
     const { data, error } = await supabase
       .from("inventory_items")
       .insert(payload)
@@ -223,6 +250,7 @@ setItems(itemsWithPhotos);
     if (error) throw error;
 
     savedItemId = data.id;
+    createdNewItem = true;
   }
 
   if (photoFile && savedItemId) {
@@ -263,10 +291,26 @@ setItems(itemsWithPhotos);
   }
 
   setPhotoPreview(null);
-  await loadItems();
-} catch (error: any) {
-  alert("Chyba pri ukladaní položky: " + error.message);
+  if (createdNewItem) {
+    await Promise.all([loadItems(), refreshPlanUsage()]);
+  } else {
+    await loadItems();
+  }
+} catch (saveError: unknown) {
+  if (isPlanLimitReachedError(saveError, "inventory_items")) {
+    alert(PLAN_LIMIT_MESSAGE);
+    await refreshPlanUsage();
+  } else {
+    const message =
+      saveError instanceof Error ? saveError.message : "Neznáma chyba.";
+    alert("Chyba pri ukladaní položky: " + message);
+
+    if (createdNewItem) {
+      await Promise.all([loadItems(), refreshPlanUsage()]);
+    }
+  }
 } finally {
+  saveInProgressRef.current = false;
   setIsSaving(false);
 }
   }
@@ -342,7 +386,7 @@ setItems(itemsWithPhotos);
     return;
   }
 
-  loadItems();
+  await Promise.all([loadItems(), refreshPlanUsage()]);
 }
 
   function isLowStock(row: any) {
@@ -370,13 +414,23 @@ setItems(itemsWithPhotos);
         Evidencia náradia, materiálu a skladových zásob.
       </p>
 
+      {!planUsageLoading && isPlanLimited && (
+        <PlanLimitNotice
+          resource="inventory_items"
+          usage={planUsage}
+          limit={planLimit}
+          className="mt-6"
+        />
+      )}
+
       <button
         onClick={() => {
           setShowForm(!showForm);
           setEditingId(null);
           setItem(emptyItem);
         }}
-        className="mt-8 rounded-xl bg-blue-600 px-6 py-3 text-white hover:bg-blue-700"
+        disabled={isItemCreationUnavailable}
+        className="mt-8 rounded-xl bg-blue-600 px-6 py-3 text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-400"
       >
         ➕ Pridať položku
       </button>
@@ -447,6 +501,7 @@ setItems(itemsWithPhotos);
       accept="image/*"
       capture="environment"
       className="hidden"
+      disabled={!editingId && isItemCreationUnavailable}
       onChange={handlePhotoChange}
     />
   </label>
@@ -457,6 +512,7 @@ setItems(itemsWithPhotos);
       type="file"
       accept="image/*"
       className="hidden"
+      disabled={!editingId && isItemCreationUnavailable}
       onChange={handlePhotoChange}
     />
   </label>
@@ -473,7 +529,7 @@ setItems(itemsWithPhotos);
 )}
           <button
             onClick={saveItem}
-            disabled={isSaving}
+            disabled={isSaving || (!editingId && isItemCreationUnavailable)}
             className="mt-5 rounded-xl bg-green-600 px-6 py-3 text-white hover:bg-green-700 disabled:bg-gray-400"
           >
             {isSaving

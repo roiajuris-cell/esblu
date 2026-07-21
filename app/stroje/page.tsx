@@ -1,8 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import PlanLimitNotice from "@/app/components/PlanLimitNotice";
+import { usePlanUsage } from "@/hooks/use-plan-usage";
+import {
+  PLAN_LIMIT_MESSAGE,
+  isPlanLimitReachedError,
+} from "@/lib/plan-limits";
 
 export default function StrojePage() {
   const [userId, setUserId] = useState("");
@@ -10,6 +16,15 @@ export default function StrojePage() {
   const [showForm, setShowForm] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const saveInProgressRef = useRef(false);
+  const {
+    usage: planUsage,
+    limit: planLimit,
+    isLimited: isPlanLimited,
+    loading: planUsageLoading,
+    refresh: refreshPlanUsage,
+  } = usePlanUsage("machines");
+  const isMachineCreationUnavailable = planUsageLoading || isPlanLimited;
 
   const emptyMachine = {
     name: "",
@@ -102,6 +117,8 @@ export default function StrojePage() {
   }
 
   async function saveMachine() {
+    if (saveInProgressRef.current) return;
+
     if (!machine.name) {
       alert("Vyplň názov stroja.");
       return;
@@ -112,6 +129,7 @@ export default function StrojePage() {
       return;
     }
 
+    saveInProgressRef.current = true;
     setIsSaving(true);
 
     const payload = {
@@ -127,25 +145,50 @@ export default function StrojePage() {
       notes: machine.notes || null,
     };
 
-    const { error } = editingId
-      ? await supabase
+    try {
+      if (editingId) {
+        const { error } = await supabase
           .from("machines")
           .update(payload)
           .eq("id", editingId)
-          .eq("user_id", userId)
-      : await supabase.from("machines").insert(payload);
+          .eq("user_id", userId);
 
-    setIsSaving(false);
+        if (error) throw error;
 
-    if (error) {
-      alert("Chyba pri ukladaní stroja: " + error.message);
-      return;
+        setMachine(emptyMachine);
+        setEditingId(null);
+        setShowForm(false);
+        await loadMachines();
+        return;
+      }
+
+      const latestUsage = await refreshPlanUsage();
+
+      if (latestUsage?.isLimited) {
+        alert(PLAN_LIMIT_MESSAGE);
+        return;
+      }
+
+      const { error } = await supabase.from("machines").insert(payload);
+      if (error) throw error;
+
+      setMachine(emptyMachine);
+      setEditingId(null);
+      setShowForm(false);
+      await Promise.all([loadMachines(), refreshPlanUsage()]);
+    } catch (saveError: unknown) {
+      if (isPlanLimitReachedError(saveError, "machines")) {
+        alert(PLAN_LIMIT_MESSAGE);
+        await refreshPlanUsage();
+      } else {
+        const message =
+          saveError instanceof Error ? saveError.message : "Neznáma chyba.";
+        alert("Chyba pri ukladaní stroja: " + message);
+      }
+    } finally {
+      saveInProgressRef.current = false;
+      setIsSaving(false);
     }
-
-    setMachine(emptyMachine);
-    setEditingId(null);
-    setShowForm(false);
-    loadMachines();
   }
 
   function editMachine(item: any) {
@@ -214,7 +257,7 @@ export default function StrojePage() {
     return;
   }
 
-  loadMachines();
+  await Promise.all([loadMachines(), refreshPlanUsage()]);
 }
 
   function cancelEdit() {
@@ -241,13 +284,23 @@ export default function StrojePage() {
         Evidencia firemných strojov a techniky.
       </p>
 
+      {!planUsageLoading && isPlanLimited && (
+        <PlanLimitNotice
+          resource="machines"
+          usage={planUsage}
+          limit={planLimit}
+          className="mt-6"
+        />
+      )}
+
       <button
         onClick={() => {
           setShowForm(!showForm);
           setEditingId(null);
           setMachine(emptyMachine);
         }}
-        className="mt-8 rounded-xl bg-blue-600 px-6 py-3 text-white hover:bg-blue-700"
+        disabled={isMachineCreationUnavailable}
+        className="mt-8 rounded-xl bg-blue-600 px-6 py-3 text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-400"
       >
         ➕ Pridať stroj
       </button>
@@ -327,7 +380,9 @@ export default function StrojePage() {
           <div className="mt-5 flex gap-3">
             <button
               onClick={saveMachine}
-              disabled={isSaving}
+              disabled={
+                isSaving || (!editingId && isMachineCreationUnavailable)
+              }
               className="rounded-xl bg-green-600 px-6 py-3 text-white hover:bg-green-700 disabled:bg-gray-400"
             >
               {isSaving

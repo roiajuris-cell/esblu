@@ -1,7 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import PlanLimitNotice from "@/app/components/PlanLimitNotice";
+import { usePlanUsage } from "@/hooks/use-plan-usage";
+import {
+  PLAN_LIMIT_MESSAGE,
+  isPlanLimitReachedError,
+} from "@/lib/plan-limits";
 import {
   exportAiEvidenceToExcel,
   type AiEvidenceExcelRecord,
@@ -116,6 +122,15 @@ export default function AiEvidenciaPage() {
     type: "success" | "error";
     text: string;
   } | null>(null);
+  const saveInProgressRef = useRef(false);
+  const {
+    usage: planUsage,
+    limit: planLimit,
+    isLimited: isPlanLimited,
+    loading: planUsageLoading,
+    refresh: refreshPlanUsage,
+  } = usePlanUsage("ai_evidence");
+  const isCreationBlocked = !planUsageLoading && isPlanLimited;
 
 const groupedRecords = records.reduce((groups: any, record: any) => {
   const spz = getSpzGroupKey(record.spz);
@@ -261,7 +276,18 @@ const summaryBySpz = records.reduce((groups: any, record: any) => {
   }
   async function handleFile(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
+    event.target.value = "";
+
     if (!file) return;
+
+    if (planUsageLoading || isCreationBlocked) {
+      setError(
+        planUsageLoading
+          ? "Overujem dostupnosť limitu. Skús to znova o chvíľu."
+          : PLAN_LIMIT_MESSAGE
+      );
+      return;
+    }
 
     setFileName(file.name);
 setResult(null);
@@ -387,12 +413,22 @@ function resolveMovementType(result: any): string | null {
   return result.movementType || null;
 }
   async function saveEvidence() {
-    if (!result) return;
+    if (!result || saveInProgressRef.current) return;
 
+    saveInProgressRef.current = true;
     setIsSaving(true);
     setError("");
+    let uploadedPhotoPath: string | null = null;
+    let recordInserted = false;
 
     try {
+      const latestUsage = await refreshPlanUsage();
+
+      if (latestUsage?.isLimited) {
+        setError(PLAN_LIMIT_MESSAGE);
+        return;
+      }
+
       const {
         data: { session },
       } = await supabase.auth.getSession();
@@ -443,6 +479,8 @@ if (selectedFile) {
   if (uploadError) {
     throw new Error(`Fotku sa nepodarilo uložiť: ${uploadError.message}`);
   }
+
+  uploadedPhotoPath = photoPath;
 }
 const resolvedMovementType = resolveMovementType(result);
       const { error } = await supabase.from("ai_evidence").insert({
@@ -476,10 +514,36 @@ review_status: result.reviewStatus || "pending",
 
       if (error) throw error;
 
+      recordInserted = true;
+      setResult(null);
+      setSelectedFile(null);
+      setFileName("");
+      await Promise.all([loadRecords(), refreshPlanUsage()]);
       alert("Záznam bol uložený do AI evidencie.");
-    } catch (err: any) {
-      setError(err.message || "Uloženie zlyhalo.");
+    } catch (saveError: unknown) {
+      if (uploadedPhotoPath && !recordInserted) {
+        const { error: cleanupError } = await supabase.storage
+          .from("ai-evidence-documents")
+          .remove([uploadedPhotoPath]);
+
+        if (cleanupError) {
+          console.error(
+            "Insert zlyhal a osirotenú fotografiu sa nepodarilo odstrániť:",
+            cleanupError
+          );
+        }
+      }
+
+      if (isPlanLimitReachedError(saveError, "ai_evidence")) {
+        setError(PLAN_LIMIT_MESSAGE);
+        await refreshPlanUsage();
+      } else {
+        setError(
+          saveError instanceof Error ? saveError.message : "Uloženie zlyhalo."
+        );
+      }
     } finally {
+      saveInProgressRef.current = false;
       setIsSaving(false);
     }
   }
@@ -531,7 +595,7 @@ review_status: result.reviewStatus || "pending",
 
   setSelectedRecord(null);
   setDocumentPhotoUrl(null);
-  await loadRecords();
+  await Promise.all([loadRecords(), refreshPlanUsage()]);
 }
 
   async function loadRecords() {
@@ -599,6 +663,14 @@ useEffect(() => {
   </h1>
 </div>
 
+        {!planUsageLoading && isPlanLimited && (
+          <PlanLimitNotice
+            resource="ai_evidence"
+            usage={planUsage}
+            limit={planLimit}
+            className="mt-6"
+          />
+        )}
 
         <div className="mt-10 rounded-3xl border-2 border-dashed border-blue-300 bg-blue-50 p-6 text-center">
   <span className="text-5xl">📄</span>
@@ -612,23 +684,37 @@ useEffect(() => {
   </p>
 
   <div className="mt-6 grid grid-cols-2 gap-3">
-    <label className="cursor-pointer rounded-2xl bg-blue-600 px-4 py-4 font-bold text-white">
+    <label
+      className={`rounded-2xl bg-blue-600 px-4 py-4 font-bold text-white ${
+        planUsageLoading || isPlanLimited || isProcessing || isSaving
+          ? "cursor-not-allowed opacity-60"
+          : "cursor-pointer"
+      }`}
+    >
       📷 Odfotiť
       <input
         type="file"
         accept="image/*"
         capture="environment"
         className="hidden"
+        disabled={planUsageLoading || isPlanLimited || isProcessing || isSaving}
         onChange={handleFile}
       />
     </label>
 
-    <label className="cursor-pointer rounded-2xl bg-white px-4 py-4 font-bold text-blue-700 shadow">
+    <label
+      className={`rounded-2xl bg-white px-4 py-4 font-bold text-blue-700 shadow ${
+        planUsageLoading || isPlanLimited || isProcessing || isSaving
+          ? "cursor-not-allowed opacity-60"
+          : "cursor-pointer"
+      }`}
+    >
       🖼️ Galéria
       <input
         type="file"
         accept="image/*"
         className="hidden"
+        disabled={planUsageLoading || isPlanLimited || isProcessing || isSaving}
         onChange={handleFile}
       />
     </label>
@@ -689,7 +775,7 @@ useEffect(() => {
 
             <button
               onClick={saveEvidence}
-              disabled={isSaving}
+              disabled={isSaving || planUsageLoading || isPlanLimited}
               className="mt-4 w-full rounded-2xl bg-blue-600 px-5 py-4 text-lg font-black text-white disabled:opacity-60"
             >
               {isSaving ? "Ukladám..." : "💾 Uložiť do evidencie"}

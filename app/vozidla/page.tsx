@@ -1,7 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import PlanLimitNotice from "@/app/components/PlanLimitNotice";
+import { usePlanUsage } from "@/hooks/use-plan-usage";
+import {
+  PLAN_LIMIT_MESSAGE,
+  isPlanLimitReachedError,
+} from "@/lib/plan-limits";
 import { normalizeSpz } from "@/lib/normalize-spz";
 import VehicleCard from "../components/VehicleCard";
 
@@ -131,6 +137,16 @@ export default function VozidlaPage() {
   const [vehicle, setVehicle] = useState<any | null>(null);
   const [vehicles, setVehicles] = useState<any[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const saveInProgressRef = useRef(false);
+  const {
+    usage: planUsage,
+    limit: planLimit,
+    isLimited: isPlanLimited,
+    loading: planUsageLoading,
+    refresh: refreshPlanUsage,
+  } = usePlanUsage("vehicles");
+  const isNewVehicleBlocked =
+    !editingId && (planUsageLoading || isPlanLimited);
 
   useEffect(() => {
     checkUser();
@@ -202,6 +218,15 @@ export default function VozidlaPage() {
 
     if (!file) return;
 
+    if (isNewVehicleBlocked) {
+      setScanError(
+        planUsageLoading
+          ? "Overujem dostupnosť limitu. Skús to znova o chvíľu."
+          : PLAN_LIMIT_MESSAGE
+      );
+      return;
+    }
+
     const setPreparing =
       side === "front" ? setIsPreparingFront : setIsPreparingBack;
     setPreparing(true);
@@ -249,6 +274,15 @@ export default function VozidlaPage() {
   }
 
   async function handleAiProcess() {
+    if (isNewVehicleBlocked) {
+      setScanError(
+        planUsageLoading
+          ? "Overujem dostupnosť limitu. Skús to znova o chvíľu."
+          : PLAN_LIMIT_MESSAGE
+      );
+      return;
+    }
+
     if (!frontFile) {
       setScanError("Najprv pridaj prednú stranu technického preukazu.");
       return;
@@ -375,50 +409,66 @@ export default function VozidlaPage() {
   }
 
   async function handleSaveVehicle() {
-    if (!vehicle) return;
+    if (!vehicle || saveInProgressRef.current) return;
 
     if (!userId) {
       alert("Nie si prihlásený.");
       return;
     }
 
+    saveInProgressRef.current = true;
     setIsSaving(true);
 
-    if (editingId) {
-      const { error } = await supabase
-        .from("vehicles")
-        .update(vehiclePayload())
-        .eq("id", editingId)
-        .eq("user_id", userId);
+    try {
+      if (editingId) {
+        const { error } = await supabase
+          .from("vehicles")
+          .update(vehiclePayload())
+          .eq("id", editingId)
+          .eq("user_id", userId);
 
-      setIsSaving(false);
+        if (error) throw error;
 
-      if (error) {
-        alert("Chyba pri úprave: " + error.message);
+        alert("Vozidlo bolo upravené.");
+        setEditingId(null);
+        setVehicle(null);
+        clearRegistrationImages();
+        await loadVehicles();
         return;
       }
 
-      alert("Vozidlo bolo upravené.");
-      setEditingId(null);
+      const latestUsage = await refreshPlanUsage();
+
+      if (latestUsage?.isLimited) {
+        alert(PLAN_LIMIT_MESSAGE);
+        return;
+      }
+
+      const { error } = await supabase.from("vehicles").insert(vehiclePayload());
+
+      if (error) throw error;
+
+      alert("Vozidlo bolo uložené.");
       setVehicle(null);
       clearRegistrationImages();
-      loadVehicles();
-      return;
+      await Promise.all([loadVehicles(), refreshPlanUsage()]);
+    } catch (saveError: unknown) {
+      if (isPlanLimitReachedError(saveError, "vehicles")) {
+        alert(PLAN_LIMIT_MESSAGE);
+        await refreshPlanUsage();
+      } else {
+        const message =
+          saveError instanceof Error ? saveError.message : "Neznáma chyba.";
+        alert(
+          editingId
+            ? "Chyba pri úprave: " + message
+            : "Chyba pri ukladaní: " + message
+        );
+      }
+    } finally {
+      saveInProgressRef.current = false;
+      setIsSaving(false);
     }
-
-    const { error } = await supabase.from("vehicles").insert(vehiclePayload());
-
-    setIsSaving(false);
-
-    if (error) {
-      alert("Chyba pri ukladaní: " + error.message);
-      return;
-    }
-
-    alert("Vozidlo bolo uložené.");
-    setVehicle(null);
-    clearRegistrationImages();
-    loadVehicles();
   }
 
   function handleEdit(car: any) {
@@ -460,7 +510,7 @@ export default function VozidlaPage() {
       return;
     }
 
-    loadVehicles();
+    await Promise.all([loadVehicles(), refreshPlanUsage()]);
   }
 
   function cancelEdit() {
@@ -502,6 +552,15 @@ export default function VozidlaPage() {
         Evidencia firemných vozidiel.
       </p>
 
+      {!planUsageLoading && isPlanLimited && (
+        <PlanLimitNotice
+          resource="vehicles"
+          usage={planUsage}
+          limit={planLimit}
+          className="mt-6"
+        />
+      )}
+
       <div className="mt-8 rounded-2xl border border-white/20 bg-white/45 p-6 shadow-lg backdrop-blur-xl">
         <h2 className="text-2xl font-bold">Načítať technický preukaz</h2>
         <p className="mt-2 text-sm text-slate-700">
@@ -522,7 +581,9 @@ export default function VozidlaPage() {
                   accept="image/*"
                   capture="environment"
                   className="hidden"
-                  disabled={isProcessing || isPreparingFront}
+                  disabled={
+                    isProcessing || isPreparingFront || isNewVehicleBlocked
+                  }
                   onChange={(event) =>
                     handleRegistrationFileChange("front", event)
                   }
@@ -535,7 +596,9 @@ export default function VozidlaPage() {
                   type="file"
                   accept="image/*"
                   className="hidden"
-                  disabled={isProcessing || isPreparingFront}
+                  disabled={
+                    isProcessing || isPreparingFront || isNewVehicleBlocked
+                  }
                   onChange={(event) =>
                     handleRegistrationFileChange("front", event)
                   }
@@ -583,7 +646,9 @@ export default function VozidlaPage() {
                   accept="image/*"
                   capture="environment"
                   className="hidden"
-                  disabled={isProcessing || isPreparingBack}
+                  disabled={
+                    isProcessing || isPreparingBack || isNewVehicleBlocked
+                  }
                   onChange={(event) =>
                     handleRegistrationFileChange("back", event)
                   }
@@ -596,7 +661,9 @@ export default function VozidlaPage() {
                   type="file"
                   accept="image/*"
                   className="hidden"
-                  disabled={isProcessing || isPreparingBack}
+                  disabled={
+                    isProcessing || isPreparingBack || isNewVehicleBlocked
+                  }
                   onChange={(event) =>
                     handleRegistrationFileChange("back", event)
                   }
@@ -640,7 +707,8 @@ export default function VozidlaPage() {
             !frontFile ||
             isProcessing ||
             isPreparingFront ||
-            isPreparingBack
+            isPreparingBack ||
+            isNewVehicleBlocked
           }
           className="mt-6 rounded-xl bg-green-600 px-6 py-3 font-medium text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:bg-gray-400"
         >
@@ -741,7 +809,7 @@ export default function VozidlaPage() {
           <div className="mt-6 flex gap-3">
             <button
               onClick={handleSaveVehicle}
-              disabled={isSaving}
+              disabled={isSaving || isNewVehicleBlocked}
               className="rounded-xl bg-blue-600 px-6 py-3 text-white hover:bg-blue-700 disabled:bg-gray-400"
             >
               {isSaving
