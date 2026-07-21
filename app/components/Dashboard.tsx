@@ -242,7 +242,7 @@ export default function Dashboard() {
           </div>
 
           <nav className="mt-12 space-y-3">
-            <SideLink active href="/" label="Menu" image="/images/van.png" />
+            <SideLink active href="/" label="Menu" icon={<MenuIcon />} />
             <SideLink href="/vozidla" label="Vozidlá" image="/images/van.png" />
             <SideLink href="/stroje" label="Stroje" image="/images/excavator.png" />
             <SideLink href="/sklad" label="Sklad" image="/images/warehouse.png" />
@@ -334,18 +334,18 @@ export default function Dashboard() {
             )}
           </div>
 
-            <div className="mt-4 grid grid-cols-2 gap-2 sm:gap-3 lg:mt-14 lg:grid-cols-4 lg:gap-8">
+            <div className="mt-4 grid grid-cols-2 gap-2 sm:gap-3 lg:mt-14 lg:grid-cols-2 lg:gap-8 xl:grid-cols-4">
             {modules
   .filter((module) => module.title !== "Nastavenia")
   .map((module) => (
               <Link
                 key={module.href}
                 href={module.href}
-                className={`group min-w-0 rounded-2xl bg-white/45 border border-white/20 p-2 text-center shadow-lg backdrop-blur-lg transition duration-300 hover:scale-105 ${
+                className={`group min-w-0 rounded-2xl bg-white/45 border border-white/20 p-2 text-center shadow-lg backdrop-blur-lg transition duration-300 hover:scale-105 lg:flex lg:h-80 lg:flex-col lg:p-4 ${
   module.title === "Nastavenia" ? "col-span-2 h-32" : "h-44"
 }`}
               >
-                <div className="mx-auto flex h-24 items-center justify-center transition group-hover:scale-105 lg:h-32">
+                <div className="mx-auto flex h-24 items-center justify-center transition group-hover:scale-105 lg:h-36 lg:flex-none">
   <Image
   src={module.image}
   width={220}
@@ -353,24 +353,24 @@ export default function Dashboard() {
   alt={module.title}
   className={
     module.title === "AI Evidencia"
-      ? "h-32 w-40 scale-125 object-contain"
+      ? "h-32 w-40 scale-125 object-contain lg:w-44 lg:scale-110"
       : module.title === "Stroje"
-      ? "h-32 w-40 scale-125 object-contain"
+      ? "h-32 w-40 scale-125 object-contain lg:w-44 lg:scale-110"
       : module.title === "Sklad"
-      ? "h-32 w-40 scale-125 object-contain"
+      ? "h-32 w-40 scale-125 object-contain lg:w-44 lg:scale-110"
       : "h-24 w-32 object-contain sm:h-28 sm:w-40 lg:h-36 lg:w-48"
   }
 />
 </div>
-                <h3 className="mt-2 text-base font-bold text-slate-900 lg:mt-5 lg:text-3xl">
+                <h3 className="mt-2 text-base font-bold text-slate-900 lg:mt-3 lg:text-2xl lg:leading-tight">
                   {module.title}
                 </h3>
 
-                <p className="mt-1 min-h-8 text-sm leading-snug text-slate-800">
+                <p className="mt-1 min-h-8 text-sm leading-snug text-slate-800 lg:mt-2 lg:min-h-10">
                   {module.subtitle}
                 </p>
 
-                <p className="mt-6 font-semibold text-blue-600 opacity-0 transition group-hover:opacity-100">
+                <p className="mt-6 font-semibold text-blue-600 opacity-0 transition group-hover:opacity-100 lg:mt-auto lg:pt-4">
                   Otvoriť →
                 </p>
               </Link>
@@ -437,11 +437,13 @@ function SideLink({
   href,
   label,
   image,
+  icon,
   active = false,
 }: {
   href: string;
   label: string;
-  image: string;
+  image?: string;
+  icon?: ReactNode;
   active?: boolean;
 }) {
   return (
@@ -454,13 +456,16 @@ function SideLink({
       }`}
     >
       <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white shadow-sm">
-        <Image
-          src={image}
-          alt={label}
-          width={34}
-          height={34}
-          className="h-8 w-8 object-contain"
-        />
+        {icon ??
+          (image ? (
+            <Image
+              src={image}
+              alt={label}
+              width={34}
+              height={34}
+              className="h-8 w-8 object-contain"
+            />
+          ) : null)}
       </div>
 
       {label}
@@ -468,9 +473,15 @@ function SideLink({
   );
 }
 
-function IconBase({ children }: { children: ReactNode }) {
+function IconBase({
+  children,
+  size = 26,
+}: {
+  children: ReactNode;
+  size?: number;
+}) {
   return (
-    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
       {children}
     </svg>
   );
@@ -478,7 +489,7 @@ function IconBase({ children }: { children: ReactNode }) {
 
 function MenuIcon() {
   return (
-    <IconBase>
+    <IconBase size={32}>
       <rect x="3" y="3" width="7" height="7" rx="1" />
       <rect x="14" y="3" width="7" height="7" rx="1" />
       <rect x="3" y="14" width="7" height="7" rx="1" />
