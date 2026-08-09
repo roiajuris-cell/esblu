@@ -1,431 +1,478 @@
 import OpenAI from "openai";
 import { normalizeSpz } from "@/lib/normalize-spz";
-import { normalizeWeightUnit } from "@/lib/normalize-weight-unit";
+import { normalizeAndValidateWeights } from "@/lib/weight-utils";
 
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY!,
 });
 
+const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
+
+const AI_EVIDENCE_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    documentType: {
+      type: ["string", "null"],
+      enum: ["vážny lístok", "dodací list", "other", null],
+    },
+    movementType: {
+      type: ["string", "null"],
+      enum: ["dovoz", "vývoz", null],
+    },
+    spz: { type: ["string", "null"] },
+    supplier: { type: ["string", "null"] },
+    customer: { type: ["string", "null"] },
+    constructionSite: { type: ["string", "null"] },
+    documentNumber: { type: ["string", "null"] },
+    material: { type: ["string", "null"] },
+    materialOriginal: { type: ["string", "null"] },
+    materialCategory: {
+      type: ["string", "null"],
+      enum: [
+        "piesok",
+        "kamenivo",
+        "asfalt",
+        "stavebný odpad",
+        "zemina",
+        "betón",
+        "iné",
+        null,
+      ],
+    },
+    documentLanguage: {
+      type: ["string", "null"],
+      enum: ["sk", "cs", "de", "en", "iné", null],
+    },
+    confidenceScore: {
+      type: ["number", "null"],
+      minimum: 0,
+      maximum: 1,
+    },
+    sourceLocation: { type: ["string", "null"] },
+    destinationLocation: { type: ["string", "null"] },
+    reviewStatus: {
+      type: ["string", "null"],
+      enum: ["confirmed", "needs_review", "pending", null],
+    },
+    quantity: { type: ["number", "null"], minimum: 0 },
+    unit: { type: ["string", "null"], enum: ["kg", "t", null] },
+    brutto: { type: ["number", "null"], minimum: 0 },
+    tara: { type: ["number", "null"], minimum: 0 },
+    netto: { type: ["number", "null"], minimum: 0 },
+    documentDate: { type: ["string", "null"] },
+    documentTime: { type: ["string", "null"] },
+    rawText: { type: ["string", "null"] },
+  },
+  required: [
+    "documentType",
+    "movementType",
+    "spz",
+    "supplier",
+    "customer",
+    "constructionSite",
+    "documentNumber",
+    "material",
+    "materialOriginal",
+    "materialCategory",
+    "documentLanguage",
+    "confidenceScore",
+    "sourceLocation",
+    "destinationLocation",
+    "reviewStatus",
+    "quantity",
+    "unit",
+    "brutto",
+    "tara",
+    "netto",
+    "documentDate",
+    "documentTime",
+    "rawText",
+  ],
+} as const;
+
+const SPZ_FALLBACK_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    spz: { type: ["string", "null"] },
+    evidenceText: { type: ["string", "null"] },
+    confidence: { type: ["number", "null"], minimum: 0, maximum: 1 },
+  },
+  required: ["spz", "evidenceText", "confidence"],
+} as const;
+
+const SPZ_FALLBACK_CONFIDENCE_THRESHOLD = 0.8;
+
+const SPZ_EVIDENCE_LABEL_PATTERNS = [
+  /\bspz\b/,
+  /\becv\b/,
+  /evidencne\s+cislo/,
+  /\brz\b/,
+  /registracni\s+znacka/,
+  /\bkennzeichen\b/,
+  /kfz[\s-]*kennzeichen/,
+  /pol\.?\s*kennzeichen/,
+  /fahrzeug[\s-]*kennzeichen/,
+  /license\s+plate/,
+  /registration\s+number/,
+  /vehicle\s+registration/,
+] as const;
+
+type SpzSource = "main" | "fallback" | "none";
+
+function normalizeEvidenceText(value: string): string {
+  return value
+    .normalize("NFKC")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function hasExplicitSpzEvidence(
+  evidenceText: string | null,
+  normalizedSpz: string | null
+): boolean {
+  if (!evidenceText || !normalizedSpz) return false;
+
+  const normalizedEvidenceText = normalizeEvidenceText(evidenceText);
+  const hasExplicitLabel = SPZ_EVIDENCE_LABEL_PATTERNS.some((pattern) =>
+    pattern.test(normalizedEvidenceText)
+  );
+  const normalizedEvidenceValue = normalizeSpz(evidenceText);
+  const containsCandidate =
+    normalizedEvidenceValue?.includes(normalizedSpz) ?? false;
+
+  return hasExplicitLabel && containsCandidate;
+}
+
+const AI_EVIDENCE_PROMPT = `
+Si asistent na čítanie firemných dokumentov zo Slovenska, Česka, Nemecka a
+anglicky hovoriacich krajín. Prednostne spracúvaj vážne lístky a dodacie listy.
+Iný typ označ ako "other". Nie si viazaný na konkrétnu firmu ani rozloženie.
+
+ZÁSADA MAPOVANIA
+- Pole neurčuj iba podľa pozície textu na stránke. Použi význam labelu, jeho
+  susednú hodnotu, vizuálnu väzbu label -> hodnota a kontext dokumentu.
+- Vždy uprednostni explicitný label a jeho hodnotu pred inferenciou.
+- Nevymýšľaj chýbajúce hodnoty, názvy firiem, SPZ ani materiál. Pri neistote
+  vráť null a nastav reviewStatus na "needs_review".
+- Dopravca, vodič, vlastník vozidla ani stavba nie sú automaticky supplier alebo
+  customer. movementType nikdy nepouži na prehodenie supplier a customer.
+
+SPZ / EČV
+- Hľadaj najmä pri labeloch: SPZ, EČV, Evidenčné číslo vozidla, Vozidlo;
+  SPZ, RZ, Registrační značka; Kennzeichen, Kfz-Kennzeichen, Pol. Kennzeichen,
+  Fahrzeug-Kennzeichen; License plate, Registration number, Vehicle registration.
+- "Fahrzeug-Nr." použi iba vtedy, keď label, hodnota a kontext jasne ukazujú,
+  že ide o registračnú značku, nie interné číslo vozidla.
+- Uprednostni hodnotu pri explicitnom označení registračnej značky. Náhodný
+  alfanumerický kód, číslo dokladu, zákazníka, objednávky, váženia alebo VIN
+  nepovažuj za SPZ. Pri viacerých kódoch nevyberaj SPZ odhadom.
+- Nehádať nečitateľné znaky O/0, I/1, B/8. Neistú alebo neúplnú SPZ vráť null.
+
+CUSTOMER
+- Mapuj iba firmu alebo osobu pri zákazníckej roli: Zákazník, Odberateľ,
+  Príjemca; Zákazník, Odběratel, Příjemce; Kunde, Anlieferer / Kunde, Abnehmer,
+  Empfänger; Customer, Client, Consignee, Recipient.
+- Pri kombinovanom labele "Anlieferer / Kunde" mapuj názov firmy na customer,
+  pokiaľ kontext jednoznačne neurčuje inú rolu.
+
+SUPPLIER
+- Mapuj vystavujúcu alebo dodávateľskú firmu pri labeloch: Dodávateľ,
+  Predávajúci, Prevádzkovateľ váhy; Dodavatel, Prodejce; Lieferant, Lieferwerk,
+  Betreiber, Abgeber; Supplier, Vendor, Seller.
+- Jasne identifikovaná firma v hlavičke, ktorá dokument vystavila alebo
+  prevádzkuje váhu, môže byť supplier. Ak jej rola nie je jasná, vráť null.
+
+STAVBA / MIESTO / PÔVOD
+- constructionSite hľadaj pri labeloch: Stavba, Miesto stavby, Pôvod, Miesto
+  pôvodu, Prevádzka; Stavba, Místo stavby, Původ; Baustelle, Herkunft,
+  Baustelle / Abfallerzeuger, Abfallerzeuger, Einsatzort; Construction site,
+  Site, Origin, Source location, Job site.
+- "Baustelle / Abfallerzeuger" typicky označuje stavbu, miesto alebo pôvod.
+  Materiál nevkladaj do constructionSite iba preto, že je vytlačený blízko.
+
+MATERIÁL
+- Hľadaj pri labeloch: Materiál, Druh materiálu, Komodita, Produkt; Materiál,
+  Druh materiálu, Produkt; Material, Sorte, Sorte Nr., Baustoff, Stoff,
+  Abfallart; Material, Material type, Product, Commodity.
+- materialOriginal je čo najpresnejší pôvodný názov z dokumentu.
+- material musí zachovať konkrétnu identifikáciu materiálu. Ak dokument uvádza
+  "AC 32 TS (B 50 / 70)", material nesmie byť iba "asfalt".
+- materialCategory môže byť všeobecnejšia hodnota povolená schémou, ale nesmie
+  nahradiť presný material ani materialOriginal.
+
+ČÍSLO DOKLADU
+- documentNumber hľadaj pri labeloch: Číslo dokladu, Číslo vážneho lístka,
+  Dodací list č., Vážny lístok č.; Číslo dokladu, Váženka č., Dodací list č.;
+  Lieferschein Nr., Lieferschein-Nr., Wiegeschein Nr., Beleg-Nr.; Document
+  number, Ticket number, Weighbridge ticket number, Delivery note number.
+
+HMOTNOSTI A MNOŽSTVO — KRITICKÉ PRAVIDLÁ
+- brutto čítaj pri Brutto, Gross alebo Gross weight; tara pri Tara, Tare alebo
+  Tare weight; netto pri Netto, Net alebo Net weight. Nezamieňaj tieto polia.
+- quantity, brutto, tara a netto musia byť JSON číslo bez jednotky alebo null.
+- unit je samostatne iba "kg", "t" alebo null. Čítaj ju priamo pri quantity
+  alebo hmotnostiach; neodhaduj ju podľa veľkosti čísla ani iného kontextu.
+- Hodnotu a jednotku neoddeľ spôsobom, ktorý zmení význam. Tisícové medzery
+  odstráň a desatinnú čiarku interpretuj podľa kontextu dokumentu.
+- Hodnoty nikdy nekonvertuj medzi kg a t.
+- "Brutto 31 480 kg", "Tara 13 260 kg", "Netto 18 220 kg" znamená brutto
+  31480, tara 13260, netto 18220 a unit "kg".
+- "Netto 18,56 t" znamená netto 18.56 a unit "t". Nejednoznačné "1,000" bez
+  dostatočného kontextu vráť ako null.
+- Vytlačené netto zachovaj; nenahrádzaj ho vlastným výpočtom. Ak sú uvedené
+  brutto, tara aj netto, skontroluj brutto - tara ≈ netto. Pri nesúlade hodnoty
+  neopravuj a nastav reviewStatus na "needs_review".
+
+DÁTUM, ČAS A OSTATNÉ POLIA
+- documentDate a documentTime sú hlavný dátum a čas váženia, vystavenia alebo
+  dodania. Uprednostni ich pred dátumom tlače, podpisu alebo technickým dátumom.
+- documentDate vráť ako YYYY-MM-DD alebo null, documentTime ako HH:MM alebo null.
+- movementType je "dovoz", "vývoz" alebo null.
+- documentLanguage je jazyk dokumentu; confidenceScore je číslo 0 až 1 alebo null.
+- rawText zachová čo najviac relevantného textu vrátane labelov a ich hodnôt,
+  aby bolo možné výsledok neskôr manuálne skontrolovať.
+- confirmed použi iba pri jasných a logicky súladných hlavných údajoch.
+- needs_review použi pri nečitateľnosti, neistote, chýbajúcej jednotke pri
+  hmotnosti alebo matematickom nesúlade.
+`;
+
+function nullableText(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed || null;
+}
+
+function parseStructuredOutput(outputText: string): Record<string, unknown> {
+  const parsed: unknown = JSON.parse(outputText);
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("AI vrátila neplatnú štruktúru odpovede.");
+  }
+  return parsed as Record<string, unknown>;
+}
+
+function normalizeAiEvidenceData(data: Record<string, unknown>) {
+  const weights = normalizeAndValidateWeights({
+    quantity: data.quantity,
+    brutto: data.brutto,
+    tara: data.tara,
+    netto: data.netto,
+    unit: data.unit,
+  });
+
+  const requestedReviewStatus = nullableText(data.reviewStatus);
+  const reviewStatus = weights.needsReview
+    ? "needs_review"
+    : requestedReviewStatus || "pending";
+
+  return {
+    documentType: nullableText(data.documentType),
+    movementType: nullableText(data.movementType),
+    spz: normalizeSpz(data.spz),
+    supplier: nullableText(data.supplier),
+    customer: nullableText(data.customer),
+    constructionSite: nullableText(data.constructionSite),
+    documentNumber: nullableText(data.documentNumber),
+    material: nullableText(data.material),
+    materialOriginal: nullableText(data.materialOriginal),
+    materialCategory: nullableText(data.materialCategory),
+    documentLanguage: nullableText(data.documentLanguage),
+    confidenceScore:
+      typeof data.confidenceScore === "number" &&
+      Number.isFinite(data.confidenceScore)
+        ? data.confidenceScore
+        : null,
+    sourceLocation: nullableText(data.sourceLocation),
+    destinationLocation: nullableText(data.destinationLocation),
+    reviewStatus,
+    quantity: weights.quantity,
+    unit: weights.unit,
+    brutto: weights.brutto,
+    tara: weights.tara,
+    netto: weights.netto,
+    documentDate: nullableText(data.documentDate),
+    documentTime: nullableText(data.documentTime),
+    rawText: nullableText(data.rawText),
+  };
+}
+
 export async function POST(req: Request) {
   try {
     const formData = await req.formData();
-    const file = formData.get("file") as File | null;
+    const fileValue = formData.get("file");
 
-    if (!file) {
+    if (!(fileValue instanceof File)) {
       return Response.json(
-        { success: false, error: "Nebola nahraná žiadna fotka." },
+        { success: false, error: "Nebola nahraná žiadna fotografia." },
         { status: 400 }
       );
     }
 
-    const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
-    const base64Image = buffer.toString("base64");
+    if (!fileValue.type.startsWith("image/")) {
+      return Response.json(
+        { success: false, error: "Nahrať je možné iba obrázok." },
+        { status: 400 }
+      );
+    }
+
+    if (fileValue.size > MAX_IMAGE_SIZE) {
+      return Response.json(
+        { success: false, error: "Obrázok môže mať najviac 10 MB." },
+        { status: 413 }
+      );
+    }
+
+    const base64Image = Buffer.from(await fileValue.arrayBuffer()).toString(
+      "base64"
+    );
+    const imageUrl = `data:${fileValue.type};base64,${base64Image}`;
 
     const response = await client.responses.create({
-      model: "gpt-4.1-mini",
+      model: "gpt-5.6-terra",
+      store: false,
+      reasoning: { effort: "none" },
+      text: {
+        format: {
+          type: "json_schema",
+          name: "ai_evidence_document",
+          strict: true,
+          schema: AI_EVIDENCE_SCHEMA,
+        },
+      },
       input: [
         {
           role: "user",
           content: [
-            {
-              type: "input_text",
-              text: `
-Si AI asistent pre stavebnú firmu.
-
-Analyzuj fotografiu dokumentu a vráť iba jeden platný JSON objekt.
-Nevracaj markdown, vysvetlenia ani text pred alebo za JSON objektom.
-
-Najprv urči typ dokumentu.
-
-Povolené hodnoty documentType:
-- dodací list
-- vážny lístok
-- faktúra
-- bloček
-- servisný doklad
-- technický preukaz
-- iný dokument
-
-Dokument môže byť v slovenčine, češtine, nemčine alebo angličtine.
-Údaje určuj podľa významu, rozloženia dokumentu, označení polí a súvislostí.
-
-HLAVNÉ PRAVIDLO PRE DODÁVATEĽA:
-
-supplier je vždy firma, ktorá je uvedená v hlavičke dokumentu a dokument vystavila.
-
-Za hlavičku dokumentu považuj najmä:
-- názov firmy alebo logo v hornej časti dokumentu,
-- adresu a kontaktné údaje vystavujúcej firmy,
-- názov vážnice, skládky, recyklačného centra, výrobne alebo prevádzky.
-
-Firma v hlavičke zostáva supplier pri dovoze aj pri vývoze.
-Nikdy neprehadzuj supplier a customer podľa movementType.
-
-Pri vážnom lístku nepoužívaj automaticky ako supplier firmu uvedenú v poli
-Kunde, Customer, Auftraggeber, zákazník alebo odberateľ.
-
-HLAVNÉ PRAVIDLO PRE ZÁKAZNÍKA:
-
-customer je firma alebo osoba výslovne uvedená ako zákazník, objednávateľ
-alebo odberateľ.
-
-Hľadaj najmä označenia:
-- Kunde
-- Kundenname
-- Kundennummer
-- Customer
-- Client
-- Auftraggeber
-- Rechnungsempfänger
-- zákazník
-- odberateľ
-- odběratel
-
-Kundennummer môže byť iba číslo zákazníka. Ak je pri ňom alebo v rovnakej
-sekcii uvedený názov firmy, do customer vlož názov firmy, nie samotné číslo.
-
-Ak zákazník nie je jednoznačne uvedený:
-- customer nechaj ako prázdny string,
-- zákazníka nevymýšľaj podľa ŠPZ, vodiča, stavby, adresy alebo smeru pohybu,
-- reviewStatus nastav na "needs_review".
-
-Ak firmu v hlavičke nie je možné jednoznačne určiť:
-- supplier nechaj ako prázdny string,
-- reviewStatus nastav na "needs_review".
-
-Dopravca, vodič, vlastník vozidla a stavba nie sú automaticky supplier ani customer.
-
-Príklad:
-Ak je v hlavičke dokumentu uvedené:
-BRZ Odenwald Bauschutt-Recycling-Zentrum
-
-a v poli Kunde je uvedené:
-Klenk & Sohn GmbH
-
-výsledok musí byť:
-supplier = BRZ Odenwald Bauschutt-Recycling-Zentrum
-customer = Klenk & Sohn GmbH
-
-PRAVIDLÁ PRE VÁŽNY LÍSTOK:
-
-- supplier = firma uvedená v hlavičke dokumentu
-- customer = výslovne označený zákazník alebo objednávateľ
-- constructionSite = stavba, Baustelle, Bauvorhaben, Herkunft alebo uvedené miesto stavby
-- material = čitateľný názov materiálu
-- materialOriginal = presný názov materiálu tak, ako je uvedený na dokumente
-- materialCategory = jednotná kategória materiálu
-- brutto = brutto hmotnosť
-- tara = tara hmotnosť
-- netto = netto hmotnosť
-- unit = spoločná jednotka uvedená pri brutto, tara alebo netto; vráť "kg" alebo "t" iba vtedy, keď je na dokumente jasne čitateľná
-- documentDate = dátum váženia
-- documentTime = čas váženia
-- documentLanguage = jazyk dokumentu
-- sourceLocation = miesto, odkiaľ materiál pochádza, iba ak je to jednoznačné
-- destinationLocation = miesto, kam materiál smeruje, iba ak je to jednoznačné
-- confidenceScore = celková istota rozpoznania od 0 do 1
-- reviewStatus = stav kontroly výsledku
-
-PRAVIDLÁ PRE DODACÍ LIST:
-
-- supplier = firma uvedená v hlavičke dokumentu
-- customer = výslovne označený odberateľ alebo zákazník
-- constructionSite = miesto dodania alebo stavba
-- material = názov materiálu
-- materialOriginal = presný názov materiálu na dokumente
-- quantity = množstvo
-- unit = jednotka uvedená pri quantity; vráť "kg" alebo "t" iba vtedy, keď je na dokumente jasne čitateľná
-- documentNumber = číslo dodacieho listu
-- documentDate = dátum dokumentu
-
-PRAVIDLÁ PRE FAKTÚRU:
-
-- supplier = firma uvedená v hlavičke faktúry, ktorá faktúru vystavila
-- customer = odberateľ alebo zákazník uvedený vo fakturačných údajoch
-- documentNumber = číslo faktúry
-- documentDate = dátum vystavenia
-
-MATERIAL CATEGORY:
-
-materialCategory musí byť presne jedna z hodnôt:
-- piesok
-- kamenivo
-- asfalt
-- stavebný odpad
-- zemina
-- betón
-- iné
-
-Príklady:
-- Sand, Füllsand, Písek, Piesok -> piesok
-- Splitt, Kies, Schotter, Kamenivo, Štrk -> kamenivo
-- Asphalt, AC8, AC 8, AC32, AC 32, Asphaltaufbruch -> asfalt
-- Bauschutt, Recyclingmaterial, Stavebný odpad -> stavebný odpad
-- Erde, Boden, Aushub, Zemina -> zemina
-- Beton, Concrete, Betón -> betón
-
-V materialOriginal vždy zachovaj pôvodné presné označenie z dokumentu.
-
-JAZYK DOKUMENTU:
-
-documentLanguage musí byť presne jedna z hodnôt:
-- sk
-- cs
-- de
-- en
-- iné
-PRAVIDLÁ PRE ŠPZ:
-
-spz = evidenčné číslo vozidla uvedené na dokumente.
-
-ŠPZ hľadaj dôkladne v celom dokumente, najmä pri označeniach:
-- Kennzeichen
-- Kfz-Kennzeichen
-- KFZ
-- Fahrzeug
-- LKW
-- amtliches Kennzeichen
-- SPZ
-- EČV
-- registračné číslo
-- vehicle registration
-
-ŠPZ môže obsahovať písmená, čísla, medzery alebo pomlčky.
-
-Pri čítaní ŠPZ:
-- odstráň medzery a pomlčky,
-- všetky písmená vráť veľkými písmenami,
-- zachovaj poradie znakov,
-- výsledok vráť napríklad ako AW711 alebo CA123AB.
-
-Dávaj pozor na zámenu podobných znakov:
-- O a 0
-- I a 1
-- B a 8
-- S a 5
-- Z a 2
-- G a 6
-
-Pri rozhodovaní použi kontext formátu registračnej značky, ale znaky nevymýšľaj.
-
-Ak nie je možné všetky znaky ŠPZ jednoznačne prečítať:
-- nevymýšľaj ani nedopĺňaj žiadny znak,
-- spz nechaj ako prázdny string,
-- reviewStatus nastav na "needs_review",
-- confidenceScore zníž.
-
-spz nechaj prázdne iba vtedy, ak na dokumente nie je možné spoľahlivo rozpoznať žiadnu registračnú značku.
-
-Nezamieňaj ŠPZ s:
-- číslom dokladu,
-- zákazníckym číslom,
-- číslom objednávky,
-- číslom váženia,
-- identifikačným číslom vozidla VIN.
-SMER POHYBU:
-
-movementType musí byť presne:
-- "dovoz" pri materiáli privážanom na stavbu
-- "vývoz" pri materiáli alebo odpade odvážanom zo stavby
-- "" ak sa smer nedá spoľahlivo určiť
-
-MovementType nikdy nepoužívaj na určenie alebo prehadzovanie supplier a customer.
-
-REVIEW STATUS:
-
-reviewStatus musí byť presne jedna z hodnôt:
-- confirmed
-- needs_review
-- pending
-
-Nastav "needs_review", ak je neistý aspoň jeden z údajov:
-- spz
-- supplier
-- customer, ak by mal byť na dokumente uvedený
-- movementType
-- material alebo materialCategory
-- brutto, tara alebo netto
-- documentDate
-
-Nastav "confirmed" iba vtedy, ak sú hlavné údaje jasne čitateľné a navzájom logicky súhlasia.
-
-KONTROLA HMOTNOSTÍ:
-
-Ak sú uvedené brutto, tara a netto, skontroluj:
-netto = brutto - tara
-
-Ak výpočet nesedí s primeranou toleranciou zaokrúhlenia:
-- zachovaj hodnoty presne podľa dokumentu,
-- reviewStatus nastav na "needs_review",
-- confidenceScore zníž.
-
-Ak je netto uvedené priamo na dokumente, uprednostni vytlačenú hodnotu pred vlastným výpočtom, ale nesúlad označ cez needs_review.
-
-VŠEOBECNÉ PRAVIDLÁ:
-
-- Dátum vždy vráť vo formáte YYYY-MM-DD.
-- Čas vráť vo formáte HH:MM, ak je čitateľný.
-- Čísla vracaj bez jednotiek.
-- Ak je pri brutto, tara, netto alebo quantity jasne uvedená jednotka, vždy ju vráť v samostatnom poli unit.
-- unit normalizuj na "kg" alebo "t". Ak jednotka nie je čitateľná alebo uvedená, nechaj unit prázdne a nevymýšľaj ju.
-- Pri desatinných číslach použi bodku, napríklad 6.66.
-- Hmotnosti neprepočítavaj medzi kg a tonami, ak jednotka nie je jednoznačná.
-- Ak údaj nenájdeš, vráť prázdny string.
-- Nevymýšľaj chýbajúce údaje.
-- rawText má obsahovať čo najvernejší prepis dôležitého textu dokumentu.
-
-Pred vrátením výsledku vykonaj záverečnú kontrolu:
-1. supplier zodpovedá firme v hlavičke dokumentu,
-2. customer zodpovedá výslovne označenému zákazníkovi,
-3. supplier a customer neboli prehodené podľa dovozu alebo vývozu,
-4. brutto, tara a netto sú logicky skontrolované,
-5. neisté údaje sú prázdne a reviewStatus je needs_review.
-
-Vráť iba čistý JSON v presne tejto štruktúre:
-
-{
-  "documentType": "",
-  "movementType": "",
-  "spz": "",
-  "supplier": "",
-  "customer": "",
-  "constructionSite": "",
-  "documentNumber": "",
-  "material": "",
-  "materialOriginal": "",
-  "materialCategory": "",
-  "documentLanguage": "",
-  "confidenceScore": "",
-  "sourceLocation": "",
-  "destinationLocation": "",
-  "reviewStatus": "",
-  "quantity": "",
-  "unit": "",
-  "brutto": "",
-  "tara": "",
-  "netto": "",
-  "documentDate": "",
-  "documentTime": "",
-  "rawText": ""
-}
-`
-              
-            },
-            {
-              type: "input_image",
-              image_url: `data:${file.type};base64,${base64Image}`,
-  detail: "high",
-},
+            { type: "input_text", text: AI_EVIDENCE_PROMPT },
+            { type: "input_image", image_url: imageUrl, detail: "high" },
           ],
         },
       ],
     });
 
-  const text = response.output_text;
-const cleaned = text.replace(/```json/g, "").replace(/```/g, "").trim();
-const vehicleData = JSON.parse(cleaned);
-vehicleData.spz = normalizeSpz(vehicleData.spz);
-vehicleData.unit = normalizeWeightUnit(vehicleData.unit);
-if (!vehicleData.spz) {
-  const spzResponse = await client.responses.create({
-    model: "gpt-4.1",
-    input: [
-      {
-        role: "user",
-        content: [
-          {
-            type: "input_text",
-            text: `
-Najprv dokument mentálne otoč do správnej orientácie, aby bol text vodorovne čitateľný.
+    if (!response.output_text) {
+      throw new Error("AI nevrátila žiadne štruktúrované údaje.");
+    }
 
-Nájdi iba evidenčné číslo vozidla.
+    const mainData = parseStructuredOutput(response.output_text);
+    const mainSpzRaw = nullableText(mainData.spz);
+    const mainSpzNormalized = normalizeSpz(mainSpzRaw);
+    const vehicleData = normalizeAiEvidenceData(mainData);
+    vehicleData.spz = mainSpzNormalized;
 
-Na tomto type dokumentu ho hľadaj prednostne v poli označenom:
-"Fahrzeug-Nr./Pol. Kennzeichen / Anlieferer"
+    let fallbackTriggered = false;
+    let fallbackSpzRaw: string | null = null;
+    let fallbackSpzNormalized: string | null = null;
+    let fallbackEvidenceText: string | null = null;
+    let fallbackConfidence: number | null = null;
+    let spzSource: SpzSource = mainSpzNormalized ? "main" : "none";
 
-Prečítaj hodnotu vytlačenú priamo pri tomto označení.
+    if (!mainSpzNormalized) {
+      fallbackTriggered = true;
+      vehicleData.reviewStatus = "needs_review";
 
-Nevytváraj ŠPZ z iných čísel na dokumente.
-Nezamieňaj ju s:
-- Lieferschein Nr.
-- Kunden Nr.
-- Baustelle Nr.
-- AVV-Nr.
-- telefónnym číslom
-- PSČ
-- dátumom
-- číslom dokladu
-
-Ak nevidíš celú ŠPZ jednoznačne, nič nehádaj.
-
-Vráť iba čistý JSON:
-{
-  "spz": "",
-  "evidenceText": "",
-  "confidence": 0
-}
-
-spz:
-- odstráň medzery a pomlčky,
-- použi veľké písmená.
-
-evidenceText:
-- prepíš presne text ŠPZ tak, ako ho vidíš na dokumente.
-
-confidence:
-- číslo od 0 do 1,
-- hodnotu nad 0.98 použi iba pri úplne jasnom prečítaní.
-
-
-Ak ŠPZ nie je možné prečítať, nechaj prázdny string.
-`,
+      const spzResponse = await client.responses.create({
+        model: "gpt-4.1",
+        store: false,
+        text: {
+          format: {
+            type: "json_schema",
+            name: "vehicle_registration_fallback",
+            strict: true,
+            schema: SPZ_FALLBACK_SCHEMA,
           },
+        },
+        input: [
           {
-            type: "input_image",
-            image_url: `data:${file.type};base64,${base64Image}`,
-            detail: "high",
+            role: "user",
+            content: [
+              {
+                type: "input_text",
+                text: `Nájdi iba celé evidenčné číslo vozidla, ktoré je priamo
+viazané na explicitný label registračnej značky.
+
+Hľadaj najmä tieto labely:
+- SK: SPZ, EČV, Evidenčné číslo
+- CZ: SPZ, RZ, Registrační značka
+- DE: Kennzeichen, Kfz-Kennzeichen, Pol. Kennzeichen, Fahrzeug-Kennzeichen
+- EN: License plate, Registration number, Vehicle registration
+
+Fahrzeug-Nr. nie je automaticky SPZ. Číslo dokumentu, číslo zákazníka,
+interné číslo vozidla ani VIN nie sú SPZ. Ak pri kandidátovi nie je explicitný
+label alebo je väzba label -> hodnota nejasná, vráť spz null.
+
+evidenceText musí obsahovať konkrétny label aj hodnotu presne tak, ako sú
+viditeľné na dokumente, napríklad "Kennzeichen: AA-714KI". Ak takýto dôkaz
+nemáš, vráť evidenceText null a spz null.
+
+confidence je číslo 0 až 1 vyjadrujúce istotu, že kandidát je registračná
+značka viazaná na explicitný label, nie iba istotu OCR čitateľnosti.`,
+              },
+              { type: "input_image", image_url: imageUrl, detail: "high" },
+            ],
           },
         ],
-      },
-    ],
-  });
+      });
 
-  try {
-    const spzCleaned = spzResponse.output_text
-      .replace(/```json/g, "")
-      .replace(/```/g, "")
-      .trim();
+      try {
+        const spzData = parseStructuredOutput(spzResponse.output_text);
+        fallbackSpzRaw = nullableText(spzData.spz);
+        fallbackSpzNormalized = normalizeSpz(fallbackSpzRaw);
+        fallbackEvidenceText = nullableText(spzData.evidenceText);
+        fallbackConfidence =
+          typeof spzData.confidence === "number" &&
+          Number.isFinite(spzData.confidence)
+            ? spzData.confidence
+            : null;
 
-    const spzData = JSON.parse(spzCleaned);
+        const hasEvidence = hasExplicitSpzEvidence(
+          fallbackEvidenceText,
+          fallbackSpzNormalized
+        );
+        const canAcceptFallback =
+          fallbackSpzNormalized !== null &&
+          fallbackConfidence !== null &&
+          fallbackConfidence >= SPZ_FALLBACK_CONFIDENCE_THRESHOLD &&
+          hasEvidence;
 
-    const normalizedFallbackSpz = normalizeSpz(spzData.spz);
-
-    if (normalizedFallbackSpz) {
-      vehicleData.spz = normalizedFallbackSpz;
-
-      vehicleData.reviewStatus = "needs_review";
+        if (canAcceptFallback) {
+          vehicleData.spz = fallbackSpzNormalized;
+          spzSource = "fallback";
+        } else {
+          vehicleData.spz = null;
+          spzSource = "none";
+        }
+      } catch (spzError) {
+        console.error("SPZ FALLBACK ERROR:", spzError);
+        vehicleData.spz = null;
+        spzSource = "none";
+      }
     }
-  } catch (spzError) {
-    console.error("SPZ FALLBACK ERROR:", spzError);
-  }
-}
-vehicleData.spz = normalizeSpz(vehicleData.spz);
-return Response.json({
-  success: true,
-  data: vehicleData,
-});
+
+    if (process.env.NODE_ENV !== "production") {
+      console.info("SPZ FALLBACK DEBUG", {
+        mainSpzRaw,
+        mainSpzNormalized,
+        fallbackTriggered,
+        fallbackSpzRaw,
+        fallbackSpzNormalized,
+        fallbackEvidenceText,
+        fallbackConfidence,
+        finalSpz: vehicleData.spz,
+        spzSource,
+      });
+    }
+
+    return Response.json({ success: true, data: vehicleData });
   } catch (error) {
     console.error("OPENAI ERROR:", error);
-
     return Response.json(
-      {
-        success: false,
-        error: "AI spracovanie zlyhalo.",
-      },
-      {
-        status: 500,
-      }
+      { success: false, error: "AI spracovanie zlyhalo." },
+      { status: 500 }
     );
   }
 }

@@ -1,6 +1,10 @@
 import type { Workbook, Worksheet } from "exceljs";
 import { normalizeSpz } from "@/lib/normalize-spz";
-import { normalizeWeightUnit } from "@/lib/normalize-weight-unit";
+import {
+  convertWeightToTons,
+  getEffectiveNetto,
+  parseWeightValue,
+} from "@/lib/weight-utils";
 
 export { normalizeWeightUnit } from "@/lib/normalize-weight-unit";
 
@@ -84,31 +88,7 @@ function normalizeText(value: string | null | undefined): string {
     .toLowerCase();
 }
 
-function toFiniteNumber(
-  value: number | string | null | undefined
-): number | null {
-  if (value === null || value === undefined) {
-    return null;
-  }
-
-  if (typeof value === "string") {
-    const normalizedValue = value.trim();
-    if (!normalizedValue) return null;
-
-    const parsed = Number(
-      normalizedValue.replace(/\s/g, "").replace(",", ".")
-    );
-    return Number.isFinite(parsed) ? parsed : null;
-  }
-
-  return Number.isFinite(value) ? value : null;
-}
-
-export function getEffectiveNetto(
-  record: AiEvidenceExcelRecord
-): number | null {
-  return toFiniteNumber(record.netto) ?? toFiniteNumber(record.quantity);
-}
+export { getEffectiveNetto } from "@/lib/weight-utils";
 
 export function normalizeMovementType(
   value: string | null | undefined
@@ -160,14 +140,6 @@ function getLocalDateFilePart(date: Date): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(
     date.getDate()
   )}`;
-}
-
-function convertWeightToTons(value: number, unit: string | null): number | null {
-  const normalizedUnit = normalizeWeightUnit(unit);
-
-  if (normalizedUnit === "kg") return value / 1000;
-  if (normalizedUnit === "t") return value;
-  return null;
 }
 
 function addToGroup(map: Map<string, number>, key: string, value: number) {
@@ -403,8 +375,8 @@ function addDocumentSheet(
       record.material,
       record.material_original,
       record.material_category,
-      toFiniteNumber(record.brutto),
-      toFiniteNumber(record.tara),
+      parseWeightValue(record.brutto),
+      parseWeightValue(record.tara),
       getEffectiveNetto(record),
       record.unit,
       record.movement_type,

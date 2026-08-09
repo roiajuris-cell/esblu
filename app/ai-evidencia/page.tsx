@@ -14,6 +14,12 @@ import {
 } from "@/lib/export-ai-evidence-excel";
 import { normalizeSpz } from "@/lib/normalize-spz";
 import { normalizeWeightUnit } from "@/lib/normalize-weight-unit";
+import {
+  convertWeightToTons,
+  getEffectiveNetto,
+  normalizeAndValidateWeights,
+  parseWeightValue,
+} from "@/lib/weight-utils";
 
 const WITHOUT_SPZ_GROUP = "BEZ ŠPZ";
 
@@ -39,6 +45,64 @@ function formatRecordWeight(
   return unit ? `${value} ${unit}` : `${value} bez jednotky`;
 }
 
+type EvidenceSummary = {
+  totalImport: number;
+  totalExport: number;
+  importCount: number;
+  exportCount: number;
+  importByMaterial: Record<string, number>;
+  exportByMaterial: Record<string, number>;
+};
+
+function createEmptySummary(): EvidenceSummary {
+  return {
+    totalImport: 0,
+    totalExport: 0,
+    importCount: 0,
+    exportCount: 0,
+    importByMaterial: {},
+    exportByMaterial: {},
+  };
+}
+
+function addRecordToSummary(
+  summary: EvidenceSummary,
+  record: AiEvidenceExcelRecord
+) {
+  const movementType = (record.movement_type || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+  const category =
+    record.material_category ||
+    record.material_original ||
+    record.material ||
+    "iné";
+  const weightInTons = convertWeightToTons(
+    getEffectiveNetto(record),
+    record.unit
+  );
+
+  if (movementType === "dovoz") {
+    summary.importCount += 1;
+    if (weightInTons !== null) {
+      summary.totalImport += weightInTons;
+      summary.importByMaterial[category] =
+        (summary.importByMaterial[category] || 0) + weightInTons;
+    }
+  }
+
+  if (movementType === "vyvoz") {
+    summary.exportCount += 1;
+    if (weightInTons !== null) {
+      summary.totalExport += weightInTons;
+      summary.exportByMaterial[category] =
+        (summary.exportByMaterial[category] || 0) + weightInTons;
+    }
+  }
+}
+
 function Info({ title, value }: { title: string; value: any }) {
   return (
     <div className="rounded-2xl bg-slate-100 p-4">
@@ -47,38 +111,117 @@ function Info({ title, value }: { title: string; value: any }) {
     </div>
   );
 }
-async function compressImage(file: File): Promise<File> {
+type DecodedImage = {
+  source: CanvasImageSource;
+  width: number;
+  height: number;
+  release: () => void;
+};
+
+function normalizeRotation(value: number): number {
+  return ((value % 360) + 360) % 360;
+}
+
+async function decodeImageWithOrientation(file: File): Promise<DecodedImage> {
+  if (typeof createImageBitmap === "function") {
+    try {
+      const bitmap = await createImageBitmap(file, {
+        imageOrientation: "from-image",
+      });
+
+      return {
+        source: bitmap,
+        width: bitmap.width,
+        height: bitmap.height,
+        release: () => bitmap.close(),
+      };
+    } catch {
+      // Staršie prehliadače môžu createImageBitmap alebo jeho options odmietnuť.
+    }
+  }
+
   const imageUrl = URL.createObjectURL(file);
 
   try {
     const image = await new Promise<HTMLImageElement>((resolve, reject) => {
       const img = new Image();
-
       img.onload = () => resolve(img);
       img.onerror = () => reject(new Error("Obrázok sa nepodarilo načítať."));
       img.src = imageUrl;
     });
 
+    return {
+      source: image,
+      width: image.naturalWidth,
+      height: image.naturalHeight,
+      release: () => URL.revokeObjectURL(imageUrl),
+    };
+  } catch (error) {
+    URL.revokeObjectURL(imageUrl);
+    throw error;
+  }
+}
+
+async function compressImage(file: File, rotation: number): Promise<File> {
+  const decodedImage = await decodeImageWithOrientation(file);
+
+  try {
+    const normalizedRotation = normalizeRotation(rotation);
+    const swapsDimensions =
+      normalizedRotation === 90 || normalizedRotation === 270;
+    const rotatedWidth = swapsDimensions
+      ? decodedImage.height
+      : decodedImage.width;
+    const rotatedHeight = swapsDimensions
+      ? decodedImage.width
+      : decodedImage.height;
     const maxDimension = 1800;
     const scale = Math.min(
       1,
-      maxDimension / Math.max(image.width, image.height)
+      maxDimension / Math.max(rotatedWidth, rotatedHeight)
     );
-
-    const width = Math.round(image.width * scale);
-    const height = Math.round(image.height * scale);
+    const scaledSourceWidth = Math.max(
+      1,
+      Math.round(decodedImage.width * scale)
+    );
+    const scaledSourceHeight = Math.max(
+      1,
+      Math.round(decodedImage.height * scale)
+    );
+    const outputWidth = swapsDimensions
+      ? scaledSourceHeight
+      : scaledSourceWidth;
+    const outputHeight = swapsDimensions
+      ? scaledSourceWidth
+      : scaledSourceHeight;
 
     const canvas = document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = height;
+    canvas.width = outputWidth;
+    canvas.height = outputHeight;
 
     const context = canvas.getContext("2d");
-
     if (!context) {
       throw new Error("Nepodarilo sa pripraviť kompresiu obrázka.");
     }
 
-    context.drawImage(image, 0, 0, width, height);
+    if (normalizedRotation === 90) {
+      context.translate(outputWidth, 0);
+      context.rotate(Math.PI / 2);
+    } else if (normalizedRotation === 180) {
+      context.translate(outputWidth, outputHeight);
+      context.rotate(Math.PI);
+    } else if (normalizedRotation === 270) {
+      context.translate(0, outputHeight);
+      context.rotate(-Math.PI / 2);
+    }
+
+    context.drawImage(
+      decodedImage.source,
+      0,
+      0,
+      scaledSourceWidth,
+      scaledSourceHeight
+    );
 
     const blob = await new Promise<Blob>((resolve, reject) => {
       canvas.toBlob(
@@ -94,20 +237,35 @@ async function compressImage(file: File): Promise<File> {
       );
     });
 
+    if (process.env.NODE_ENV !== "production") {
+      console.info("AI EVIDENCE IMAGE DEBUG", {
+        originalWidth: decodedImage.width,
+        originalHeight: decodedImage.height,
+        outputWidth,
+        outputHeight,
+        rotation: normalizedRotation,
+        outputMimeType: blob.type,
+        outputSize: blob.size,
+      });
+    }
+
     const originalName =
       file.name.replace(/\.[^/.]+$/, "") || "dokument";
 
     return new File([blob], `${originalName}.webp`, {
-      type: "image/webp",
+      type: blob.type || "image/webp",
       lastModified: Date.now(),
     });
   } finally {
-    URL.revokeObjectURL(imageUrl);
+    decodedImage.release();
   }
 }
 export default function AiEvidenciaPage() {
   const [fileName, setFileName] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [pendingImageFile, setPendingImageFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [rotation, setRotation] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [result, setResult] = useState<any>(null);
@@ -123,6 +281,7 @@ export default function AiEvidenciaPage() {
     text: string;
   } | null>(null);
   const saveInProgressRef = useRef(false);
+  const previewObjectUrlRef = useRef<string | null>(null);
   const {
     usage: planUsage,
     limit: planLimit,
@@ -151,93 +310,49 @@ const visibleDocuments = records.filter((record) => {
   const recordSpz = getSpzGroupKey(record.spz);
   return recordSpz === getSpzGroupKey(selectedSpz);
 });
-const summary = records.reduce(
-  (acc: any, record: any) => {
-    const movementType = (record.movement_type || "")
-      .toLowerCase()
-      .trim();
-
-    const weight =
-      Number(record.netto) ||
-      Number(record.quantity) ||
-      0;
-
-    const category =
-      record.material_category ||
-      record.material_original ||
-      record.material ||
-      "iné";
-
-    if (movementType === "dovoz") {
-      acc.totalImport += weight;
-      acc.importCount += 1;
-      acc.importByMaterial[category] =
-        (acc.importByMaterial[category] || 0) + weight;
-    }
-  
-    if (movementType === "vývoz" || movementType === "vyvoz") {
-      acc.totalExport += weight;
-      acc.exportCount += 1;
-      acc.exportByMaterial[category] =
-        (acc.exportByMaterial[category] || 0) + weight;
-    }
-
-    return acc;
-  },
-  {
-    totalImport: 0,
-    totalExport: 0,
-    importCount: 0,
-    exportCount: 0,
-    importByMaterial: {},
-    exportByMaterial: {},
-  }
-);
-const summaryBySpz = records.reduce((groups: any, record: any) => {
+const summary = records.reduce((accumulator, record) => {
+  addRecordToSummary(accumulator, record);
+  return accumulator;
+}, createEmptySummary());
+const summaryBySpz = records.reduce<Record<string, EvidenceSummary>>((groups, record) => {
   const spz = getSpzGroupKey(record.spz);
 
-  const movementType = (record.movement_type || "")
-    .toLowerCase()
-    .trim();
-
-  const weight =
-    Number(record.netto) ||
-    Number(record.quantity) ||
-    0;
-
-  const category =
-    record.material_category ||
-    record.material_original ||
-    record.material ||
-    "iné";
-
   if (!groups[spz]) {
-    groups[spz] = {
-      totalImport: 0,
-      totalExport: 0,
-      importCount: 0,
-      exportCount: 0,
-      importByMaterial: {},
-      exportByMaterial: {},
-    };
+    groups[spz] = createEmptySummary();
   }
 
-  if (movementType === "dovoz") {
-    groups[spz].totalImport += weight;
-    groups[spz].importCount += 1;
-    groups[spz].importByMaterial[category] =
-      (groups[spz].importByMaterial[category] || 0) + weight;
-  }
-
-  if (movementType === "vývoz" || movementType === "vyvoz") {
-    groups[spz].totalExport += weight;
-    groups[spz].exportCount += 1;
-    groups[spz].exportByMaterial[category] =
-      (groups[spz].exportByMaterial[category] || 0) + weight;
-  }
+  addRecordToSummary(groups[spz], record);
 
   return groups;
 }, {});
+
+  function revokePreviewObjectUrl() {
+    if (previewObjectUrlRef.current) {
+      URL.revokeObjectURL(previewObjectUrlRef.current);
+      previewObjectUrlRef.current = null;
+    }
+  }
+
+  function prepareImagePreview(file: File) {
+    revokePreviewObjectUrl();
+    const objectUrl = URL.createObjectURL(file);
+    previewObjectUrlRef.current = objectUrl;
+    setPreviewUrl(objectUrl);
+    setPendingImageFile(file);
+    setRotation(0);
+  }
+
+  function clearImagePreview(clearFileName = true) {
+    revokePreviewObjectUrl();
+    setPreviewUrl(null);
+    setPendingImageFile(null);
+    setRotation(0);
+
+    if (clearFileName) {
+      setFileName("");
+    }
+  }
+
   async function handleExportExcel() {
     if (exportLoading) return;
 
@@ -274,7 +389,7 @@ const summaryBySpz = records.reduce((groups: any, record: any) => {
       setExportLoading(false);
     }
   }
-  async function handleFile(event: React.ChangeEvent<HTMLInputElement>) {
+  function handleFile(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = "";
 
@@ -290,25 +405,31 @@ const summaryBySpz = records.reduce((groups: any, record: any) => {
     }
 
     setFileName(file.name);
-setResult(null);
-setSelectedFile(null);
-setError("");
-setIsProcessing(true);
+    setResult(null);
+    setSelectedFile(null);
+    setError("");
+    prepareImagePreview(file);
+  }
 
-try {
-  const compressedFile = await compressImage(file);
+  async function processPendingDocument() {
+    if (!pendingImageFile || isProcessing) return;
 
-  setSelectedFile(compressedFile);
+    if (planUsageLoading || isCreationBlocked) {
+      setError(
+        planUsageLoading
+          ? "Overujem dostupnosť limitu. Skús to znova o chvíľu."
+          : PLAN_LIMIT_MESSAGE
+      );
+      return;
+    }
 
-  console.log("Pôvodná veľkosť:", file.size, "bytes");
-  console.log(
-    "Komprimovaná veľkosť:",
-    compressedFile.size,
-    "bytes"
-  );
+    setError("");
+    setIsProcessing(true);
 
-  const formData = new FormData();
-  formData.append("file", compressedFile);
+    try {
+      const compressedFile = await compressImage(pendingImageFile, rotation);
+      const formData = new FormData();
+      formData.append("file", compressedFile);
 
       const response = await fetch("/api/scan-vehicle-doc", {
         method: "POST",
@@ -322,19 +443,33 @@ try {
       }
 
       const scannedResult = data.data;
+      const resolvedMovementType = resolveMovementType(scannedResult);
 
-const resolvedMovementType = resolveMovementType(scannedResult);
-
-setResult({
-  ...scannedResult,
-  spz: normalizeSpz(scannedResult.spz),
-  movementType: resolvedMovementType || "",
-});
-    } catch (err: any) {
-      setError(err.message || "Nastala neznáma chyba.");
+      setSelectedFile(compressedFile);
+      setResult({
+        ...scannedResult,
+        spz: normalizeSpz(scannedResult.spz),
+        movementType: resolvedMovementType || "",
+      });
+      clearImagePreview(false);
+    } catch (processingError: unknown) {
+      setError(
+        processingError instanceof Error
+          ? processingError.message
+          : "Nastala neznáma chyba."
+      );
     } finally {
       setIsProcessing(false);
     }
+  }
+
+  function cancelPendingDocument() {
+    if (isProcessing) return;
+
+    clearImagePreview();
+    setSelectedFile(null);
+    setResult(null);
+    setError("");
   }
 
   function updateResult(field: string, value: string) {
@@ -344,10 +479,6 @@ setResult({
     }));
   }
 
-  function toNumber(value: any) {
-    if (value === "" || value === null || value === undefined) return null;
-    return Number(String(value).replace(",", "."));
-  }
 function normalizeText(value?: string | null) {
   return (value ?? "")
     .normalize("NFD")
@@ -422,6 +553,27 @@ function resolveMovementType(result: any): string | null {
     let recordInserted = false;
 
     try {
+      const validatedWeights = normalizeAndValidateWeights({
+        quantity: result.quantity,
+        brutto: result.brutto,
+        tara: result.tara,
+        netto: result.netto,
+        unit: result.unit,
+      });
+
+      if (validatedWeights.invalidFields.length > 0) {
+        throw new Error(
+          `Skontrolujte číselný formát polí: ${validatedWeights.invalidFields.join(
+            ", "
+          )}. Nejednoznačné alebo neplatné hmotnosti sa nedajú uložiť.`
+        );
+      }
+
+      const confidenceScore = parseWeightValue(result.confidenceScore);
+      if (confidenceScore !== null && confidenceScore > 1) {
+        throw new Error("Miera istoty musí byť číslo od 0 do 1.");
+      }
+
       const latestUsage = await refreshPlanUsage();
 
       if (latestUsage?.isLimited) {
@@ -483,6 +635,9 @@ if (selectedFile) {
   uploadedPhotoPath = photoPath;
 }
 const resolvedMovementType = resolveMovementType(result);
+      const reviewStatus = validatedWeights.needsReview
+        ? "needs_review"
+        : result.reviewStatus || "pending";
       const { error } = await supabase.from("ai_evidence").insert({
         user_id: session.user.id,
         vehicle_id: vehicleId,
@@ -495,15 +650,15 @@ const resolvedMovementType = resolveMovementType(result);
         material_original: result.materialOriginal || null,
 material_category: result.materialCategory || null,
 document_language: result.documentLanguage || null,
-confidence_score: toNumber(result.confidenceScore),
+confidence_score: confidenceScore,
 source_location: result.sourceLocation || null,
 destination_location: result.destinationLocation || null,
-review_status: result.reviewStatus || "pending",
-        quantity: toNumber(result.quantity),
-        unit: normalizeWeightUnit(result.unit),
-        brutto: toNumber(result.brutto),
-        tara: toNumber(result.tara),
-        netto: toNumber(result.netto),
+review_status: reviewStatus,
+        quantity: validatedWeights.quantity,
+        unit: validatedWeights.unit,
+        brutto: validatedWeights.brutto,
+        tara: validatedWeights.tara,
+        netto: validatedWeights.netto,
         construction_site: result.constructionSite || null,
         customer: result.customer || null,
         document_date: result.documentDate || null,
@@ -646,6 +801,25 @@ useEffect(() => {
   loadRecords();
 }, []);
 
+useEffect(() => {
+  return () => {
+    if (previewObjectUrlRef.current) {
+      URL.revokeObjectURL(previewObjectUrlRef.current);
+      previewObjectUrlRef.current = null;
+    }
+  };
+}, []);
+
+const currentWeightValidation = result
+  ? normalizeAndValidateWeights({
+      quantity: result.quantity,
+      brutto: result.brutto,
+      tara: result.tara,
+      netto: result.netto,
+      unit: result.unit,
+    })
+  : null;
+
   return (
     <main
   className="min-h-screen bg-cover bg-center bg-fixed p-4 sm:p-6 lg:p-10"
@@ -721,6 +895,77 @@ useEffect(() => {
   </div>
 </div>
 
+        {previewUrl && pendingImageFile && (
+          <section className="mt-8 rounded-3xl bg-slate-50 p-5 sm:p-6">
+            <div className="text-center">
+              <h2 className="text-xl font-black text-slate-950">
+                Skontrolujte orientáciu dokumentu
+              </h2>
+              <p className="mt-2 text-sm text-slate-600">
+                Pred AI spracovaním otočte dokument tak, aby bol text čitateľný.
+              </p>
+              <p className="mt-2 text-sm font-bold text-blue-700">
+                Rotácia: {rotation}°
+              </p>
+            </div>
+
+            <div className="mx-auto mt-5 flex aspect-square w-full max-w-xl items-center justify-center overflow-hidden rounded-2xl bg-slate-200 p-3">
+              <img
+                src={previewUrl}
+                alt="Náhľad dokumentu pred AI spracovaním"
+                className="max-h-full max-w-full object-contain transition-transform duration-200"
+                style={{ transform: `rotate(${rotation}deg)` }}
+              />
+            </div>
+
+            <div className="mt-5 grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() =>
+                  setRotation((current) => normalizeRotation(current - 90))
+                }
+                disabled={isProcessing}
+                className="rounded-2xl bg-white px-4 py-3 font-bold text-slate-800 shadow disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                ↺ Otočiť doľava
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  setRotation((current) => normalizeRotation(current + 90))
+                }
+                disabled={isProcessing}
+                className="rounded-2xl bg-white px-4 py-3 font-bold text-slate-800 shadow disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                ↻ Otočiť doprava
+              </button>
+            </div>
+
+            <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+              <button
+                type="button"
+                onClick={processPendingDocument}
+                disabled={
+                  isProcessing || planUsageLoading || isCreationBlocked
+                }
+                className="flex-1 rounded-2xl bg-blue-600 px-5 py-4 font-black text-white disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isProcessing
+                  ? "AI spracováva dokument..."
+                  : "Spracovať dokument"}
+              </button>
+              <button
+                type="button"
+                onClick={cancelPendingDocument}
+                disabled={isProcessing}
+                className="rounded-2xl bg-slate-200 px-5 py-4 font-bold text-slate-800 disabled:cursor-not-allowed disabled:opacity-60 sm:min-w-32"
+              >
+                Zrušiť
+              </button>
+            </div>
+          </section>
+        )}
+
         {fileName && (
           <div className="mt-8 rounded-2xl bg-slate-50 p-5">
             <p className="font-bold text-slate-900">Vybraný dokument:</p>
@@ -766,16 +1011,38 @@ useEffect(() => {
                   {label}
                 </label>
                 <input
-                  value={result[field] || ""}
+                  value={result[field] ?? ""}
                   onChange={(e) => updateResult(field, e.target.value)}
                   className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 outline-none"
                 />
               </div>
             ))}
 
+            {currentWeightValidation?.invalidFields.length ? (
+              <p className="rounded-xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+                Skontrolujte číselný formát polí: {" "}
+                {currentWeightValidation.invalidFields.join(", ")}.
+              </p>
+            ) : currentWeightValidation?.hasMathMismatch ? (
+              <p className="rounded-xl bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
+                Brutto, tara a netto si matematicky nezodpovedajú. Hodnoty sa
+                automaticky neopravili a záznam bude označený na kontrolu.
+              </p>
+            ) : currentWeightValidation?.isUnitMissing ? (
+              <p className="rounded-xl bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
+                Pri hmotnosti chýba rozpoznaná jednotka. Záznam bude označený
+                na kontrolu.
+              </p>
+            ) : null}
+
             <button
               onClick={saveEvidence}
-              disabled={isSaving || planUsageLoading || isPlanLimited}
+              disabled={
+                isSaving ||
+                planUsageLoading ||
+                isPlanLimited ||
+                Boolean(currentWeightValidation?.invalidFields.length)
+              }
               className="mt-4 w-full rounded-2xl bg-blue-600 px-5 py-4 text-lg font-black text-white disabled:opacity-60"
             >
               {isSaving ? "Ukladám..." : "💾 Uložiť do evidencie"}
