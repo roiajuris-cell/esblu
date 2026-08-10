@@ -86,7 +86,19 @@ export default function VehicleDetailPage() {
 
     setIsSaving(true);
 
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      setIsSaving(false);
+      alert("Na uloženie servisného záznamu musíte byť prihlásený.");
+      return;
+    }
+
     const payload = {
+      user_id: user.id,
       vehicle_id: vehicleId,
       service_date: service.service_date,
       mileage: service.mileage ? Number(service.mileage) : null,
