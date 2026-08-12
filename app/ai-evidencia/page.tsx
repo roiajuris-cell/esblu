@@ -427,12 +427,23 @@ const summaryBySpz = records.reduce<Record<string, EvidenceSummary>>((groups, re
     setIsProcessing(true);
 
     try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session) {
+        throw new Error("Na AI spracovanie musíš byť prihlásený.");
+      }
+
       const compressedFile = await compressImage(pendingImageFile, rotation);
       const formData = new FormData();
       formData.append("file", compressedFile);
 
       const response = await fetch("/api/scan-vehicle-doc", {
         method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
         body: formData,
       });
 

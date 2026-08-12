@@ -1,10 +1,22 @@
 import OpenAI from "openai";
+import { createClient } from "@supabase/supabase-js";
 import { normalizeSpz } from "@/lib/normalize-spz";
 import { normalizeAndValidateWeights } from "@/lib/weight-utils";
 
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY!,
 });
+
+const supabaseAuth = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+  {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  }
+);
 
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
 
@@ -302,6 +314,30 @@ function normalizeAiEvidenceData(data: Record<string, unknown>) {
 
 export async function POST(req: Request) {
   try {
+    const authorization = req.headers.get("authorization");
+    const accessToken = authorization?.startsWith("Bearer ")
+      ? authorization.slice("Bearer ".length).trim()
+      : "";
+
+    if (!accessToken) {
+      return Response.json(
+        { success: false, error: "Na AI spracovanie musíš byť prihlásený." },
+        { status: 401 }
+      );
+    }
+
+    const {
+      data: { user },
+      error: authError,
+    } = await supabaseAuth.auth.getUser(accessToken);
+
+    if (authError || !user) {
+      return Response.json(
+        { success: false, error: "Prihlásenie vypršalo. Prihlás sa znova." },
+        { status: 401 }
+      );
+    }
+
     const formData = await req.formData();
     const fileValue = formData.get("file");
 
