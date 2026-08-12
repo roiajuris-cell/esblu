@@ -7,7 +7,7 @@ export type PlanResource =
   | "machines";
 
 export const PLAN_RESOURCE_LABELS: Record<PlanResource, string> = {
-  ai_evidence: "AI evidencia",
+  ai_evidence: "AI Inbox",
   vehicles: "Vozidlá",
   inventory_items: "Sklad",
   machines: "Stroje",

@@ -188,7 +188,7 @@ export default function Dashboard() {
 
   const modules = [
   {
-    title: "AI Evidencia",
+    title: "AI Inbox",
     subtitle: "Inteligentné spracovanie dokumentov",
     href: "/ai-evidencia",
     image: "/images/ai-evidencia.png",
@@ -352,7 +352,7 @@ export default function Dashboard() {
   height={150}
   alt={module.title}
   className={
-    module.title === "AI Evidencia"
+    module.title === "AI Inbox"
       ? "h-32 w-40 scale-125 object-contain lg:w-44 lg:scale-110"
       : module.title === "Stroje"
       ? "h-32 w-40 scale-125 object-contain lg:w-44 lg:scale-110"

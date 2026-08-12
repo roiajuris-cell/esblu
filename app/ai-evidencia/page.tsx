@@ -22,6 +22,131 @@ import {
   parseWeightValue,
 } from "@/lib/weight-utils";
 
+type ScanDocumentType =
+  | "weigh_ticket"
+  | "delivery_note"
+  | "invoice"
+  | "receipt"
+  | "service_document"
+  | "other";
+
+const DOCUMENT_TYPE_LABELS: Record<ScanDocumentType, string> = {
+  weigh_ticket: "vážny lístok",
+  delivery_note: "dodací list",
+  invoice: "faktúra",
+  receipt: "bloček",
+  service_document: "servisný doklad",
+  other: "dokument na kontrolu",
+};
+
+// Polia pre typy, ktoré sa v tejto etape ešte neukladajú (documents tabuľka
+// ešte nie je napojená) — iba na zobrazenie/kontrolu, s SK popiskami podľa
+// zadania.
+const REVIEW_ONLY_FIELD_LABELS: Record<
+  Exclude<ScanDocumentType, "weigh_ticket" | "delivery_note">,
+  [string, string][]
+> = {
+  invoice: [
+    ["supplier", "Dodávateľ"],
+    ["customer", "Zákazník"],
+    ["invoiceNumber", "Číslo faktúry"],
+    ["issueDate", "Dátum vystavenia"],
+    ["dueDate", "Dátum splatnosti"],
+    ["totalAmount", "Suma"],
+    ["vatAmount", "DPH"],
+    ["currency", "Mena"],
+    ["variableSymbol", "Variabilný symbol"],
+    ["description", "Popis"],
+  ],
+  receipt: [
+    ["merchant", "Obchodník"],
+    ["purchaseDate", "Dátum"],
+    ["totalAmount", "Suma"],
+    ["currency", "Mena"],
+    ["paymentMethod", "Spôsob platby"],
+    ["category", "Kategória"],
+  ],
+  service_document: [
+    ["provider", "Poskytovateľ servisu"],
+    ["serviceDate", "Dátum servisu"],
+    ["vehicleOrMachineIdentifier", "Vozidlo / stroj"],
+    ["description", "Popis"],
+    ["cost", "Cena"],
+    ["currency", "Mena"],
+    ["nextServiceDate", "Ďalší servis"],
+  ],
+  other: [["summary", "Zhrnutie"]],
+};
+
+function describeScanError(status: number, data: any): string {
+  const serverMessage =
+    (data && typeof data.message === "string" && data.message) ||
+    (data &&
+      typeof data.error === "string" &&
+      data.error !== "AI_INCONSISTENT_OUTPUT" &&
+      data.error) ||
+    null;
+
+  if (serverMessage) return serverMessage;
+
+  switch (status) {
+    case 401:
+      return "Prihlásenie vypršalo. Prihlás sa znova.";
+    case 400:
+    case 415:
+      return "Nepodporovaný alebo neplatný súbor. Skús JPEG, PNG alebo WebP obrázok.";
+    case 413:
+      return "Obrázok je príliš veľký (max. 10 MB).";
+    case 422:
+      return "AI nevrátila jednoznačný výsledok. Skús sken dokumentu zopakovať.";
+    case 500:
+      return "AI spracovanie dokumentu zlyhalo. Skús to znova o chvíľu.";
+    default:
+      return "Nastala neznáma chyba pri spracovaní dokumentu.";
+  }
+}
+
+// Sploští weighTicketFields/deliveryNoteFields z nového /api/scan-document
+// do rovnakého plochého tvaru, aký doteraz vracal /api/scan-vehicle-doc.
+// Vďaka tomu saveEvidence() nižšie zostáva úplne nezmenená a naďalej
+// zapisuje do ai_evidence presne tak, ako predtým.
+function buildFlatWeighTicketResult(
+  documentType: "weigh_ticket" | "delivery_note",
+  fields: Record<string, any>,
+  common: {
+    rawText: string | null;
+    confidenceScore: number | null;
+    reviewStatus: string | null;
+    documentLanguage: string | null;
+  }
+) {
+  return {
+    documentType: DOCUMENT_TYPE_LABELS[documentType],
+    movementType: fields.movementType ?? null,
+    spz: fields.spz ?? null,
+    supplier: fields.supplier ?? null,
+    customer: fields.customer ?? null,
+    constructionSite: fields.constructionSite ?? null,
+    documentNumber: fields.documentNumber ?? null,
+    material: fields.material ?? null,
+    materialOriginal: fields.materialOriginal ?? null,
+    materialCategory: fields.materialCategory ?? null,
+    documentLanguage: common.documentLanguage,
+    confidenceScore: common.confidenceScore,
+    sourceLocation: fields.sourceLocation ?? null,
+    destinationLocation: fields.destinationLocation ?? null,
+    reviewStatus: common.reviewStatus === "needs_review" ? "needs_review" : "confirmed",
+    quantity: fields.quantity ?? null,
+    unit: fields.unit ?? null,
+    brutto: fields.brutto ?? null,
+    tara: fields.tara ?? null,
+    netto: fields.netto ?? null,
+    documentDate: fields.documentDate ?? null,
+    documentTime: fields.documentTime ?? null,
+    rawText: common.rawText,
+  };
+}
+
 const WITHOUT_SPZ_GROUP = "BEZ ŠPZ";
 
 function getSpzGroupKey(value: unknown): string {
@@ -281,6 +406,16 @@ export default function AiEvidenciaPage() {
     type: "success" | "error";
     text: string;
   } | null>(null);
+  const [scanDocumentType, setScanDocumentType] =
+    useState<ScanDocumentType | null>(null);
+  const [otherResult, setOtherResult] = useState<Record<string, any> | null>(
+    null
+  );
+  const [assignmentTarget, setAssignmentTarget] = useState<
+    "vehicle" | "machine" | "none" | null
+  >(null);
+  const [assignmentVehicleSpz, setAssignmentVehicleSpz] = useState("");
+  const [assignmentMachineLabel, setAssignmentMachineLabel] = useState("");
   const saveInProgressRef = useRef(false);
   const previewObjectUrlRef = useRef<string | null>(null);
   const {
@@ -438,9 +573,9 @@ const summaryBySpz = records.reduce<Record<string, EvidenceSummary>>((groups, re
 
       const compressedFile = await compressImage(pendingImageFile, rotation);
       const formData = new FormData();
-      formData.append("file", compressedFile);
+      formData.append("image", compressedFile);
 
-      const response = await fetch("/api/scan-vehicle-doc", {
+      const response = await fetch("/api/scan-document", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${session.access_token}`,
@@ -451,18 +586,70 @@ const summaryBySpz = records.reduce<Record<string, EvidenceSummary>>((groups, re
       const data = await response.json();
 
       if (!response.ok || !data.success) {
-        throw new Error(data.error || "AI spracovanie zlyhalo.");
+        throw new Error(describeScanError(response.status, data));
       }
 
-      const scannedResult = data.data;
-      const resolvedMovementType = resolveMovementType(scannedResult);
+      const scanned = data.data;
+      const documentType = scanned.documentType as ScanDocumentType;
 
       setSelectedFile(compressedFile);
-      setResult({
-        ...scannedResult,
-        spz: normalizeSpz(scannedResult.spz),
-        movementType: resolvedMovementType || "",
-      });
+      setScanDocumentType(documentType);
+      setAssignmentTarget(null);
+
+      let prefillSpz = "";
+      let prefillMachine = "";
+
+      if (documentType === "weigh_ticket" || documentType === "delivery_note") {
+        const fields =
+          (documentType === "weigh_ticket"
+            ? scanned.weighTicketFields
+            : scanned.deliveryNoteFields) ?? {};
+
+        const flatResult = buildFlatWeighTicketResult(documentType, fields, {
+          rawText: scanned.rawText,
+          confidenceScore: scanned.confidenceScore,
+          reviewStatus: scanned.reviewStatus,
+          documentLanguage: scanned.documentLanguage,
+        });
+        const resolvedMovementType = resolveMovementType(flatResult);
+        const normalizedSpz = normalizeSpz(flatResult.spz);
+
+        setOtherResult(null);
+        setResult({
+          ...flatResult,
+          spz: normalizedSpz,
+          movementType: resolvedMovementType || "",
+        });
+
+        prefillSpz = normalizedSpz || "";
+      } else {
+        const fieldsKey =
+          documentType === "invoice"
+            ? "invoiceFields"
+            : documentType === "receipt"
+            ? "receiptFields"
+            : documentType === "service_document"
+            ? "serviceDocumentFields"
+            : "otherFields";
+        const fields = scanned[fieldsKey] ?? {};
+
+        setResult(null);
+        setOtherResult({
+          ...fields,
+          reviewStatus: scanned.reviewStatus,
+          confidenceScore: scanned.confidenceScore,
+          rawText: scanned.rawText,
+        });
+
+        if (documentType === "service_document") {
+          const identifier = fields.vehicleOrMachineIdentifier || "";
+          prefillSpz = identifier;
+          prefillMachine = identifier;
+        }
+      }
+
+      setAssignmentVehicleSpz(prefillSpz);
+      setAssignmentMachineLabel(prefillMachine);
       clearImagePreview(false);
     } catch (processingError: unknown) {
       setError(
@@ -480,8 +667,17 @@ const summaryBySpz = records.reduce<Record<string, EvidenceSummary>>((groups, re
 
     clearImagePreview();
     setSelectedFile(null);
-    setResult(null);
+    resetScanReview();
     setError("");
+  }
+
+  function resetScanReview() {
+    setResult(null);
+    setOtherResult(null);
+    setScanDocumentType(null);
+    setAssignmentTarget(null);
+    setAssignmentVehicleSpz("");
+    setAssignmentMachineLabel("");
   }
 
   function updateResult(field: string, value: string) {
@@ -489,6 +685,10 @@ const summaryBySpz = records.reduce<Record<string, EvidenceSummary>>((groups, re
       ...prev,
       [field]: value,
     }));
+  }
+
+  function updateOtherResult(field: string, value: string) {
+    setOtherResult((prev) => (prev ? { ...prev, [field]: value } : prev));
   }
 
 function normalizeText(value?: string | null) {
@@ -682,11 +882,11 @@ review_status: reviewStatus,
       if (error) throw error;
 
       recordInserted = true;
-      setResult(null);
+      resetScanReview();
       setSelectedFile(null);
       setFileName("");
       await Promise.all([loadRecords(), refreshPlanUsage()]);
-      alert("Záznam bol uložený do AI evidencie.");
+      alert("Dokument bol uložený do AI Inboxu.");
     } catch (saveError: unknown) {
       if (uploadedPhotoPath && !recordInserted) {
         const { error: cleanupError } = await supabase.storage
@@ -843,11 +1043,11 @@ const currentWeightValidation = result
         <div className="flex items-center gap-4">
   <img
     src="/images/ai-evidencia.png"
-    alt="AI Evidencia"
+    alt="AI Inbox"
     className="h-16 w-16 object-contain"
   />
   <h1 className="text-4xl font-bold text-white drop-shadow-lg">
-    AI EVIDENCIA
+    AI INBOX
   </h1>
 </div>
 
@@ -1000,8 +1200,15 @@ const currentWeightValidation = result
         {result && (
           <div className="mt-8 space-y-4 rounded-3xl bg-slate-50 p-6">
             <h2 className="text-2xl font-black text-slate-950">
-              Načítané údaje
+              Načítané údaje — {DOCUMENT_TYPE_LABELS[scanDocumentType ?? "weigh_ticket"]}
             </h2>
+
+            {result.reviewStatus === "needs_review" && (
+              <p className="rounded-xl bg-amber-100 px-4 py-3 text-sm font-bold text-amber-900">
+                ⚠️ AI si nie je istá niektorými údajmi. Pred uložením ich
+                skontroluj.
+              </p>
+            )}
 
             {[
               ["documentType", "Typ dokumentu"],
@@ -1063,6 +1270,130 @@ const currentWeightValidation = result
             </button>
           </div>
           )}
+
+        {otherResult && scanDocumentType && (
+          <div className="mt-8 space-y-4 rounded-3xl bg-slate-50 p-6">
+            <h2 className="text-2xl font-black text-slate-950">
+              Načítané údaje — {DOCUMENT_TYPE_LABELS[scanDocumentType]}
+            </h2>
+
+            {otherResult.reviewStatus === "needs_review" && (
+              <p className="rounded-xl bg-amber-100 px-4 py-3 text-sm font-bold text-amber-900">
+                ⚠️ Tento dokument potrebuje kontrolu — AI si nie je istá
+                niektorými údajmi.
+              </p>
+            )}
+
+            {scanDocumentType !== "weigh_ticket" &&
+              scanDocumentType !== "delivery_note" &&
+              REVIEW_ONLY_FIELD_LABELS[scanDocumentType].map(
+                ([field, label]) => (
+                  <div key={field}>
+                    <label className="text-sm font-bold text-slate-600">
+                      {label}
+                    </label>
+                    <input
+                      value={otherResult[field] ?? ""}
+                      onChange={(e) => updateOtherResult(field, e.target.value)}
+                      className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 outline-none"
+                    />
+                  </div>
+                )
+              )}
+
+            <p className="rounded-xl bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-800">
+              Ukladanie tohto typu dokumentu bude dostupné v nasledujúcej
+              aktualizácii AI Inboxu. Zatiaľ si údaje môžeš iba skontrolovať.
+            </p>
+
+            <button
+              type="button"
+              onClick={cancelPendingDocument}
+              className="mt-2 w-full rounded-2xl bg-slate-200 px-5 py-4 font-bold text-slate-800"
+            >
+              Nahrať iný dokument
+            </button>
+          </div>
+        )}
+
+        {(result || otherResult) && (
+          <div className="mt-8 space-y-4 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h2 className="text-xl font-black text-slate-950">
+              Chcete dokument priradiť?
+            </h2>
+
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={() => setAssignmentTarget("vehicle")}
+                className={`rounded-2xl px-3 py-4 text-sm font-bold ${
+                  assignmentTarget === "vehicle"
+                    ? "bg-blue-600 text-white"
+                    : "bg-slate-100 text-slate-700"
+                }`}
+              >
+                🚛 Vozidlo
+              </button>
+              <button
+                type="button"
+                onClick={() => setAssignmentTarget("machine")}
+                className={`rounded-2xl px-3 py-4 text-sm font-bold ${
+                  assignmentTarget === "machine"
+                    ? "bg-blue-600 text-white"
+                    : "bg-slate-100 text-slate-700"
+                }`}
+              >
+                🚜 Stroj
+              </button>
+              <button
+                type="button"
+                onClick={() => setAssignmentTarget("none")}
+                className={`rounded-2xl px-3 py-4 text-sm font-bold ${
+                  assignmentTarget === "none"
+                    ? "bg-blue-600 text-white"
+                    : "bg-slate-100 text-slate-700"
+                }`}
+              >
+                Bez priradenia
+              </button>
+            </div>
+
+            {assignmentTarget === "vehicle" && (
+              <div>
+                <label className="text-sm font-bold text-slate-600">
+                  ŠPZ vozidla
+                </label>
+                <input
+                  value={assignmentVehicleSpz}
+                  onChange={(e) => setAssignmentVehicleSpz(e.target.value)}
+                  placeholder="napr. BA123AB"
+                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 outline-none"
+                />
+              </div>
+            )}
+
+            {assignmentTarget === "machine" && (
+              <div>
+                <label className="text-sm font-bold text-slate-600">
+                  Názov alebo označenie stroja
+                </label>
+                <input
+                  value={assignmentMachineLabel}
+                  onChange={(e) => setAssignmentMachineLabel(e.target.value)}
+                  placeholder="napr. Bager JCB 3CX"
+                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 outline-none"
+                />
+              </div>
+            )}
+
+            <p className="text-xs text-slate-500">
+              Priradenie sa zatiaľ iba pripravuje — v tejto verzii sa ešte
+              neukladá. Plné prepojenie s vozidlami a strojmi pribudne v
+              nasledujúcej aktualizácii.
+            </p>
+          </div>
+        )}
+
          {records.length > 0 && (
   <div className="mt-10">
     <h2 className="mb-4 text-2xl font-bold text-white drop-shadow-lg">
