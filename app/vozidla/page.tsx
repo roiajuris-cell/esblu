@@ -10,6 +10,7 @@ import {
 } from "@/lib/plan-limits";
 import { normalizeSpz } from "@/lib/normalize-spz";
 import VehicleCard from "../components/VehicleCard";
+import BackLink from "../components/BackLink";
 
 type RegistrationSide = "front" | "back";
 
@@ -539,6 +540,8 @@ export default function VozidlaPage() {
   className="min-h-screen bg-cover bg-center bg-fixed p-4 sm:p-6 lg:p-10"
   style={{ backgroundImage: "url('/images/background-dark.png')" }}
 >
+      <BackLink href="/" label="Hlavné menu" className="mb-4" />
+
       <div className="flex items-center gap-4">
   <img
     src="/images/van.png"

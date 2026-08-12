@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import BackLink from "@/app/components/BackLink";
 
 export default function VehicleDetailPage() {
   const { id } = useParams();
@@ -152,6 +153,8 @@ export default function VehicleDetailPage() {
 
   return (
     <main className="min-h-screen bg-slate-100 p-10">
+      <BackLink href="/vozidla" label="Vozidlá" className="mb-4" />
+
       <h1 className="text-4xl font-bold">
         {vehicle.znacka} {vehicle.model}
       </h1>

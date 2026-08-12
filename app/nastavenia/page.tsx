@@ -3,6 +3,7 @@
 import { ChangeEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
+import BackLink from "@/app/components/BackLink";
 
 const feedbackSubject = "Spätná väzba k Esblu";
 const feedbackBody = `Dobrý deň,
@@ -411,6 +412,8 @@ export default function NastaveniaPage() {
           "url('/images/background-dark.png')",
       }}
     >
+      <BackLink href="/" label="Hlavné menu" className="mb-4" />
+
       <div className="flex items-center gap-4">
         <img
           src="/images/settings.png"

@@ -9,6 +9,7 @@ import {
   PLAN_LIMIT_MESSAGE,
   isPlanLimitReachedError,
 } from "@/lib/plan-limits";
+import BackLink from "@/app/components/BackLink";
 
 export default function StrojePage() {
   const [userId, setUserId] = useState("");
@@ -358,6 +359,8 @@ export default function StrojePage() {
   className="min-h-screen bg-cover bg-center bg-fixed p-4 sm:p-6 lg:p-10"
   style={{ backgroundImage: "url('/images/background-dark.png')" }}
 >
+      <BackLink href="/" label="Hlavné menu" className="mb-4" />
+
       <div className="flex items-center gap-4">
   <img
     src="/images/excavator.png"

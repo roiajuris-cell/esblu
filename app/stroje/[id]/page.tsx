@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import BackLink from "@/app/components/BackLink";
 
 type MachineService = {
   id: string;
@@ -534,6 +535,8 @@ export default function MachineDetailPage() {
 
   return (
     <main className="min-h-screen bg-slate-100 p-10">
+      <BackLink href="/stroje" label="Stroje" className="mb-4" />
+
       <h1 className="text-4xl font-bold">🚜 {machine.name}</h1>
 
       <div className="mt-8 rounded-2xl bg-white p-8 shadow">

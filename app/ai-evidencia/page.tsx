@@ -8,6 +8,7 @@ import {
   PLAN_LIMIT_MESSAGE,
   isPlanLimitReachedError,
 } from "@/lib/plan-limits";
+import BackLink from "@/app/components/BackLink";
 import {
   exportAiEvidenceToExcel,
   type AiEvidenceExcelRecord,
@@ -837,6 +838,8 @@ const currentWeightValidation = result
   style={{ backgroundImage: "url('/images/background-dark.png')" }}
 >
       <div className="mx-auto max-w-3xl">
+        <BackLink href="/" label="Hlavné menu" className="mb-4" />
+
         <div className="flex items-center gap-4">
   <img
     src="/images/ai-evidencia.png"
