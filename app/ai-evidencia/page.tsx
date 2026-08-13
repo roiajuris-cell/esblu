@@ -13,6 +13,10 @@ import {
   exportAiEvidenceToExcel,
   type AiEvidenceExcelRecord,
 } from "@/lib/export-ai-evidence-excel";
+import {
+  exportAiInboxFolderToExcel,
+  type AiInboxFolderKind,
+} from "@/lib/export-ai-inbox-documents-excel";
 import { normalizeSpz } from "@/lib/normalize-spz";
 import { normalizeWeightUnit } from "@/lib/normalize-weight-unit";
 import {
@@ -60,8 +64,39 @@ type OtherDocumentRow = {
   extracted_fields: Record<string, unknown> | null;
   storage_bucket: string | null;
   storage_path: string | null;
+  original_filename: string | null;
+  note: string | null;
   document_links?: { vehicle_id: string | null; machine_id: string | null }[];
 };
+
+// Riadok public.document_attachments — jednoduché prílohy k dokumentu
+// (dnes iba PZP/insurance detail, pozri sekciu "Prílohy" nižšie).
+type AttachmentRow = {
+  id: string;
+  document_id: string;
+  storage_bucket: string;
+  storage_path: string;
+  original_filename: string | null;
+  mime_type: string | null;
+  attachment_type: string;
+  created_at: string | null;
+};
+
+const ATTACHMENT_TYPE_LABELS: Record<string, string> = {
+  white_card: "Biela karta",
+  green_card: "Zelená karta / potvrdenie o poistení",
+  insurance_event: "Záznam o poistnej udalosti",
+  other: "Iný súvisiaci dokument",
+};
+
+// Dokumenty typu receipt/invoice bez priradenia k vozidlu/stroju sa v zozname
+// zobrazujú zoskupené do zložiek "Bločky"/"Faktúry" (pozri bod 4 zadania),
+// nie samostatne v plochom zozname "Ostatné dokumenty" — aby sa rovnaký
+// dokument nikdy nezobrazil na dvoch miestach naraz.
+function isDocumentAssigned(doc: OtherDocumentRow): boolean {
+  const link = Array.isArray(doc?.document_links) ? doc.document_links[0] : null;
+  return Boolean(link && (link.vehicle_id || link.machine_id));
+}
 
 // SK popisky polí pre zobrazenie/editáciu v UI aj pre detail uloženého
 // dokumentu (documents.extracted_fields má rovnaký tvar ako tieto fields
@@ -557,6 +592,28 @@ export default function AiEvidenciaPage() {
   const [otherDocuments, setOtherDocuments] = useState<OtherDocumentRow[]>([]);
   const [selectedOtherDocument, setSelectedOtherDocument] =
     useState<OtherDocumentRow | null>(null);
+  // Poznámka pri bločku/faktúre — voliteľné pole vyplnené pred uložením
+  // (bod 2 zadania). Vážneho lístka/dodacieho listu sa netýka.
+  const [documentNote, setDocumentNote] = useState("");
+  const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(
+    null
+  );
+  // Zložky "Bločky"/"Faktúry" pre nepriradené dokumenty (bod 4 zadania).
+  const [openFolder, setOpenFolder] = useState<AiInboxFolderKind | null>(null);
+  const [folderExportLoading, setFolderExportLoading] = useState(false);
+  const [folderExportFeedback, setFolderExportFeedback] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
+  // Prílohy PZP dokumentu (bod 3 zadania) — načítané pre aktuálne otvorený
+  // detail dokumentu typu insurance.
+  const [attachments, setAttachments] = useState<AttachmentRow[]>([]);
+  const [attachmentsLoading, setAttachmentsLoading] = useState(false);
+  const [newAttachmentType, setNewAttachmentType] = useState("white_card");
+  const [isUploadingAttachment, setIsUploadingAttachment] = useState(false);
+  const [deletingAttachmentId, setDeletingAttachmentId] = useState<
+    string | null
+  >(null);
   const saveOtherDocumentInProgressRef = useRef(false);
   const saveInProgressRef = useRef(false);
   const previewObjectUrlRef = useRef<string | null>(null);
@@ -603,6 +660,29 @@ const summaryBySpz = records.reduce<Record<string, EvidenceSummary>>((groups, re
 
   return groups;
 }, {});
+
+// Zložky "Bločky"/"Faktúry" (bod 4/6 zadania) — iba dokumenty BEZ priradenia
+// k vozidlu/stroju. Priradené bločky/faktúry ostávajú v "Ostatné dokumenty"
+// nižšie (so svojou väzbou viditeľnou), aby sa nikde nezobrazovali duplicitne.
+const unassignedReceipts = otherDocuments.filter(
+  (doc) => doc.document_type === "receipt" && !isDocumentAssigned(doc)
+);
+const unassignedInvoices = otherDocuments.filter(
+  (doc) => doc.document_type === "invoice" && !isDocumentAssigned(doc)
+);
+const otherDocumentsFlatList = otherDocuments.filter(
+  (doc) =>
+    !(
+      (doc.document_type === "receipt" || doc.document_type === "invoice") &&
+      !isDocumentAssigned(doc)
+    )
+);
+const openFolderDocuments =
+  openFolder === "receipt"
+    ? unassignedReceipts
+    : openFolder === "invoice"
+      ? unassignedInvoices
+      : [];
 
   function revokePreviewObjectUrl() {
     if (previewObjectUrlRef.current) {
@@ -667,6 +747,46 @@ const summaryBySpz = records.reduce<Record<string, EvidenceSummary>>((groups, re
       setExportLoading(false);
     }
   }
+  async function handleExportFolder(kind: AiInboxFolderKind) {
+    if (folderExportLoading) return;
+
+    const folderRecords = kind === "receipt" ? unassignedReceipts : unassignedInvoices;
+
+    if (folderRecords.length === 0) {
+      setFolderExportFeedback({
+        type: "error",
+        text: "Nie sú dostupné žiadne dokumenty na export.",
+      });
+      return;
+    }
+
+    setFolderExportLoading(true);
+    setFolderExportFeedback(null);
+
+    try {
+      const { exportedCount, fileName } = await exportAiInboxFolderToExcel(
+        kind,
+        folderRecords
+      );
+
+      setFolderExportFeedback({
+        type: "success",
+        text: `Exportovaných ${exportedCount} záznamov do súboru ${fileName}.`,
+      });
+    } catch (exportError: unknown) {
+      console.error("Chyba pri exporte zložky:", exportError);
+      setFolderExportFeedback({
+        type: "error",
+        text:
+          exportError instanceof Error
+            ? exportError.message
+            : "Export sa nepodaril. Skús to znova.",
+      });
+    } finally {
+      setFolderExportLoading(false);
+    }
+  }
+
   function handleFile(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = "";
@@ -863,6 +983,7 @@ const summaryBySpz = records.reduce<Record<string, EvidenceSummary>>((groups, re
     setAssignmentTarget(null);
     setSelectedVehicleId("");
     setSelectedMachineId("");
+    setDocumentNote("");
   }
 
   function updateResult(field: string, value: string) {
@@ -1209,6 +1330,10 @@ review_status: reviewStatus,
         },
         extracted_fields: otherResult.fields,
         field_confidence: otherResult.fieldConfidence,
+        note:
+          scanDocumentType === "invoice" || scanDocumentType === "receipt"
+            ? documentNote.trim() || null
+            : null,
       });
 
       if (insertError) throw insertError;
@@ -1287,6 +1412,306 @@ review_status: reviewStatus,
       saveOtherDocumentInProgressRef.current = false;
       setIsSavingOtherDocument(false);
     }
+  }
+
+  // Vymazanie dokumentu z public.documents (faktúra, bloček, PZP, servisný
+  // doklad, iné) — bod 1 zadania. Poradie je zámerne: najprv Storage
+  // (hlavný súbor aj všetky prílohy), až potom DB riadok, aby nikdy
+  // nevznikol osirotený súbor v Storage bez zodpovedajúceho DB záznamu (ak
+  // by DB delete zlyhal po vymazaní Storage, dokument v zozname ostane a
+  // vymazanie sa dá bezpečne zopakovať — remove() na už neexistujúcej ceste
+  // nie je chyba). document_links aj document_attachments majú FK ON DELETE
+  // CASCADE, takže sa v DB odstránia automaticky spolu s dokumentom.
+  async function deleteOtherDocument(doc: OtherDocumentRow) {
+    if (deletingDocumentId) return;
+
+    if (
+      !confirm(
+        "Naozaj chceš natrvalo vymazať tento dokument? Vrátane originálneho súboru a prípadných príloh."
+      )
+    ) {
+      return;
+    }
+
+    setDeletingDocumentId(doc.id);
+    setError("");
+
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session) {
+        throw new Error("Nie si prihlásený.");
+      }
+
+      const { data: docAttachments, error: attachmentsError } = await supabase
+        .from("document_attachments")
+        .select("storage_bucket, storage_path")
+        .eq("document_id", doc.id)
+        .eq("user_id", session.user.id);
+
+      if (attachmentsError) {
+        throw new Error(
+          `Prílohy dokumentu sa nepodarilo načítať: ${attachmentsError.message}`
+        );
+      }
+
+      const pathsByBucket = new Map<string, string[]>();
+      const addPath = (bucket: string | null, path: string | null) => {
+        if (!bucket || !path) return;
+        const existing = pathsByBucket.get(bucket) ?? [];
+        existing.push(path);
+        pathsByBucket.set(bucket, existing);
+      };
+
+      addPath(doc.storage_bucket, doc.storage_path);
+      (docAttachments || []).forEach((attachment) =>
+        addPath(attachment.storage_bucket, attachment.storage_path)
+      );
+
+      for (const [bucket, paths] of pathsByBucket.entries()) {
+        const { error: removeError } = await supabase.storage
+          .from(bucket)
+          .remove(paths);
+
+        if (removeError) {
+          throw new Error(
+            `Súbory dokumentu sa nepodarilo odstrániť zo Storage: ${removeError.message}`
+          );
+        }
+      }
+
+      const { error: deleteError } = await supabase
+        .from("documents")
+        .delete()
+        .eq("id", doc.id)
+        .eq("user_id", session.user.id);
+
+      if (deleteError) throw deleteError;
+
+      setOtherDocuments((prev) => prev.filter((item) => item.id !== doc.id));
+      setSelectedOtherDocument((current) =>
+        current?.id === doc.id ? null : current
+      );
+    } catch (deleteError: unknown) {
+      alert(
+        deleteError instanceof Error
+          ? deleteError.message
+          : "Vymazanie dokumentu zlyhalo."
+      );
+    } finally {
+      setDeletingDocumentId(null);
+    }
+  }
+
+  // Prílohy PZP dokumentu (bod 3 zadania) — jednoduchý model: každá príloha
+  // patrí presne jednému dokumentu (public.document_attachments). Volaná aj
+  // po nahraní/vymazaní prílohy, aby zoznam ostal v sync bez refreshu.
+  async function reloadAttachments(documentId: string) {
+    setAttachmentsLoading(true);
+
+    const { data, error } = await supabase
+      .from("document_attachments")
+      .select("*")
+      .eq("document_id", documentId)
+      .order("created_at", { ascending: true });
+
+    if (!error && data) {
+      setAttachments(data);
+    } else if (error) {
+      console.error("Chyba pri načítaní príloh dokumentu:", error);
+    }
+
+    setAttachmentsLoading(false);
+  }
+
+  async function handleAttachmentUpload(
+    event: React.ChangeEvent<HTMLInputElement>
+  ) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+
+    if (!file || !selectedOtherDocument) return;
+
+    setIsUploadingAttachment(true);
+    setError("");
+
+    let uploadedPath: string | null = null;
+
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session) {
+        throw new Error("Nie si prihlásený.");
+      }
+
+      const uniqueName = `${Date.now()}-${crypto.randomUUID()}-${file.name}`;
+      const storagePath = `${session.user.id}/${selectedOtherDocument.id}/attachments/${uniqueName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("ai-inbox-documents")
+        .upload(storagePath, file, {
+          contentType: file.type || "application/octet-stream",
+          cacheControl: "3600",
+          upsert: false,
+        });
+
+      if (uploadError) {
+        throw new Error(`Prílohu sa nepodarilo nahrať: ${uploadError.message}`);
+      }
+
+      uploadedPath = storagePath;
+
+      const { data: inserted, error: insertError } = await supabase
+        .from("document_attachments")
+        .insert({
+          user_id: session.user.id,
+          document_id: selectedOtherDocument.id,
+          storage_bucket: "ai-inbox-documents",
+          storage_path: storagePath,
+          original_filename: file.name || null,
+          mime_type: file.type || null,
+          file_size: file.size ?? null,
+          attachment_type: newAttachmentType,
+        })
+        .select()
+        .single();
+
+      if (insertError) throw insertError;
+
+      setAttachments((prev) => [...prev, inserted as AttachmentRow]);
+    } catch (uploadError: unknown) {
+      if (uploadedPath) {
+        const { error: cleanupError } = await supabase.storage
+          .from("ai-inbox-documents")
+          .remove([uploadedPath]);
+
+        if (cleanupError) {
+          console.error(
+            "Insert prílohy zlyhal a osirotený súbor sa nepodarilo odstrániť:",
+            cleanupError
+          );
+        }
+      }
+
+      alert(
+        uploadError instanceof Error
+          ? uploadError.message
+          : "Prílohu sa nepodarilo uložiť."
+      );
+    } finally {
+      setIsUploadingAttachment(false);
+    }
+  }
+
+  async function deleteAttachment(attachment: AttachmentRow) {
+    if (deletingAttachmentId) return;
+    if (!confirm("Naozaj chceš vymazať túto prílohu?")) return;
+
+    setDeletingAttachmentId(attachment.id);
+
+    try {
+      const { error: removeError } = await supabase.storage
+        .from(attachment.storage_bucket)
+        .remove([attachment.storage_path]);
+
+      if (removeError) {
+        throw new Error(
+          `Súbor prílohy sa nepodarilo odstrániť zo Storage: ${removeError.message}`
+        );
+      }
+
+      const { error: deleteError } = await supabase
+        .from("document_attachments")
+        .delete()
+        .eq("id", attachment.id);
+
+      if (deleteError) throw deleteError;
+
+      setAttachments((prev) => prev.filter((item) => item.id !== attachment.id));
+    } catch (deleteError: unknown) {
+      alert(
+        deleteError instanceof Error
+          ? deleteError.message
+          : "Vymazanie prílohy zlyhalo."
+      );
+    } finally {
+      setDeletingAttachmentId(null);
+    }
+  }
+
+  async function openAttachment(attachment: AttachmentRow) {
+    const { data, error } = await supabase.storage
+      .from(attachment.storage_bucket)
+      .createSignedUrl(attachment.storage_path, 300);
+
+    if (error || !data) {
+      alert("Prílohu sa nepodarilo otvoriť.");
+      return;
+    }
+
+    window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+  }
+
+  // Stiahnutie originálneho súboru dokumentu do zariadenia (bod 4/5
+  // zadania) — skutočný download (nie iba otvorenie v novej záložke), aby
+  // šlo dokument následne vytlačiť štandardným spôsobom zariadenia.
+  async function downloadOriginal(doc: OtherDocumentRow) {
+    if (!doc.storage_bucket || !doc.storage_path) return;
+
+    try {
+      const { data, error } = await supabase.storage
+        .from(doc.storage_bucket)
+        .createSignedUrl(doc.storage_path, 60);
+
+      if (error || !data) {
+        throw new Error("Originál sa nepodarilo pripraviť na stiahnutie.");
+      }
+
+      const response = await fetch(data.signedUrl);
+      if (!response.ok) {
+        throw new Error("Originál sa nepodarilo stiahnuť.");
+      }
+
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+
+      link.href = objectUrl;
+      link.download = doc.original_filename || `dokument-${doc.id}`;
+      link.style.display = "none";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+    } catch (downloadError: unknown) {
+      alert(
+        downloadError instanceof Error
+          ? downloadError.message
+          : "Originál sa nepodarilo stiahnuť."
+      );
+    }
+  }
+
+  // Tlač — otvorí originál v novej záložke, používateľ ho vytlačí bežným
+  // spôsobom prehliadača/zariadenia (Ctrl+P / zdieľať > tlačiť na mobile).
+  // Zámerne bez vlastnej print-CSS logiky — jednoduchšie a spoľahlivejšie.
+  async function printOriginal(doc: OtherDocumentRow) {
+    if (!doc.storage_bucket || !doc.storage_path) return;
+
+    const { data, error } = await supabase.storage
+      .from(doc.storage_bucket)
+      .createSignedUrl(doc.storage_path, 300);
+
+    if (error || !data) {
+      alert("Originál sa nepodarilo pripraviť na tlač.");
+      return;
+    }
+
+    window.open(data.signedUrl, "_blank", "noopener,noreferrer");
   }
 
   async function deleteRecord(id: string) {
@@ -1466,6 +1891,19 @@ useEffect(() => {
 }, [selectedOtherDocument]);
 
 useEffect(() => {
+  async function syncAttachmentsForSelectedDocument() {
+    if (selectedOtherDocument?.document_type !== "insurance") {
+      setAttachments([]);
+      return;
+    }
+
+    await reloadAttachments(selectedOtherDocument.id);
+  }
+
+  syncAttachmentsForSelectedDocument();
+}, [selectedOtherDocument?.id, selectedOtherDocument?.document_type]);
+
+useEffect(() => {
   async function initialize() {
     await Promise.all([
       loadRecords(),
@@ -1545,6 +1983,18 @@ function summarizeDocument(doc: OtherDocumentRow): string {
   if (parts.length > 0) return parts.join(" • ");
 
   return type ? DOCUMENT_TYPE_LABELS[type] : "Dokument";
+}
+
+function formatAmount(value: unknown, currency: unknown): string {
+  if (value === null || value === undefined || value === "") {
+    return "Bez sumy";
+  }
+  const currencyLabel = typeof currency === "string" && currency ? ` ${currency}` : "";
+  return `${value}${currencyLabel}`;
+}
+
+function formatDocDate(value: unknown): string {
+  return typeof value === "string" && value ? value : "Bez dátumu";
 }
 
   return (
@@ -1817,6 +2267,23 @@ function summarizeDocument(doc: OtherDocumentRow): string {
                   />
                 </div>
               )
+            )}
+
+            {/* Poznámka — nepovinná, iba pri bločku/faktúre (bod 2 zadania). */}
+            {(scanDocumentType === "invoice" ||
+              scanDocumentType === "receipt") && (
+              <div>
+                <label className="text-sm font-bold text-slate-600">
+                  Poznámka (nepovinné)
+                </label>
+                <textarea
+                  value={documentNote}
+                  onChange={(e) => setDocumentNote(e.target.value)}
+                  rows={3}
+                  placeholder="Napr. na čo bol nákup, kto ho schválil..."
+                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 outline-none"
+                />
+              </div>
             )}
 
             {/* Priradenie MUSÍ byť pred tlačidlom Uložiť — rovnaká zásada
@@ -2304,21 +2771,170 @@ function summarizeDocument(doc: OtherDocumentRow): string {
       )}
     </div>
 
+    {/* Zložky "Bločky"/"Faktúry" — nepriradené dokumenty (bod 4 zadania). */}
+    {!openFolder && (
+      <div className="mt-10">
+        <h2 className="text-2xl font-black text-white drop-shadow-lg">
+          Zložky
+        </h2>
+
+        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <button
+            type="button"
+            onClick={() => setOpenFolder("receipt")}
+            className="rounded-3xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:border-blue-300"
+          >
+            <p className="text-3xl">🧾</p>
+            <h3 className="mt-2 text-xl font-black text-slate-950">Bločky</h3>
+            <p className="mt-1 text-sm text-slate-600">
+              {unassignedReceipts.length}{" "}
+              {unassignedReceipts.length === 1 ? "nepriradený bloček" : "nepriradených bločkov"}
+            </p>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setOpenFolder("invoice")}
+            className="rounded-3xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:border-blue-300"
+          >
+            <p className="text-3xl">📃</p>
+            <h3 className="mt-2 text-xl font-black text-slate-950">Faktúry</h3>
+            <p className="mt-1 text-sm text-slate-600">
+              {unassignedInvoices.length}{" "}
+              {unassignedInvoices.length === 1 ? "nepriradená faktúra" : "nepriradených faktúr"}
+            </p>
+          </button>
+        </div>
+      </div>
+    )}
+
+    {openFolder && (
+      <div className="mt-10">
+        <button
+          onClick={() => {
+            setOpenFolder(null);
+            setFolderExportFeedback(null);
+          }}
+          className="mb-4 rounded-2xl bg-slate-200 px-4 py-3 font-bold text-slate-700"
+        >
+          ← Späť na zložky
+        </button>
+
+        <div className="flex flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:p-6">
+          <div>
+            <h2 className="text-2xl font-black text-slate-950">
+              {openFolder === "receipt" ? "🧾 Bločky" : "📃 Faktúry"}
+            </h2>
+            <p className="mt-1 text-sm text-slate-600">
+              {openFolderDocuments.length}{" "}
+              {openFolderDocuments.length === 1 ? "nepriradený dokument" : "nepriradených dokumentov"}
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => handleExportFolder(openFolder)}
+            disabled={folderExportLoading || openFolderDocuments.length === 0}
+            aria-busy={folderExportLoading}
+            className="rounded-2xl bg-emerald-600 px-5 py-4 font-black text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {folderExportLoading ? "Generujem Excel..." : "Exportovať zložku"}
+          </button>
+        </div>
+
+        {folderExportFeedback && (
+          <p
+            className={`mt-4 rounded-xl px-4 py-3 text-sm font-semibold ${
+              folderExportFeedback.type === "success"
+                ? "bg-emerald-50 text-emerald-800"
+                : "bg-red-50 text-red-700"
+            }`}
+          >
+            {folderExportFeedback.text}
+          </p>
+        )}
+
+        {openFolderDocuments.length === 0 ? (
+          <p className="mt-4 rounded-xl bg-slate-100 px-4 py-3 text-sm text-slate-600">
+            Zatiaľ tu nie sú žiadne nepriradené dokumenty.
+          </p>
+        ) : (
+          <div className="mt-4 space-y-3">
+            {openFolderDocuments.map((doc) => {
+              const fields = doc.extracted_fields || {};
+              return (
+                <div
+                  key={doc.id}
+                  className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      {openFolder === "receipt" ? (
+                        <h3 className="text-lg font-black text-slate-950">
+                          {(fields.merchant as string) || "Bez obchodníka"}
+                        </h3>
+                      ) : (
+                        <h3 className="text-lg font-black text-slate-950">
+                          {(fields.supplier as string) || "Bez dodávateľa"}
+                        </h3>
+                      )}
+                      <p className="mt-1 text-sm text-slate-600">
+                        📅{" "}
+                        {formatDocDate(
+                          openFolder === "receipt"
+                            ? fields.purchaseDate
+                            : fields.issueDate
+                        )}
+                      </p>
+                    </div>
+
+                    {doc.status === "needs_review" && (
+                      <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-bold text-amber-700">
+                        na kontrolu
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="mt-4 space-y-1 text-sm text-slate-600">
+                    <p>💶 {formatAmount(fields.totalAmount, fields.currency)}</p>
+                    {openFolder === "invoice" && (
+                      <p>
+                        🔢{" "}
+                        {(fields.invoiceNumber as string) || "Bez čísla faktúry"}
+                      </p>
+                    )}
+                    {doc.note && <p>📝 {doc.note}</p>}
+                  </div>
+
+                  <button
+                    onClick={() => setSelectedOtherDocument(doc)}
+                    className="mt-5 w-full rounded-2xl bg-blue-600 px-4 py-3 font-bold text-white hover:bg-blue-700"
+                  >
+                    📄 Otvoriť detail
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    )}
+
     <div className="mt-10">
       <h2 className="text-2xl font-black text-slate-950">
         Ostatné dokumenty
       </h2>
       <p className="mt-1 text-sm text-slate-600">
-        Faktúry, bločky, PZP, servisné doklady a ostatné dokumenty uložené cez AI Inbox.
+        PZP, servisné doklady, ostatné dokumenty a priradené faktúry/bločky uložené cez AI Inbox.
       </p>
 
-      {otherDocuments.length === 0 ? (
+      {otherDocumentsFlatList.length === 0 ? (
         <p className="mt-4 rounded-xl bg-slate-100 px-4 py-3 text-sm text-slate-600">
           Zatiaľ tu nie sú žiadne uložené dokumenty.
         </p>
       ) : (
         <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-          {otherDocuments.map((doc) => (
+          {otherDocumentsFlatList.map((doc) => (
             <div
               key={doc.id}
               className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"
@@ -2509,6 +3125,15 @@ function summarizeDocument(doc: OtherDocumentRow): string {
 
       </div>
 
+      {selectedOtherDocument.note && (
+        <div className="mt-5 rounded-2xl bg-amber-50 p-4">
+          <p className="text-sm font-bold text-amber-900">📝 Poznámka</p>
+          <p className="mt-1 whitespace-pre-wrap text-sm text-amber-900">
+            {selectedOtherDocument.note}
+          </p>
+        </div>
+      )}
+
       {selectedOtherDocument.storage_path && (
         <div className="mt-5">
           <p className="mb-2 text-sm font-bold text-slate-700">
@@ -2532,6 +3157,111 @@ function summarizeDocument(doc: OtherDocumentRow): string {
               Načítavam fotografiu...
             </p>
           )}
+
+          <div className="mt-3 grid grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={() => downloadOriginal(selectedOtherDocument)}
+              className="rounded-2xl bg-slate-100 px-4 py-3 font-bold text-slate-800"
+            >
+              ⬇️ Stiahnuť
+            </button>
+            <button
+              type="button"
+              onClick={() => printOriginal(selectedOtherDocument)}
+              className="rounded-2xl bg-slate-100 px-4 py-3 font-bold text-slate-800"
+            >
+              🖨️ Tlačiť
+            </button>
+          </div>
+        </div>
+      )}
+
+      {selectedOtherDocument.document_type === "insurance" && (
+        <div className="mt-6 rounded-2xl border border-slate-200 p-4">
+          <p className="text-sm font-black text-slate-900">📎 Prílohy</p>
+          <p className="mt-1 text-xs text-slate-500">
+            Biela karta, zelená karta, záznam o poistnej udalosti alebo iný
+            súvisiaci dokument k tomuto PZP.
+          </p>
+
+          {attachmentsLoading ? (
+            <p className="mt-3 text-sm text-slate-500">Načítavam prílohy...</p>
+          ) : attachments.length === 0 ? (
+            <p className="mt-3 text-sm text-slate-500">
+              Zatiaľ tu nie sú žiadne prílohy.
+            </p>
+          ) : (
+            <div className="mt-3 space-y-2">
+              {attachments.map((attachment) => (
+                <div
+                  key={attachment.id}
+                  className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-4 py-3"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-bold text-slate-800">
+                      {ATTACHMENT_TYPE_LABELS[attachment.attachment_type] ||
+                        "Iný súvisiaci dokument"}
+                    </p>
+                    <p className="truncate text-xs text-slate-500">
+                      {attachment.original_filename || "bez názvu"}
+                    </p>
+                  </div>
+
+                  <div className="flex shrink-0 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => openAttachment(attachment)}
+                      className="rounded-xl bg-blue-600 px-3 py-2 text-xs font-bold text-white"
+                    >
+                      Otvoriť
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => deleteAttachment(attachment)}
+                      disabled={deletingAttachmentId === attachment.id}
+                      className="rounded-xl bg-red-50 px-3 py-2 text-xs font-bold text-red-700 disabled:opacity-50"
+                    >
+                      {deletingAttachmentId === attachment.id
+                        ? "Mažem..."
+                        : "Vymazať"}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+            <select
+              value={newAttachmentType}
+              onChange={(e) => setNewAttachmentType(e.target.value)}
+              className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm outline-none sm:flex-1"
+            >
+              {Object.entries(ATTACHMENT_TYPE_LABELS).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+
+            <label
+              className={`rounded-xl px-4 py-3 text-center text-sm font-bold text-white ${
+                isUploadingAttachment
+                  ? "cursor-not-allowed bg-blue-300"
+                  : "cursor-pointer bg-blue-600"
+              }`}
+            >
+              {isUploadingAttachment ? "Nahrávam..." : "+ Pridať prílohu"}
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp,application/pdf"
+                className="hidden"
+                disabled={isUploadingAttachment}
+                onChange={handleAttachmentUpload}
+              />
+            </label>
+          </div>
         </div>
       )}
 
@@ -2540,6 +3270,16 @@ function summarizeDocument(doc: OtherDocumentRow): string {
         className="mt-8 w-full rounded-2xl bg-blue-600 py-4 font-bold text-white"
       >
         Zavrieť
+      </button>
+
+      <button
+        onClick={() => deleteOtherDocument(selectedOtherDocument)}
+        disabled={deletingDocumentId === selectedOtherDocument.id}
+        className="mt-3 w-full rounded-2xl bg-red-600 py-4 font-bold text-white disabled:opacity-60"
+      >
+        {deletingDocumentId === selectedOtherDocument.id
+          ? "Mažem..."
+          : "🗑 Vymazať dokument"}
       </button>
     </div>
   </div>
