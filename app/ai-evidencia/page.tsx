@@ -1329,17 +1329,99 @@ const currentWeightValidation = result
               </p>
             ) : null}
 
+            {/* Priradenie MUSÍ byť v tom istom bloku a NAD tlačidlom
+                "Uložiť do evidencie" — inak si používateľ môže kliknúť
+                uložiť skôr, než sa k priradeniu vôbec dostane. */}
+            <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5">
+              <h3 className="text-lg font-black text-slate-950">
+                Chcete dokument priradiť?
+              </h3>
+
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setAssignmentTarget("vehicle")}
+                  className={`rounded-2xl px-3 py-4 text-sm font-bold ${
+                    assignmentTarget === "vehicle"
+                      ? "bg-blue-600 text-white"
+                      : "bg-slate-100 text-slate-700"
+                  }`}
+                >
+                  🚛 Vozidlo
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAssignmentTarget("machine")}
+                  className={`rounded-2xl px-3 py-4 text-sm font-bold ${
+                    assignmentTarget === "machine"
+                      ? "bg-blue-600 text-white"
+                      : "bg-slate-100 text-slate-700"
+                  }`}
+                >
+                  🚜 Stroj
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAssignmentTarget("none")}
+                  className={`rounded-2xl px-3 py-4 text-sm font-bold ${
+                    assignmentTarget === "none"
+                      ? "bg-blue-600 text-white"
+                      : "bg-slate-100 text-slate-700"
+                  }`}
+                >
+                  Bez priradenia
+                </button>
+              </div>
+
+              {assignmentTarget === "vehicle" && (
+                <div>
+                  <label className="text-sm font-bold text-slate-600">
+                    ŠPZ vozidla
+                  </label>
+                  <input
+                    value={assignmentVehicleSpz}
+                    onChange={(e) => setAssignmentVehicleSpz(e.target.value)}
+                    placeholder="napr. BA123AB"
+                    className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 outline-none"
+                  />
+                </div>
+              )}
+
+              {assignmentTarget === "machine" && (
+                <div>
+                  <label className="text-sm font-bold text-slate-600">
+                    Názov alebo označenie stroja
+                  </label>
+                  <input
+                    value={assignmentMachineLabel}
+                    onChange={(e) => setAssignmentMachineLabel(e.target.value)}
+                    placeholder="napr. Bager JCB 3CX"
+                    className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 outline-none"
+                  />
+                </div>
+              )}
+            </div>
+
             <button
               onClick={saveEvidence}
               disabled={
                 isSaving ||
                 planUsageLoading ||
                 isPlanLimited ||
-                Boolean(currentWeightValidation?.invalidFields.length)
+                Boolean(currentWeightValidation?.invalidFields.length) ||
+                !assignmentTarget
               }
               className="mt-4 w-full rounded-2xl bg-blue-600 px-5 py-4 text-lg font-black text-white disabled:opacity-60"
             >
-              {isSaving ? "Ukladám..." : "💾 Uložiť do evidencie"}
+              {isSaving
+                ? "Ukladám..."
+                : assignmentTarget === "vehicle"
+                  ? `💾 Uložiť k vozidlu${assignmentVehicleSpz ? ` (${assignmentVehicleSpz})` : ""}`
+                  : assignmentTarget === "machine"
+                    ? `💾 Uložiť k stroju${assignmentMachineLabel ? ` (${assignmentMachineLabel})` : ""}`
+                    : assignmentTarget === "none"
+                      ? "💾 Uložiť bez priradenia"
+                      : "💾 Najprv zvoľ priradenie"}
             </button>
           </div>
           )}
@@ -1386,83 +1468,6 @@ const currentWeightValidation = result
             >
               Nahrať iný dokument
             </button>
-          </div>
-        )}
-
-        {result && (
-          <div className="mt-8 space-y-4 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h2 className="text-xl font-black text-slate-950">
-              Chcete dokument priradiť?
-            </h2>
-
-            <div className="grid grid-cols-3 gap-2">
-              <button
-                type="button"
-                onClick={() => setAssignmentTarget("vehicle")}
-                className={`rounded-2xl px-3 py-4 text-sm font-bold ${
-                  assignmentTarget === "vehicle"
-                    ? "bg-blue-600 text-white"
-                    : "bg-slate-100 text-slate-700"
-                }`}
-              >
-                🚛 Vozidlo
-              </button>
-              <button
-                type="button"
-                onClick={() => setAssignmentTarget("machine")}
-                className={`rounded-2xl px-3 py-4 text-sm font-bold ${
-                  assignmentTarget === "machine"
-                    ? "bg-blue-600 text-white"
-                    : "bg-slate-100 text-slate-700"
-                }`}
-              >
-                🚜 Stroj
-              </button>
-              <button
-                type="button"
-                onClick={() => setAssignmentTarget("none")}
-                className={`rounded-2xl px-3 py-4 text-sm font-bold ${
-                  assignmentTarget === "none"
-                    ? "bg-blue-600 text-white"
-                    : "bg-slate-100 text-slate-700"
-                }`}
-              >
-                Bez priradenia
-              </button>
-            </div>
-
-            {assignmentTarget === "vehicle" && (
-              <div>
-                <label className="text-sm font-bold text-slate-600">
-                  ŠPZ vozidla
-                </label>
-                <input
-                  value={assignmentVehicleSpz}
-                  onChange={(e) => setAssignmentVehicleSpz(e.target.value)}
-                  placeholder="napr. BA123AB"
-                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 outline-none"
-                />
-              </div>
-            )}
-
-            {assignmentTarget === "machine" && (
-              <div>
-                <label className="text-sm font-bold text-slate-600">
-                  Názov alebo označenie stroja
-                </label>
-                <input
-                  value={assignmentMachineLabel}
-                  onChange={(e) => setAssignmentMachineLabel(e.target.value)}
-                  placeholder="napr. Bager JCB 3CX"
-                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 outline-none"
-                />
-              </div>
-            )}
-
-            <p className="text-xs text-slate-500">
-              Priradenie sa uloží spolu s dokumentom po kliknutí na
-              &bdquo;Uložiť do evidencie&ldquo; nižšie.
-            </p>
           </div>
         )}
 
