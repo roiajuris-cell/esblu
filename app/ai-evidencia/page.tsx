@@ -594,7 +594,6 @@ const summaryBySpz = records.reduce<Record<string, EvidenceSummary>>((groups, re
 
       setSelectedFile(compressedFile);
       setScanDocumentType(documentType);
-      setAssignmentTarget(null);
 
       let prefillSpz = "";
       let prefillMachine = "";
@@ -648,6 +647,19 @@ const summaryBySpz = records.reduce<Record<string, EvidenceSummary>>((groups, re
         }
       }
 
+      // Predvolené priradenie: ak AI rozpoznala ŠPZ pri vážnom lístku/dodacom
+      // liste, predvyplní sa "Vozidlo" (zachováva doterajšie automatické
+      // správanie). Inak ostáva "Bez priradenia", kým si používateľ
+      // explicitne nevyberie inak. Pri ostatných typoch dokumentov sa
+      // priradenie zatiaľ neponúka (ukladanie týchto typov ešte nie je
+      // implementované).
+      setAssignmentTarget(
+        documentType === "weigh_ticket" || documentType === "delivery_note"
+          ? prefillSpz
+            ? "vehicle"
+            : "none"
+          : null
+      );
       setAssignmentVehicleSpz(prefillSpz);
       setAssignmentMachineLabel(prefillMachine);
       clearImagePreview(false);
@@ -800,28 +812,87 @@ function resolveMovementType(result: any): string | null {
       if (!session) {
         throw new Error("Nie si prihlásený.");
       }
+      // Priradenie dokumentu sa riadi explicitným výberom v UI
+      // ("Chcete dokument priradiť?"), nie iba rozpoznanou ŠPZ. Vozidlo aj
+      // stroj sa vždy overujú proti záznamom prihláseného používateľa
+      // (user_id filter), takže sa nedá priradiť k cudziemu vozidlu/stroju
+      // ani obísť RLS.
       const normalizedResultSpz = normalizeSpz(result.spz);
-      let vehicleId = null;
+      let vehicleId: string | null = null;
+      let machineId: string | null = null;
+      let machineLabel: string | null = null;
       let canonicalSpz = normalizedResultSpz;
 
-      if (normalizedResultSpz) {
+      if (assignmentTarget === "vehicle") {
+        const normalizedAssignmentSpz = normalizeSpz(assignmentVehicleSpz);
+
+        if (!normalizedAssignmentSpz) {
+          throw new Error(
+            "Zadaj ŠPZ vozidla, ku ktorému chceš dokument priradiť, alebo zvoľ iné priradenie."
+          );
+        }
+
         const { data: vehicles, error: vehiclesError } = await supabase
           .from("vehicles")
           .select("id, spz")
           .eq("user_id", session.user.id);
 
         if (vehiclesError) {
-          console.error("Chyba pri načítaní vozidiel:", vehiclesError);
+          throw new Error(
+            `Vozidlá sa nepodarilo načítať: ${vehiclesError.message}`
+          );
         }
 
         const matchedVehicle = vehicles?.find(
-          (vehicle) => normalizeSpz(vehicle.spz) === normalizedResultSpz
+          (vehicle) => normalizeSpz(vehicle.spz) === normalizedAssignmentSpz
         );
 
-        vehicleId = matchedVehicle?.id ?? null;
-        canonicalSpz =
-          normalizeSpz(matchedVehicle?.spz) ?? normalizedResultSpz;
+        if (!matchedVehicle) {
+          throw new Error(
+            `Vozidlo so ŠPZ "${assignmentVehicleSpz}" sa nenašlo. Skontroluj ŠPZ alebo ho najprv pridaj medzi vozidlá.`
+          );
+        }
+
+        vehicleId = matchedVehicle.id;
+        canonicalSpz = normalizeSpz(matchedVehicle.spz) ?? normalizedAssignmentSpz;
+      } else if (assignmentTarget === "machine") {
+        const trimmedMachineLabel = assignmentMachineLabel.trim();
+
+        if (!trimmedMachineLabel) {
+          throw new Error(
+            "Zadaj názov alebo označenie stroja, ku ktorému chceš dokument priradiť, alebo zvoľ iné priradenie."
+          );
+        }
+
+        const { data: machines, error: machinesError } = await supabase
+          .from("machines")
+          .select("id, name")
+          .eq("user_id", session.user.id);
+
+        if (machinesError) {
+          throw new Error(
+            `Stroje sa nepodarilo načítať: ${machinesError.message}`
+          );
+        }
+
+        const normalizedMachineLabel = normalizeText(trimmedMachineLabel);
+        const matchedMachine = machines?.find(
+          (machine) => normalizeText(machine.name) === normalizedMachineLabel
+        );
+
+        if (!matchedMachine) {
+          throw new Error(
+            `Stroj "${assignmentMachineLabel}" sa nenašiel. Skontroluj názov alebo ho najprv pridaj medzi stroje.`
+          );
+        }
+
+        machineId = matchedMachine.id;
+        machineLabel = matchedMachine.name ?? trimmedMachineLabel;
+        canonicalSpz = null;
       }
+      // assignmentTarget === "none" (alebo nezvolené): žiadne vozidlo ani
+      // stroj sa nepriraďuje, rozpoznaná ŠPZ z dokumentu (ak nejaká je) sa
+      // naďalej uloží ako informačný text v poli spz.
 
       let photoPath: string | null = null;
 
@@ -853,6 +924,8 @@ const resolvedMovementType = resolveMovementType(result);
       const { error } = await supabase.from("ai_evidence").insert({
         user_id: session.user.id,
         vehicle_id: vehicleId,
+        machine_id: machineId,
+        machine_label: machineLabel,
         spz: canonicalSpz,
         document_type: result.documentType || null,
         movement_type: resolvedMovementType,
@@ -1316,7 +1389,7 @@ const currentWeightValidation = result
           </div>
         )}
 
-        {(result || otherResult) && (
+        {result && (
           <div className="mt-8 space-y-4 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
             <h2 className="text-xl font-black text-slate-950">
               Chcete dokument priradiť?
@@ -1387,9 +1460,8 @@ const currentWeightValidation = result
             )}
 
             <p className="text-xs text-slate-500">
-              Priradenie sa zatiaľ iba pripravuje — v tejto verzii sa ešte
-              neukladá. Plné prepojenie s vozidlami a strojmi pribudne v
-              nasledujúcej aktualizácii.
+              Priradenie sa uloží spolu s dokumentom po kliknutí na
+              &bdquo;Uložiť do evidencie&ldquo; nižšie.
             </p>
           </div>
         )}
@@ -1756,6 +1828,16 @@ const currentWeightValidation = result
 
         <Info title="Typ" value={selectedRecord.document_type} />
         <Info title="Pohyb" value={selectedRecord.movement_type} />
+        <Info
+          title="Priradenie"
+          value={
+            selectedRecord.vehicle_id
+              ? `Vozidlo${selectedRecord.spz ? ` — ${selectedRecord.spz}` : ""}`
+              : selectedRecord.machine_id
+                ? `Stroj${selectedRecord.machine_label ? ` — ${selectedRecord.machine_label}` : ""}`
+                : "Bez priradenia"
+          }
+        />
         <Info title="SPZ" value={selectedRecord.spz} />
         <Info title="Dodávateľ" value={selectedRecord.supplier} />
         <Info title="Zákazník" value={selectedRecord.customer} />
