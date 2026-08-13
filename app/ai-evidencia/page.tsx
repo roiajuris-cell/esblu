@@ -147,6 +147,96 @@ function buildFlatWeighTicketResult(
   };
 }
 
+// -----------------------------------------------------------------------------
+// Priraďovanie k vozidlu/stroju — zdieľané dopyty nad vlastnými záznamami
+// prihláseného používateľa (user_id filter drží RLS izoláciu).
+//
+// resolveVehicleIdBySpz sa používa pre vážny lístok/dodací list: priradenie
+// je čisto automatické podľa ŠPZ rozpoznanej AI, nikdy nezlyhá a nikdy
+// neblokuje uloženie dokumentu — ak vozidlo s danou ŠPZ v module Vozidlá
+// neexistuje (alebo dopyt zlyhá), vráti vehicleId: null a dokument sa aj tak
+// uloží, iba bez väzby na konkrétne vozidlo.
+//
+// resolveMachineIdByLabel je pripravená pre budúce doplnenie ukladania
+// ostatných typov dokumentov (faktúra, bloček, servisný doklad, PZP a
+// pod.) s ručným priradením k vozidlu/stroju — dnes ju nikde nevoláme,
+// keďže ukladanie týchto typov ešte nie je implementované.
+// -----------------------------------------------------------------------------
+
+async function resolveVehicleIdBySpz(
+  userId: string,
+  spz: unknown
+): Promise<{ vehicleId: string | null; canonicalSpz: string | null }> {
+  const normalizedSpz = normalizeSpz(spz);
+
+  if (!normalizedSpz) {
+    return { vehicleId: null, canonicalSpz: null };
+  }
+
+  const { data: vehicles, error: vehiclesError } = await supabase
+    .from("vehicles")
+    .select("id, spz")
+    .eq("user_id", userId);
+
+  if (vehiclesError) {
+    console.error("Chyba pri načítaní vozidiel:", vehiclesError);
+    return { vehicleId: null, canonicalSpz: normalizedSpz };
+  }
+
+  const matchedVehicle = vehicles?.find(
+    (vehicle) => normalizeSpz(vehicle.spz) === normalizedSpz
+  );
+
+  return {
+    vehicleId: matchedVehicle?.id ?? null,
+    canonicalSpz: normalizeSpz(matchedVehicle?.spz) ?? normalizedSpz,
+  };
+}
+
+function normalizeMachineLabel(value: unknown): string {
+  return (typeof value === "string" ? value : "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+// Zámerne zatiaľ nikde nevolaná — pripravená pre budúce doplnenie ukladania
+// ostatných typov dokumentov (pozri komentár vyššie pri
+// resolveVehicleIdBySpz). Potlačené lint upozornenie na nepoužitú funkciu,
+// kým sa táto funkcia nezapojí do reálneho save flow.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+async function resolveMachineIdByLabel(
+  userId: string,
+  label: string
+): Promise<{ machineId: string | null; machineLabel: string | null }> {
+  const trimmedLabel = label.trim();
+
+  if (!trimmedLabel) {
+    return { machineId: null, machineLabel: null };
+  }
+
+  const { data: machines, error: machinesError } = await supabase
+    .from("machines")
+    .select("id, name")
+    .eq("user_id", userId);
+
+  if (machinesError) {
+    console.error("Chyba pri načítaní strojov:", machinesError);
+    return { machineId: null, machineLabel: null };
+  }
+
+  const normalizedLabel = normalizeMachineLabel(trimmedLabel);
+  const matchedMachine = machines?.find(
+    (machine) => normalizeMachineLabel(machine.name) === normalizedLabel
+  );
+
+  return {
+    machineId: matchedMachine?.id ?? null,
+    machineLabel: matchedMachine?.name ?? null,
+  };
+}
+
 const WITHOUT_SPZ_GROUP = "BEZ ŠPZ";
 
 function getSpzGroupKey(value: unknown): string {
@@ -647,19 +737,12 @@ const summaryBySpz = records.reduce<Record<string, EvidenceSummary>>((groups, re
         }
       }
 
-      // Predvolené priradenie: ak AI rozpoznala ŠPZ pri vážnom lístku/dodacom
-      // liste, predvyplní sa "Vozidlo" (zachováva doterajšie automatické
-      // správanie). Inak ostáva "Bez priradenia", kým si používateľ
-      // explicitne nevyberie inak. Pri ostatných typoch dokumentov sa
-      // priradenie zatiaľ neponúka (ukladanie týchto typov ešte nie je
-      // implementované).
-      setAssignmentTarget(
-        documentType === "weigh_ticket" || documentType === "delivery_note"
-          ? prefillSpz
-            ? "vehicle"
-            : "none"
-          : null
-      );
+      // Vážny lístok/dodací list: žiadne ručné priradenie — vozidlo sa
+      // dohľadá automaticky podľa ŠPZ priamo pri ukladaní (saveEvidence).
+      // Ostatné typy dokumentov: ručné priradenie (Vozidlo/Stroj/Bez
+      // priradenia) ostáva nezvolené, kým si ho používateľ výslovne
+      // nezvolí — ukladanie týchto typov navyše ešte nie je implementované.
+      setAssignmentTarget(null);
       setAssignmentVehicleSpz(prefillSpz);
       setAssignmentMachineLabel(prefillMachine);
       clearImagePreview(false);
@@ -812,87 +895,19 @@ function resolveMovementType(result: any): string | null {
       if (!session) {
         throw new Error("Nie si prihlásený.");
       }
-      // Priradenie dokumentu sa riadi explicitným výberom v UI
-      // ("Chcete dokument priradiť?"), nie iba rozpoznanou ŠPZ. Vozidlo aj
-      // stroj sa vždy overujú proti záznamom prihláseného používateľa
-      // (user_id filter), takže sa nedá priradiť k cudziemu vozidlu/stroju
-      // ani obísť RLS.
-      const normalizedResultSpz = normalizeSpz(result.spz);
-      let vehicleId: string | null = null;
-      let machineId: string | null = null;
-      let machineLabel: string | null = null;
-      let canonicalSpz = normalizedResultSpz;
-
-      if (assignmentTarget === "vehicle") {
-        const normalizedAssignmentSpz = normalizeSpz(assignmentVehicleSpz);
-
-        if (!normalizedAssignmentSpz) {
-          throw new Error(
-            "Zadaj ŠPZ vozidla, ku ktorému chceš dokument priradiť, alebo zvoľ iné priradenie."
-          );
-        }
-
-        const { data: vehicles, error: vehiclesError } = await supabase
-          .from("vehicles")
-          .select("id, spz")
-          .eq("user_id", session.user.id);
-
-        if (vehiclesError) {
-          throw new Error(
-            `Vozidlá sa nepodarilo načítať: ${vehiclesError.message}`
-          );
-        }
-
-        const matchedVehicle = vehicles?.find(
-          (vehicle) => normalizeSpz(vehicle.spz) === normalizedAssignmentSpz
-        );
-
-        if (!matchedVehicle) {
-          throw new Error(
-            `Vozidlo so ŠPZ "${assignmentVehicleSpz}" sa nenašlo. Skontroluj ŠPZ alebo ho najprv pridaj medzi vozidlá.`
-          );
-        }
-
-        vehicleId = matchedVehicle.id;
-        canonicalSpz = normalizeSpz(matchedVehicle.spz) ?? normalizedAssignmentSpz;
-      } else if (assignmentTarget === "machine") {
-        const trimmedMachineLabel = assignmentMachineLabel.trim();
-
-        if (!trimmedMachineLabel) {
-          throw new Error(
-            "Zadaj názov alebo označenie stroja, ku ktorému chceš dokument priradiť, alebo zvoľ iné priradenie."
-          );
-        }
-
-        const { data: machines, error: machinesError } = await supabase
-          .from("machines")
-          .select("id, name")
-          .eq("user_id", session.user.id);
-
-        if (machinesError) {
-          throw new Error(
-            `Stroje sa nepodarilo načítať: ${machinesError.message}`
-          );
-        }
-
-        const normalizedMachineLabel = normalizeText(trimmedMachineLabel);
-        const matchedMachine = machines?.find(
-          (machine) => normalizeText(machine.name) === normalizedMachineLabel
-        );
-
-        if (!matchedMachine) {
-          throw new Error(
-            `Stroj "${assignmentMachineLabel}" sa nenašiel. Skontroluj názov alebo ho najprv pridaj medzi stroje.`
-          );
-        }
-
-        machineId = matchedMachine.id;
-        machineLabel = matchedMachine.name ?? trimmedMachineLabel;
-        canonicalSpz = null;
-      }
-      // assignmentTarget === "none" (alebo nezvolené): žiadne vozidlo ani
-      // stroj sa nepriraďuje, rozpoznaná ŠPZ z dokumentu (ak nejaká je) sa
-      // naďalej uloží ako informačný text v poli spz.
+      // Vážny lístok / dodací list: priradenie k vozidlu je VÝHRADNE
+      // automatické podľa ŠPZ, ktorú rozpoznala AI (žiadne ručné
+      // "Chcete dokument priradiť?" pre tento typ). Ak vozidlo s danou
+      // ŠPZ v module Vozidlá neexistuje, uloženie NESMIE zlyhať — dokument
+      // sa uloží so ŠPZ ako textom a vehicle_id zostane null.
+      // resolveVehicleIdBySpz nikdy nevyhadzuje chybu.
+      const { vehicleId, canonicalSpz } = await resolveVehicleIdBySpz(
+        session.user.id,
+        result.spz
+      );
+      // Vážny lístok/dodací list nemá ručné priradenie k stroju.
+      const machineId: string | null = null;
+      const machineLabel: string | null = null;
 
       let photoPath: string | null = null;
 
@@ -1329,9 +1344,60 @@ const currentWeightValidation = result
               </p>
             ) : null}
 
-            {/* Priradenie MUSÍ byť v tom istom bloku a NAD tlačidlom
-                "Uložiť do evidencie" — inak si používateľ môže kliknúť
-                uložiť skôr, než sa k priradeniu vôbec dostane. */}
+            {/* Vážny lístok/dodací list nemá ručné priradenie — vozidlo sa
+                dohľadáva automaticky podľa ŠPZ priamo v saveEvidence(). */}
+            <button
+              onClick={saveEvidence}
+              disabled={
+                isSaving ||
+                planUsageLoading ||
+                isPlanLimited ||
+                Boolean(currentWeightValidation?.invalidFields.length)
+              }
+              className="mt-4 w-full rounded-2xl bg-blue-600 px-5 py-4 text-lg font-black text-white disabled:opacity-60"
+            >
+              {isSaving ? "Ukladám..." : "💾 Uložiť do evidencie"}
+            </button>
+          </div>
+          )}
+
+        {otherResult && scanDocumentType && (
+          <div className="mt-8 space-y-4 rounded-3xl bg-slate-50 p-6">
+            <h2 className="text-2xl font-black text-slate-950">
+              Načítané údaje — {DOCUMENT_TYPE_LABELS[scanDocumentType]}
+            </h2>
+
+            {otherResult.reviewStatus === "needs_review" && (
+              <p className="rounded-xl bg-amber-100 px-4 py-3 text-sm font-bold text-amber-900">
+                ⚠️ Tento dokument potrebuje kontrolu — AI si nie je istá
+                niektorými údajmi.
+              </p>
+            )}
+
+            {scanDocumentType !== "weigh_ticket" &&
+              scanDocumentType !== "delivery_note" &&
+              REVIEW_ONLY_FIELD_LABELS[scanDocumentType].map(
+                ([field, label]) => (
+                  <div key={field}>
+                    <label className="text-sm font-bold text-slate-600">
+                      {label}
+                    </label>
+                    <input
+                      value={otherResult[field] ?? ""}
+                      onChange={(e) => updateOtherResult(field, e.target.value)}
+                      className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 outline-none"
+                    />
+                  </div>
+                )
+              )}
+
+            {/* Všeobecný mechanizmus ručného priradenia (Vozidlo / Stroj /
+                Bez priradenia) pre dokumenty bez jednoznačnej ŠPZ — faktúra,
+                bloček, PZP/poistná zmluva, servisný doklad a pod. Ukladanie
+                tohto typu dokumentu ešte nie je zapojené (pozri disclaimer
+                nižšie), takže výber sa zatiaľ nikam neposiela; pripravené na
+                napojenie na resolveVehicleIdBySpz / resolveMachineIdByLabel
+                v momente, keď sa pre tieto typy doplní save flow. */}
             <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5">
               <h3 className="text-lg font-black text-slate-950">
                 Chcete dokument priradiť?
@@ -1402,63 +1468,10 @@ const currentWeightValidation = result
               )}
             </div>
 
-            <button
-              onClick={saveEvidence}
-              disabled={
-                isSaving ||
-                planUsageLoading ||
-                isPlanLimited ||
-                Boolean(currentWeightValidation?.invalidFields.length) ||
-                !assignmentTarget
-              }
-              className="mt-4 w-full rounded-2xl bg-blue-600 px-5 py-4 text-lg font-black text-white disabled:opacity-60"
-            >
-              {isSaving
-                ? "Ukladám..."
-                : assignmentTarget === "vehicle"
-                  ? `💾 Uložiť k vozidlu${assignmentVehicleSpz ? ` (${assignmentVehicleSpz})` : ""}`
-                  : assignmentTarget === "machine"
-                    ? `💾 Uložiť k stroju${assignmentMachineLabel ? ` (${assignmentMachineLabel})` : ""}`
-                    : assignmentTarget === "none"
-                      ? "💾 Uložiť bez priradenia"
-                      : "💾 Najprv zvoľ priradenie"}
-            </button>
-          </div>
-          )}
-
-        {otherResult && scanDocumentType && (
-          <div className="mt-8 space-y-4 rounded-3xl bg-slate-50 p-6">
-            <h2 className="text-2xl font-black text-slate-950">
-              Načítané údaje — {DOCUMENT_TYPE_LABELS[scanDocumentType]}
-            </h2>
-
-            {otherResult.reviewStatus === "needs_review" && (
-              <p className="rounded-xl bg-amber-100 px-4 py-3 text-sm font-bold text-amber-900">
-                ⚠️ Tento dokument potrebuje kontrolu — AI si nie je istá
-                niektorými údajmi.
-              </p>
-            )}
-
-            {scanDocumentType !== "weigh_ticket" &&
-              scanDocumentType !== "delivery_note" &&
-              REVIEW_ONLY_FIELD_LABELS[scanDocumentType].map(
-                ([field, label]) => (
-                  <div key={field}>
-                    <label className="text-sm font-bold text-slate-600">
-                      {label}
-                    </label>
-                    <input
-                      value={otherResult[field] ?? ""}
-                      onChange={(e) => updateOtherResult(field, e.target.value)}
-                      className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 outline-none"
-                    />
-                  </div>
-                )
-              )}
-
             <p className="rounded-xl bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-800">
               Ukladanie tohto typu dokumentu bude dostupné v nasledujúcej
-              aktualizácii AI Inboxu. Zatiaľ si údaje môžeš iba skontrolovať.
+              aktualizácii AI Inboxu. Zatiaľ si údaje aj priradenie môžeš iba
+              skontrolovať.
             </p>
 
             <button
