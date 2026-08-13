@@ -49,6 +49,7 @@ const ALLOWED_DOCUMENT_TYPES = [
   "delivery_note",
   "invoice",
   "receipt",
+  "insurance",
   "service_document",
   "other",
 ] as const;
@@ -76,6 +77,7 @@ const CRITICAL_FIELDS_BY_TYPE: Record<DocumentType, readonly string[]> = {
   delivery_note: [],
   invoice: ["totalAmount"],
   receipt: ["totalAmount"],
+  insurance: ["policyNumber"],
   service_document: [],
   other: [],
 };
@@ -85,6 +87,7 @@ const FIELDS_KEY_BY_TYPE: Record<DocumentType, string> = {
   delivery_note: "deliveryNoteFields",
   invoice: "invoiceFields",
   receipt: "receiptFields",
+  insurance: "insuranceFields",
   service_document: "serviceDocumentFields",
   other: "otherFields",
 };
@@ -245,6 +248,31 @@ const RECEIPT_FIELDS_SCHEMA = {
   ],
 } as const;
 
+const INSURANCE_FIELDS_SCHEMA = {
+  type: ["object", "null"],
+  additionalProperties: false,
+  properties: {
+    provider: { type: ["string", "null"] },
+    policyNumber: { type: ["string", "null"] },
+    insuranceType: { type: ["string", "null"] },
+    vehicleIdentifier: { type: ["string", "null"] },
+    validFrom: { type: ["string", "null"] },
+    validTo: { type: ["string", "null"] },
+    premiumAmount: { type: ["number", "null"], minimum: 0 },
+    currency: { type: ["string", "null"] },
+  },
+  required: [
+    "provider",
+    "policyNumber",
+    "insuranceType",
+    "vehicleIdentifier",
+    "validFrom",
+    "validTo",
+    "premiumAmount",
+    "currency",
+  ],
+} as const;
+
 const SERVICE_DOCUMENT_FIELDS_SCHEMA = {
   type: ["object", "null"],
   additionalProperties: false,
@@ -313,6 +341,7 @@ const DOCUMENT_SCAN_SCHEMA = {
     deliveryNoteFields: DELIVERY_NOTE_FIELDS_SCHEMA,
     invoiceFields: INVOICE_FIELDS_SCHEMA,
     receiptFields: RECEIPT_FIELDS_SCHEMA,
+    insuranceFields: INSURANCE_FIELDS_SCHEMA,
     serviceDocumentFields: SERVICE_DOCUMENT_FIELDS_SCHEMA,
     otherFields: OTHER_FIELDS_SCHEMA,
   },
@@ -327,6 +356,7 @@ const DOCUMENT_SCAN_SCHEMA = {
     "deliveryNoteFields",
     "invoiceFields",
     "receiptFields",
+    "insuranceFields",
     "serviceDocumentFields",
     "otherFields",
   ],
@@ -343,6 +373,8 @@ TYPY DOKUMENTOV
   uvedených hmotností).
 - invoice: faktúra (dodávateľ, odberateľ, suma, splatnosť).
 - receipt: pokladničný bloček (obchod, suma, dátum nákupu).
+- insurance: poistná zmluva alebo poistný certifikát vozidla/stroja (PZP,
+  havarijné poistenie a pod.) — poisťovňa, číslo zmluvy, platnosť, poistné.
 - service_document: servisný doklad vozidla alebo stroja (fotografia/sken
   dokladu, nie interný formulár).
 - other: dokument, ktorý jednoznačne nezapadá do žiadneho z vyššie uvedených.
@@ -350,9 +382,10 @@ TYPY DOKUMENTOV
 KRITICKÉ PRAVIDLO — PRESNE JEDEN FIELDS OBJEKT
 Vyplň iba ten fields objekt, ktorý zodpovedá documentType (weighTicketFields
 pre weigh_ticket, deliveryNoteFields pre delivery_note, invoiceFields pre
-invoice, receiptFields pre receipt, serviceDocumentFields pre
-service_document, otherFields pre other). Všetkých ostatných päť fields
-objektov MUSÍ byť null. Nikdy nevypĺňaj viac než jeden naraz.
+invoice, receiptFields pre receipt, insuranceFields pre insurance,
+serviceDocumentFields pre service_document, otherFields pre other). Všetkých
+ostatných šesť fields objektov MUSÍ byť null. Nikdy nevypĺňaj viac než jeden
+naraz.
 
 ZÁSADA MAPOVANIA (platí pre všetky typy)
 - Pole neurčuj iba podľa pozície textu na stránke. Použi význam labelu, jeho
@@ -492,6 +525,24 @@ podľa toho, v akom jazyku je zvyšok dokumentu.
   čitateľný, inak null.
 - vehicleOrMachineIdentifier vráť iba ak dokument jasne odkazuje na
   konkrétne vozidlo (SPZ) alebo stroj (sériové číslo); inak null.
+
+== INSURANCE ==
+- provider je názov poisťovne (napr. Allianz, Generali, Kooperativa); inak
+  null.
+- policyNumber je číslo poistnej zmluvy/certifikátu presne tak, ako je
+  vytlačené (Číslo zmluvy, Číslo poistky, Policy number, Vertragsnummer);
+  inak null.
+- insuranceType je druh poistenia tak, ako je uvedený na dokumente (napr.
+  "PZP", "havarijné poistenie", "Kasko"); nevymýšľaj skratku, ak nie je na
+  dokumente uvedená.
+- vehicleIdentifier vráť iba ak dokument jasne odkazuje na konkrétne
+  vozidlo (SPZ) alebo stroj (sériové/výrobné číslo); inak null.
+- validFrom a validTo (platnosť poistenia "od"/"do") vráť ako YYYY-MM-DD,
+  alebo null pri nejednoznačnom dátume.
+- premiumAmount je výška poistného (celkové alebo splátka podľa toho, čo je
+  na dokumente jasne označené ako suma poistného) ako číslo bez symbolu
+  meny, alebo null. currency vráť ako 3-písmenový kód, iba ak je jednoznačne
+  čitateľný, inak null.
 
 VŠEOBECNÉ
 - rawText zachová čo najviac relevantného textu vrátane labelov a hodnôt,
@@ -778,6 +829,19 @@ function normalizeReceiptFields(data: Record<string, unknown>) {
   };
 }
 
+function normalizeInsuranceFields(data: Record<string, unknown>) {
+  return {
+    provider: nullableText(data.provider),
+    policyNumber: nullableText(data.policyNumber),
+    insuranceType: nullableText(data.insuranceType),
+    vehicleIdentifier: nullableText(data.vehicleIdentifier),
+    validFrom: nullableText(data.validFrom),
+    validTo: nullableText(data.validTo),
+    premiumAmount: toFiniteNumberOrNull(data.premiumAmount, { min: 0 }),
+    currency: nullableText(data.currency),
+  };
+}
+
 function normalizeServiceDocumentFields(data: Record<string, unknown>) {
   return {
     provider: nullableText(data.provider),
@@ -979,6 +1043,12 @@ export async function POST(req: Request) {
             (rawData.receiptFields as Record<string, unknown>) ?? {}
           )
         : null;
+    const insuranceFields =
+      documentType === "insurance"
+        ? normalizeInsuranceFields(
+            (rawData.insuranceFields as Record<string, unknown>) ?? {}
+          )
+        : null;
     const serviceDocumentFields =
       documentType === "service_document"
         ? normalizeServiceDocumentFields(
@@ -1075,6 +1145,7 @@ export async function POST(req: Request) {
       deliveryNoteFields ??
       invoiceFields ??
       receiptFields ??
+      insuranceFields ??
       serviceDocumentFields ??
       otherFields;
 
@@ -1128,6 +1199,7 @@ export async function POST(req: Request) {
         deliveryNoteFields,
         invoiceFields,
         receiptFields,
+        insuranceFields,
         serviceDocumentFields,
         otherFields,
       },

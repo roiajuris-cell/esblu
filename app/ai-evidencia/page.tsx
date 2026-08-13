@@ -27,6 +27,7 @@ type ScanDocumentType =
   | "delivery_note"
   | "invoice"
   | "receipt"
+  | "insurance"
   | "service_document"
   | "other";
 
@@ -35,17 +36,37 @@ const DOCUMENT_TYPE_LABELS: Record<ScanDocumentType, string> = {
   delivery_note: "dodací list",
   invoice: "faktúra",
   receipt: "bloček",
+  insurance: "PZP / poistná zmluva",
   service_document: "servisný doklad",
   other: "dokument na kontrolu",
 };
 
-// Polia pre typy, ktoré sa v tejto etape ešte neukladajú (documents tabuľka
-// ešte nie je napojená) — iba na zobrazenie/kontrolu, s SK popiskami podľa
-// zadania.
-const REVIEW_ONLY_FIELD_LABELS: Record<
-  Exclude<ScanDocumentType, "weigh_ticket" | "delivery_note">,
-  [string, string][]
-> = {
+// Typy dokumentov, ktoré sa ukladajú cez documents/document_links (druhý,
+// všeobecný AI Inbox model — pozri saveOtherDocument nižšie), s ručným
+// priradením k vozidlu/stroju. Vážny lístok a dodací list majú vlastný,
+// nezávislý flow (ai_evidence, automatické priradenie podľa ŠPZ).
+type OtherDocumentType = Exclude<
+  ScanDocumentType,
+  "weigh_ticket" | "delivery_note"
+>;
+
+// Riadok public.documents (s embedovaným public.document_links) tak, ako ho
+// vracia .select("*, document_links(*)") — pozri loadOtherDocuments nižšie.
+type OtherDocumentRow = {
+  id: string;
+  document_type: string | null;
+  status: string | null;
+  created_at: string | null;
+  extracted_fields: Record<string, unknown> | null;
+  storage_bucket: string | null;
+  storage_path: string | null;
+  document_links?: { vehicle_id: string | null; machine_id: string | null }[];
+};
+
+// SK popisky polí pre zobrazenie/editáciu v UI aj pre detail uloženého
+// dokumentu (documents.extracted_fields má rovnaký tvar ako tieto fields
+// objekty z /api/scan-document, takže rovnaká mapa funguje pre obe miesta).
+const REVIEW_ONLY_FIELD_LABELS: Record<OtherDocumentType, [string, string][]> = {
   invoice: [
     ["supplier", "Dodávateľ"],
     ["customer", "Zákazník"],
@@ -65,6 +86,16 @@ const REVIEW_ONLY_FIELD_LABELS: Record<
     ["currency", "Mena"],
     ["paymentMethod", "Spôsob platby"],
     ["category", "Kategória"],
+  ],
+  insurance: [
+    ["provider", "Poisťovňa"],
+    ["policyNumber", "Číslo zmluvy"],
+    ["insuranceType", "Druh poistenia"],
+    ["vehicleIdentifier", "Vozidlo / stroj"],
+    ["validFrom", "Platnosť od"],
+    ["validTo", "Platnosť do"],
+    ["premiumAmount", "Poistné"],
+    ["currency", "Mena"],
   ],
   service_document: [
     ["provider", "Poskytovateľ servisu"],
@@ -490,6 +521,8 @@ export default function AiEvidenciaPage() {
   const [selectedRecord, setSelectedRecord] = useState<any>(null);
   const [documentPhotoUrl, setDocumentPhotoUrl] =
   useState<string | null>(null);
+  const [otherDocumentPhotoUrl, setOtherDocumentPhotoUrl] =
+    useState<string | null>(null);
   const [selectedSpz, setSelectedSpz] = useState<string | null>(null);
   const [exportLoading, setExportLoading] = useState(false);
   const [exportFeedback, setExportFeedback] = useState<{
@@ -498,14 +531,33 @@ export default function AiEvidenciaPage() {
   } | null>(null);
   const [scanDocumentType, setScanDocumentType] =
     useState<ScanDocumentType | null>(null);
-  const [otherResult, setOtherResult] = useState<Record<string, any> | null>(
-    null
-  );
+  const [otherResult, setOtherResult] = useState<{
+    fields: Record<string, any>;
+    reviewStatus: string | null;
+    confidenceScore: number | null;
+    rawText: string | null;
+    documentLanguage: string | null;
+    fieldConfidence: { field: string; confidence: number }[];
+  } | null>(null);
   const [assignmentTarget, setAssignmentTarget] = useState<
     "vehicle" | "machine" | "none" | null
   >(null);
-  const [assignmentVehicleSpz, setAssignmentVehicleSpz] = useState("");
-  const [assignmentMachineLabel, setAssignmentMachineLabel] = useState("");
+  // Výber z existujúcich vozidiel/strojov (dropdown, nie voľný text) —
+  // používateľ nemusí ručne prepisovať identifikátor entity, ktorá už v
+  // databáze existuje.
+  const [selectedVehicleId, setSelectedVehicleId] = useState("");
+  const [selectedMachineId, setSelectedMachineId] = useState("");
+  const [vehicleOptions, setVehicleOptions] = useState<
+    { id: string; spz: string | null }[]
+  >([]);
+  const [machineOptions, setMachineOptions] = useState<
+    { id: string; name: string | null }[]
+  >([]);
+  const [isSavingOtherDocument, setIsSavingOtherDocument] = useState(false);
+  const [otherDocuments, setOtherDocuments] = useState<OtherDocumentRow[]>([]);
+  const [selectedOtherDocument, setSelectedOtherDocument] =
+    useState<OtherDocumentRow | null>(null);
+  const saveOtherDocumentInProgressRef = useRef(false);
   const saveInProgressRef = useRef(false);
   const previewObjectUrlRef = useRef<string | null>(null);
   const {
@@ -685,9 +737,6 @@ const summaryBySpz = records.reduce<Record<string, EvidenceSummary>>((groups, re
       setSelectedFile(compressedFile);
       setScanDocumentType(documentType);
 
-      let prefillSpz = "";
-      let prefillMachine = "";
-
       if (documentType === "weigh_ticket" || documentType === "delivery_note") {
         const fields =
           (documentType === "weigh_ticket"
@@ -710,13 +759,17 @@ const summaryBySpz = records.reduce<Record<string, EvidenceSummary>>((groups, re
           movementType: resolvedMovementType || "",
         });
 
-        prefillSpz = normalizedSpz || "";
+        setAssignmentTarget(null);
+        setSelectedVehicleId("");
+        setSelectedMachineId("");
       } else {
         const fieldsKey =
           documentType === "invoice"
             ? "invoiceFields"
             : documentType === "receipt"
             ? "receiptFields"
+            : documentType === "insurance"
+            ? "insuranceFields"
             : documentType === "service_document"
             ? "serviceDocumentFields"
             : "otherFields";
@@ -724,27 +777,64 @@ const summaryBySpz = records.reduce<Record<string, EvidenceSummary>>((groups, re
 
         setResult(null);
         setOtherResult({
-          ...fields,
+          fields,
           reviewStatus: scanned.reviewStatus,
           confidenceScore: scanned.confidenceScore,
           rawText: scanned.rawText,
+          documentLanguage: scanned.documentLanguage,
+          fieldConfidence: Array.isArray(scanned.fieldConfidence)
+            ? scanned.fieldConfidence
+            : [],
         });
 
-        if (documentType === "service_document") {
-          const identifier = fields.vehicleOrMachineIdentifier || "";
-          prefillSpz = identifier;
-          prefillMachine = identifier;
+        // Ak dokument obsahuje identifikátor vozidla/stroja (dnes iba
+        // service_document, prípadne insurance.vehicleIdentifier), skús ho
+        // bez zásahu používateľa spárovať s existujúcim vozidlom alebo
+        // strojom podľa už načítaných zoznamov — nikdy nenúť ručné
+        // prepisovanie, ak entita už existuje. Pri nejednoznačnosti alebo
+        // chýbajúcom identifikátore ostáva priradenie nezvolené.
+        const identifier =
+          (documentType === "service_document" &&
+            typeof fields.vehicleOrMachineIdentifier === "string" &&
+            fields.vehicleOrMachineIdentifier) ||
+          (documentType === "insurance" &&
+            typeof fields.vehicleIdentifier === "string" &&
+            fields.vehicleIdentifier) ||
+          "";
+
+        const normalizedIdentifierSpz = identifier ? normalizeSpz(identifier) : null;
+        const matchedVehicle = normalizedIdentifierSpz
+          ? vehicleOptions.find(
+              (vehicle) => normalizeSpz(vehicle.spz) === normalizedIdentifierSpz
+            )
+          : undefined;
+
+        const normalizedIdentifierLabel = identifier
+          ? normalizeMachineLabel(identifier)
+          : "";
+        const matchedMachine =
+          !matchedVehicle && normalizedIdentifierLabel
+            ? machineOptions.find(
+                (machine) =>
+                  normalizeMachineLabel(machine.name) === normalizedIdentifierLabel
+              )
+            : undefined;
+
+        if (matchedVehicle) {
+          setAssignmentTarget("vehicle");
+          setSelectedVehicleId(matchedVehicle.id);
+          setSelectedMachineId("");
+        } else if (matchedMachine) {
+          setAssignmentTarget("machine");
+          setSelectedMachineId(matchedMachine.id);
+          setSelectedVehicleId("");
+        } else {
+          setAssignmentTarget(null);
+          setSelectedVehicleId("");
+          setSelectedMachineId("");
         }
       }
 
-      // Vážny lístok/dodací list: žiadne ručné priradenie — vozidlo sa
-      // dohľadá automaticky podľa ŠPZ priamo pri ukladaní (saveEvidence).
-      // Ostatné typy dokumentov: ručné priradenie (Vozidlo/Stroj/Bez
-      // priradenia) ostáva nezvolené, kým si ho používateľ výslovne
-      // nezvolí — ukladanie týchto typov navyše ešte nie je implementované.
-      setAssignmentTarget(null);
-      setAssignmentVehicleSpz(prefillSpz);
-      setAssignmentMachineLabel(prefillMachine);
       clearImagePreview(false);
     } catch (processingError: unknown) {
       setError(
@@ -771,8 +861,8 @@ const summaryBySpz = records.reduce<Record<string, EvidenceSummary>>((groups, re
     setOtherResult(null);
     setScanDocumentType(null);
     setAssignmentTarget(null);
-    setAssignmentVehicleSpz("");
-    setAssignmentMachineLabel("");
+    setSelectedVehicleId("");
+    setSelectedMachineId("");
   }
 
   function updateResult(field: string, value: string) {
@@ -783,7 +873,9 @@ const summaryBySpz = records.reduce<Record<string, EvidenceSummary>>((groups, re
   }
 
   function updateOtherResult(field: string, value: string) {
-    setOtherResult((prev) => (prev ? { ...prev, [field]: value } : prev));
+    setOtherResult((prev) =>
+      prev ? { ...prev, fields: { ...prev.fields, [field]: value } } : prev
+    );
   }
 
 function normalizeText(value?: string | null) {
@@ -1002,6 +1094,201 @@ review_status: reviewStatus,
       setIsSaving(false);
     }
   }
+  // Uloženie ostatných typov dokumentov (faktúra, bloček, PZP/poistná
+  // zmluva, servisný doklad, iné) — nový, samostatný save flow cez
+  // public.documents + public.document_links. Vážneho lístka/dodacieho
+  // listu (ai_evidence, saveEvidence vyššie) sa vôbec netýka.
+  async function saveOtherDocument() {
+    if (
+      !otherResult ||
+      !scanDocumentType ||
+      scanDocumentType === "weigh_ticket" ||
+      scanDocumentType === "delivery_note" ||
+      saveOtherDocumentInProgressRef.current
+    ) {
+      return;
+    }
+
+    if (!assignmentTarget) {
+      setError(
+        "Najprv zvoľ, či dokument priradiť k vozidlu, stroju, alebo bez priradenia."
+      );
+      return;
+    }
+
+    if (assignmentTarget === "vehicle" && !selectedVehicleId) {
+      setError("Vyber vozidlo, ku ktorému chceš dokument priradiť.");
+      return;
+    }
+
+    if (assignmentTarget === "machine" && !selectedMachineId) {
+      setError("Vyber stroj, ku ktorému chceš dokument priradiť.");
+      return;
+    }
+
+    saveOtherDocumentInProgressRef.current = true;
+    setIsSavingOtherDocument(true);
+    setError("");
+
+    let uploadedPath: string | null = null;
+    let documentInserted = false;
+    let documentId: string | null = null;
+
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session) {
+        throw new Error("Nie si prihlásený.");
+      }
+
+      // Vozidlo/stroj sa vyberá výhradne z už načítaného zoznamu vlastných
+      // entít používateľa (dropdown) — čerstvá kontrola členstva tesne
+      // pred uložením iba pre prípad, že bola medzičasom zmazaná.
+      if (
+        assignmentTarget === "vehicle" &&
+        !vehicleOptions.some((vehicle) => vehicle.id === selectedVehicleId)
+      ) {
+        throw new Error(
+          "Vybrané vozidlo už nie je dostupné. Obnov stránku a skús výber zopakovať."
+        );
+      }
+
+      if (
+        assignmentTarget === "machine" &&
+        !machineOptions.some((machine) => machine.id === selectedMachineId)
+      ) {
+        throw new Error(
+          "Vybraný stroj už nie je dostupný. Obnov stránku a skús výber zopakovať."
+        );
+      }
+
+      documentId = crypto.randomUUID();
+      let storagePath: string | null = null;
+
+      if (selectedFile) {
+        const uniqueName = `${Date.now()}-${crypto.randomUUID()}.webp`;
+        storagePath = `${session.user.id}/${documentId}/${uniqueName}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from("ai-inbox-documents")
+          .upload(storagePath, selectedFile, {
+            contentType: selectedFile.type || "image/webp",
+            cacheControl: "3600",
+            upsert: false,
+          });
+
+        if (uploadError) {
+          throw new Error(`Fotku sa nepodarilo uložiť: ${uploadError.message}`);
+        }
+
+        uploadedPath = storagePath;
+      }
+
+      const status =
+        otherResult.reviewStatus === "needs_review" ? "needs_review" : "confirmed";
+
+      const { error: insertError } = await supabase.from("documents").insert({
+        id: documentId,
+        user_id: session.user.id,
+        storage_bucket: "ai-inbox-documents",
+        storage_path: storagePath,
+        original_filename: fileName || null,
+        mime_type: selectedFile?.type || null,
+        file_size: selectedFile?.size ?? null,
+        document_type: scanDocumentType,
+        status,
+        ai_raw_output: {
+          documentType: scanDocumentType,
+          confidenceScore: otherResult.confidenceScore,
+          reviewStatus: otherResult.reviewStatus,
+          documentLanguage: otherResult.documentLanguage,
+          fieldConfidence: otherResult.fieldConfidence,
+          fields: otherResult.fields,
+        },
+        extracted_fields: otherResult.fields,
+        field_confidence: otherResult.fieldConfidence,
+      });
+
+      if (insertError) throw insertError;
+
+      documentInserted = true;
+
+      // Priradenie k vozidlu/stroju — samostatný insert do document_links,
+      // aby zlyhanie priradenia (napr. medzičasom zmazaná entita) bolo
+      // odlíšiteľné od zlyhania uloženia samotného dokumentu.
+      if (assignmentTarget === "vehicle" || assignmentTarget === "machine") {
+        const { error: linkError } = await supabase
+          .from("document_links")
+          .insert({
+            user_id: session.user.id,
+            document_id: documentId,
+            vehicle_id: assignmentTarget === "vehicle" ? selectedVehicleId : null,
+            machine_id: assignmentTarget === "machine" ? selectedMachineId : null,
+            link_type: "primary",
+            confirmed_by_user: true,
+          });
+
+        if (linkError) {
+          console.error("Priradenie dokumentu sa nepodarilo uložiť:", linkError);
+          resetScanReview();
+          setSelectedFile(null);
+          setFileName("");
+          await loadOtherDocuments();
+          setError(
+            "Dokument bol uložený, ale priradenie k vozidlu/stroju sa nepodarilo uložiť. Otvor dokument v zozname a priraď ho znova."
+          );
+          return;
+        }
+      }
+
+      // Audit záznam — best effort, nikdy neblokuje ani neoznamuje chybu
+      // ako zlyhanie hlavného uloženia.
+      const { error: logError } = await supabase
+        .from("document_review_log")
+        .insert({
+          document_id: documentId,
+          document_ref: documentId,
+          user_id: session.user.id,
+          action: "created",
+        });
+
+      if (logError) {
+        console.error(
+          "Záznam do document_review_log sa nepodarilo uložiť:",
+          logError
+        );
+      }
+
+      resetScanReview();
+      setSelectedFile(null);
+      setFileName("");
+      await loadOtherDocuments();
+      alert("Dokument bol uložený do AI Inboxu.");
+    } catch (saveError: unknown) {
+      if (uploadedPath && !documentInserted) {
+        const { error: cleanupError } = await supabase.storage
+          .from("ai-inbox-documents")
+          .remove([uploadedPath]);
+
+        if (cleanupError) {
+          console.error(
+            "Insert zlyhal a osirotenú fotografiu sa nepodarilo odstrániť:",
+            cleanupError
+          );
+        }
+      }
+
+      setError(
+        saveError instanceof Error ? saveError.message : "Uloženie zlyhalo."
+      );
+    } finally {
+      saveOtherDocumentInProgressRef.current = false;
+      setIsSavingOtherDocument(false);
+    }
+  }
+
   async function deleteRecord(id: string) {
   if (!confirm("Naozaj chceš vymazať tento záznam?")) return;
 
@@ -1070,6 +1357,64 @@ review_status: reviewStatus,
     setRecords(data);
   }
 }
+
+// Vlastné vozidlá a stroje prihláseného používateľa — zdroj pre výberové
+// polia priradenia (dropdown), aby nikto nemusel ručne prepisovať
+// identifikátor entity, ktorá už v databáze existuje.
+async function loadVehicleAndMachineOptions() {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (!session) return;
+
+  const [vehiclesResult, machinesResult] = await Promise.all([
+    supabase
+      .from("vehicles")
+      .select("id, spz")
+      .eq("user_id", session.user.id)
+      .order("spz", { ascending: true }),
+    supabase
+      .from("machines")
+      .select("id, name")
+      .eq("user_id", session.user.id)
+      .order("name", { ascending: true }),
+  ]);
+
+  if (!vehiclesResult.error && vehiclesResult.data) {
+    setVehicleOptions(vehiclesResult.data);
+  }
+
+  if (!machinesResult.error && machinesResult.data) {
+    setMachineOptions(machinesResult.data);
+  }
+}
+
+// Ostatné typy dokumentov (faktúra, bloček, PZP/poistná zmluva, servisný
+// doklad, iné) — uložené v public.documents, priradenie v
+// public.document_links (real FK na documents.id, PostgREST ho preto vie
+// vnoriť priamo do selectu).
+async function loadOtherDocuments() {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (!session) return;
+
+  const { data, error } = await supabase
+    .from("documents")
+    .select("*, document_links(*)")
+    .eq("user_id", session.user.id)
+    .is("deleted_at", null)
+    .order("created_at", { ascending: false });
+
+  if (!error && data) {
+    setOtherDocuments(data);
+  } else if (error) {
+    console.error("Chyba pri načítaní ostatných dokumentov:", error);
+  }
+}
+
 useEffect(() => {
   async function loadDocumentPhoto() {
     setDocumentPhotoUrl(null);
@@ -1098,7 +1443,38 @@ useEffect(() => {
 }, [selectedRecord]);
 
 useEffect(() => {
-  loadRecords();
+  async function loadOtherDocumentPhoto() {
+    setOtherDocumentPhotoUrl(null);
+
+    if (!selectedOtherDocument?.storage_bucket || !selectedOtherDocument?.storage_path) {
+      return;
+    }
+
+    const { data, error } = await supabase.storage
+      .from(selectedOtherDocument.storage_bucket)
+      .createSignedUrl(selectedOtherDocument.storage_path, 3600);
+
+    if (error) {
+      console.error("Chyba pri načítaní fotografie dokumentu:", error);
+      return;
+    }
+
+    setOtherDocumentPhotoUrl(data.signedUrl);
+  }
+
+  loadOtherDocumentPhoto();
+}, [selectedOtherDocument]);
+
+useEffect(() => {
+  async function initialize() {
+    await Promise.all([
+      loadRecords(),
+      loadVehicleAndMachineOptions(),
+      loadOtherDocuments(),
+    ]);
+  }
+
+  initialize();
 }, []);
 
 useEffect(() => {
@@ -1119,6 +1495,57 @@ const currentWeightValidation = result
       unit: result.unit,
     })
   : null;
+
+// Priradenie uloženého dokumentu (documents + document_links) na
+// zobraziteľný text — "Vozidlo — [ŠPZ]", "Stroj — [názov]" alebo
+// "Bez priradenia". Vychádza z už načítaných vehicleOptions/machineOptions,
+// takže nevyžaduje ďalší dotaz do DB.
+function describeDocumentAssignment(doc: OtherDocumentRow): string {
+  const link = Array.isArray(doc?.document_links) ? doc.document_links[0] : null;
+  if (!link) return "Bez priradenia";
+
+  if (link.vehicle_id) {
+    const vehicle = vehicleOptions.find((v) => v.id === link.vehicle_id);
+    return `Vozidlo — ${vehicle ? vehicle.spz : "neznáme vozidlo"}`;
+  }
+
+  if (link.machine_id) {
+    const machine = machineOptions.find((m) => m.id === link.machine_id);
+    return `Stroj — ${machine ? machine.name : "neznámy stroj"}`;
+  }
+
+  return "Bez priradenia";
+}
+
+// Krátke zhrnutie dokumentu pre kartu v zozname "Ostatné dokumenty" —
+// zloží najvýstižnejšie z už uložených extracted_fields podľa typu
+// dokumentu, nič nevymýšľa nad rámec toho, čo AI endpoint vrátil.
+function summarizeDocument(doc: OtherDocumentRow): string {
+  const fields = doc?.extracted_fields || {};
+  const type = doc?.document_type as OtherDocumentType | undefined;
+
+  const primary =
+    (fields.supplier as string) ||
+    (fields.merchant as string) ||
+    (fields.provider as string) ||
+    (fields.customer as string) ||
+    "";
+
+  const amount =
+    (fields.totalAmount as string | number) ||
+    (fields.premiumAmount as string | number) ||
+    (fields.cost as string | number) ||
+    "";
+  const currency = (fields.currency as string) || "";
+
+  const parts = [primary, amount ? `${amount} ${currency}`.trim() : ""].filter(
+    Boolean
+  );
+
+  if (parts.length > 0) return parts.join(" • ");
+
+  return type ? DOCUMENT_TYPE_LABELS[type] : "Dokument";
+}
 
   return (
     <main
@@ -1361,7 +1788,10 @@ const currentWeightValidation = result
           </div>
           )}
 
-        {otherResult && scanDocumentType && (
+        {otherResult &&
+          scanDocumentType &&
+          scanDocumentType !== "weigh_ticket" &&
+          scanDocumentType !== "delivery_note" && (
           <div className="mt-8 space-y-4 rounded-3xl bg-slate-50 p-6">
             <h2 className="text-2xl font-black text-slate-950">
               Načítané údaje — {DOCUMENT_TYPE_LABELS[scanDocumentType]}
@@ -1374,30 +1804,24 @@ const currentWeightValidation = result
               </p>
             )}
 
-            {scanDocumentType !== "weigh_ticket" &&
-              scanDocumentType !== "delivery_note" &&
-              REVIEW_ONLY_FIELD_LABELS[scanDocumentType].map(
-                ([field, label]) => (
-                  <div key={field}>
-                    <label className="text-sm font-bold text-slate-600">
-                      {label}
-                    </label>
-                    <input
-                      value={otherResult[field] ?? ""}
-                      onChange={(e) => updateOtherResult(field, e.target.value)}
-                      className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 outline-none"
-                    />
-                  </div>
-                )
-              )}
+            {REVIEW_ONLY_FIELD_LABELS[scanDocumentType].map(
+              ([field, label]) => (
+                <div key={field}>
+                  <label className="text-sm font-bold text-slate-600">
+                    {label}
+                  </label>
+                  <input
+                    value={otherResult.fields[field] ?? ""}
+                    onChange={(e) => updateOtherResult(field, e.target.value)}
+                    className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 outline-none"
+                  />
+                </div>
+              )
+            )}
 
-            {/* Všeobecný mechanizmus ručného priradenia (Vozidlo / Stroj /
-                Bez priradenia) pre dokumenty bez jednoznačnej ŠPZ — faktúra,
-                bloček, PZP/poistná zmluva, servisný doklad a pod. Ukladanie
-                tohto typu dokumentu ešte nie je zapojené (pozri disclaimer
-                nižšie), takže výber sa zatiaľ nikam neposiela; pripravené na
-                napojenie na resolveVehicleIdBySpz / resolveMachineIdByLabel
-                v momente, keď sa pre tieto typy doplní save flow. */}
+            {/* Priradenie MUSÍ byť pred tlačidlom Uložiť — rovnaká zásada
+                ako pri vážnom lístku, aby sa nedalo uložiť skôr, než sa
+                používateľ k priradeniu vôbec dostane. */}
             <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5">
               <h3 className="text-lg font-black text-slate-950">
                 Chcete dokument priradiť?
@@ -1442,42 +1866,96 @@ const currentWeightValidation = result
               {assignmentTarget === "vehicle" && (
                 <div>
                   <label className="text-sm font-bold text-slate-600">
-                    ŠPZ vozidla
+                    Vozidlo
                   </label>
-                  <input
-                    value={assignmentVehicleSpz}
-                    onChange={(e) => setAssignmentVehicleSpz(e.target.value)}
-                    placeholder="napr. BA123AB"
+                  <select
+                    value={selectedVehicleId}
+                    onChange={(e) => setSelectedVehicleId(e.target.value)}
                     className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 outline-none"
-                  />
+                  >
+                    <option value="">— vyber vozidlo —</option>
+                    {vehicleOptions.map((vehicle) => (
+                      <option key={vehicle.id} value={vehicle.id}>
+                        {vehicle.spz || "Bez ŠPZ"}
+                      </option>
+                    ))}
+                  </select>
+                  {vehicleOptions.length === 0 && (
+                    <p className="mt-1 text-xs text-slate-500">
+                      Zatiaľ nemáš pridané žiadne vozidlo v module Vozidlá.
+                    </p>
+                  )}
                 </div>
               )}
 
               {assignmentTarget === "machine" && (
                 <div>
                   <label className="text-sm font-bold text-slate-600">
-                    Názov alebo označenie stroja
+                    Stroj
                   </label>
-                  <input
-                    value={assignmentMachineLabel}
-                    onChange={(e) => setAssignmentMachineLabel(e.target.value)}
-                    placeholder="napr. Bager JCB 3CX"
+                  <select
+                    value={selectedMachineId}
+                    onChange={(e) => setSelectedMachineId(e.target.value)}
                     className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 outline-none"
-                  />
+                  >
+                    <option value="">— vyber stroj —</option>
+                    {machineOptions.map((machine) => (
+                      <option key={machine.id} value={machine.id}>
+                        {machine.name || "Bez názvu"}
+                      </option>
+                    ))}
+                  </select>
+                  {machineOptions.length === 0 && (
+                    <p className="mt-1 text-xs text-slate-500">
+                      Zatiaľ nemáš pridaný žiadny stroj v module Stroje.
+                    </p>
+                  )}
                 </div>
               )}
             </div>
 
-            <p className="rounded-xl bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-800">
-              Ukladanie tohto typu dokumentu bude dostupné v nasledujúcej
-              aktualizácii AI Inboxu. Zatiaľ si údaje aj priradenie môžeš iba
-              skontrolovať.
-            </p>
+            <button
+              type="button"
+              onClick={saveOtherDocument}
+              disabled={
+                isSavingOtherDocument ||
+                planUsageLoading ||
+                !assignmentTarget ||
+                (assignmentTarget === "vehicle" && !selectedVehicleId) ||
+                (assignmentTarget === "machine" && !selectedMachineId)
+              }
+              className="mt-4 w-full rounded-2xl bg-blue-600 px-5 py-4 text-lg font-black text-white disabled:opacity-60"
+            >
+              {isSavingOtherDocument
+                ? "Ukladám..."
+                : assignmentTarget === "vehicle"
+                  ? `💾 Uložiť k vozidlu${
+                      selectedVehicleId
+                        ? ` (${
+                            vehicleOptions.find((v) => v.id === selectedVehicleId)
+                              ?.spz || ""
+                          })`
+                        : ""
+                    }`
+                  : assignmentTarget === "machine"
+                    ? `💾 Uložiť k stroju${
+                        selectedMachineId
+                          ? ` (${
+                              machineOptions.find((m) => m.id === selectedMachineId)
+                                ?.name || ""
+                            })`
+                          : ""
+                      }`
+                    : assignmentTarget === "none"
+                      ? "💾 Uložiť bez priradenia"
+                      : "💾 Najprv zvoľ priradenie"}
+            </button>
 
             <button
               type="button"
               onClick={cancelPendingDocument}
-              className="mt-2 w-full rounded-2xl bg-slate-200 px-5 py-4 font-bold text-slate-800"
+              disabled={isSavingOtherDocument}
+              className="mt-2 w-full rounded-2xl bg-slate-200 px-5 py-4 font-bold text-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
             >
               Nahrať iný dokument
             </button>
@@ -1825,6 +2303,69 @@ const currentWeightValidation = result
         </p>
       )}
     </div>
+
+    <div className="mt-10">
+      <h2 className="text-2xl font-black text-slate-950">
+        Ostatné dokumenty
+      </h2>
+      <p className="mt-1 text-sm text-slate-600">
+        Faktúry, bločky, PZP, servisné doklady a ostatné dokumenty uložené cez AI Inbox.
+      </p>
+
+      {otherDocuments.length === 0 ? (
+        <p className="mt-4 rounded-xl bg-slate-100 px-4 py-3 text-sm text-slate-600">
+          Zatiaľ tu nie sú žiadne uložené dokumenty.
+        </p>
+      ) : (
+        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {otherDocuments.map((doc) => (
+            <div
+              key={doc.id}
+              className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-xs font-black uppercase tracking-wide text-blue-600">
+                    📄{" "}
+                    {DOCUMENT_TYPE_LABELS[doc.document_type as ScanDocumentType] ||
+                      doc.document_type ||
+                      "Doklad"}
+                  </p>
+
+                  <h3 className="mt-2 text-lg font-black text-slate-950">
+                    {summarizeDocument(doc)}
+                  </h3>
+                </div>
+
+                {doc.status === "needs_review" && (
+                  <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-bold text-amber-700">
+                    na kontrolu
+                  </span>
+                )}
+              </div>
+
+              <div className="mt-4 space-y-2 text-sm text-slate-600">
+                <p>🔗 {describeDocumentAssignment(doc)}</p>
+                <p>
+                  📅{" "}
+                  {doc.created_at
+                    ? new Date(doc.created_at).toLocaleDateString("sk-SK")
+                    : "Bez dátumu"}
+                </p>
+              </div>
+
+              <button
+                onClick={() => setSelectedOtherDocument(doc)}
+                className="mt-5 w-full rounded-2xl bg-blue-600 px-4 py-3 font-bold text-white hover:bg-blue-700"
+              >
+                📄 Otvoriť detail
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+
 {selectedRecord && (
   <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-3 sm:items-center sm:p-4">
     <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white p-5 shadow-2xl sm:p-8">
@@ -1910,6 +2451,96 @@ const currentWeightValidation = result
 >
   🗑 Vymazať záznam
 </button>
+    </div>
+  </div>
+)}
+{selectedOtherDocument && (
+  <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-3 sm:items-center sm:p-4">
+    <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white p-5 shadow-2xl sm:p-8">
+
+      <div className="flex items-center justify-between">
+        <h2 className="text-3xl font-black">
+          📄 Detail dokumentu
+        </h2>
+
+        <button
+          onClick={() => setSelectedOtherDocument(null)}
+          className="rounded-xl bg-slate-100 px-4 py-2"
+        >
+          ✕
+        </button>
+      </div>
+
+      <div className="mt-8 grid grid-cols-2 gap-4">
+
+        <Info
+          title="Typ"
+          value={
+            DOCUMENT_TYPE_LABELS[
+              selectedOtherDocument.document_type as ScanDocumentType
+            ] || selectedOtherDocument.document_type
+          }
+        />
+        <Info
+          title="Priradenie"
+          value={describeDocumentAssignment(selectedOtherDocument)}
+        />
+
+        {(
+          REVIEW_ONLY_FIELD_LABELS[
+            selectedOtherDocument.document_type as OtherDocumentType
+          ] || []
+        ).map(([field, label]) => (
+          <Info
+            key={field}
+            title={label}
+            value={selectedOtherDocument.extracted_fields?.[field]}
+          />
+        ))}
+
+        <Info
+          title="Vytvorené"
+          value={
+            selectedOtherDocument.created_at
+              ? new Date(selectedOtherDocument.created_at).toLocaleString("sk-SK")
+              : null
+          }
+        />
+
+      </div>
+
+      {selectedOtherDocument.storage_path && (
+        <div className="mt-5">
+          <p className="mb-2 text-sm font-bold text-slate-700">
+            Originálny dokument
+          </p>
+
+          {otherDocumentPhotoUrl ? (
+            <a
+              href={otherDocumentPhotoUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <img
+                src={otherDocumentPhotoUrl}
+                alt="Originálny dokument"
+                className="max-h-[500px] w-full rounded-2xl border border-slate-200 object-contain"
+              />
+            </a>
+          ) : (
+            <p className="text-sm text-slate-500">
+              Načítavam fotografiu...
+            </p>
+          )}
+        </div>
+      )}
+
+      <button
+        onClick={() => setSelectedOtherDocument(null)}
+        className="mt-8 w-full rounded-2xl bg-blue-600 py-4 font-bold text-white"
+      >
+        Zavrieť
+      </button>
     </div>
   </div>
 )}
