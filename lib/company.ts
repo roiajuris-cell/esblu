@@ -66,6 +66,32 @@ export function isOwnerOrAdmin(role: CompanyMemberRole | null | undefined) {
   return role === "owner" || role === "admin";
 }
 
+export type CompanyProfile = {
+  company_name: string | null;
+  logo_path: string | null;
+};
+
+/**
+ * Firemný názov + logo pre AKTÍVNEHO PRIHLÁSENÉHO POUŽÍVATEĽA, bez ohľadu na
+ * jeho rolu — owner, admin aj employee dostanú rovnaké dva údaje (branding
+ * ownera firmy), nikdy vlastný, väčšinou prázdny settings riadok. Volá
+ * public.esblu_get_company_profile() (20260814180000), ktorá company_id
+ * odvodzuje výhradne z auth.uid(). Vracia null, ak volajúci nemá aktívny
+ * membership alebo ak firma ešte nemá vyplnené meno/logo (bežný, nechybový
+ * stav — volajúci má zachovať dnešný fallback).
+ */
+export async function getCompanyProfile(): Promise<CompanyProfile | null> {
+  const { data, error } = await supabase.rpc("esblu_get_company_profile");
+
+  if (error) {
+    console.error("getCompanyProfile zlyhalo:", error.message);
+    return null;
+  }
+
+  const row = Array.isArray(data) ? data[0] : data;
+  return row ?? null;
+}
+
 export type CompanyInviteRow = {
   invite_id: string;
   email: string;

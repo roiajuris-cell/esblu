@@ -6,7 +6,7 @@ import type { ReactNode } from "react";
 import Image from "next/image"
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import { getMyActiveMembership } from "@/lib/company";
+import { getCompanyProfile, getMyActiveMembership } from "@/lib/company";
 function getGreeting() {
   const hour = new Date().getHours();
 
@@ -48,11 +48,14 @@ export default function Dashboard() {
       setVehicles([]);
       setMachines([]);
       setItems([]);
-      loadSettings(session.user.id);
+      // Bez aktívneho membershipu niet "firmy", ktorej branding by sa dal
+      // načítať (esblu_get_company_profile by aj tak nič nevrátila) —
+      // ostáva dnešný generický fallback ("ESBLU", žiadne logo).
       return;
     }
 
-    loadData(membership.company_id, session.user.id);
+    loadData(membership.company_id);
+    loadCompanyProfile();
   }
 
   async function logout() {
@@ -60,21 +63,21 @@ export default function Dashboard() {
     router.push("/login");
   }
 
-  async function loadSettings(currentUserId: string) {
-    const { data: settingsData } = await supabase
-      .from("settings")
-      .select("company_name, logo_path")
-      .eq("user_id", currentUserId)
-      .limit(1)
-      .single();
+  // Firemný názov + logo pre AKTÍVNEHO ČLENA firmy (owner/admin/employee
+  // rovnako) — nie z vlastného, väčšinou prázdneho settings riadku
+  // prihláseného používateľa. Pozri lib/company.ts a
+  // supabase/migrations/20260814180000_add_company_profile_rpc.sql.
+  async function loadCompanyProfile() {
+    const profile = await getCompanyProfile();
 
-    if (settingsData?.company_name) {
-      setCompanyName(settingsData.company_name);
+    if (profile?.company_name) {
+      setCompanyName(profile.company_name);
     }
-    if (settingsData?.logo_path) {
+
+    if (profile?.logo_path) {
       const { data: logoData } = supabase.storage
         .from("company-logos")
-        .getPublicUrl(settingsData.logo_path);
+        .getPublicUrl(profile.logo_path);
 
       setCompanyLogoUrl(logoData.publicUrl);
     } else {
@@ -82,7 +85,7 @@ export default function Dashboard() {
     }
   }
 
-  async function loadData(currentCompanyId: string, currentUserId: string) {
+  async function loadData(currentCompanyId: string) {
     const { data: vehicleData } = await supabase
       .from("vehicles")
       .select("*")
@@ -101,8 +104,6 @@ export default function Dashboard() {
     setVehicles(vehicleData || []);
     setMachines(machineData || []);
     setItems(itemData || []);
-
-    await loadSettings(currentUserId);
   }
 
   function createAlerts() {
