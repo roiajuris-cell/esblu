@@ -4,12 +4,19 @@ type Props = {
   car: any;
   onDelete: (id: string) => void;
   onEdit: (car: any) => void;
+  // Employee nesmie podľa RLS upraviť ani zmazať vozidlo (vehicles_update_
+  // owner_admin / vehicles_delete_owner_admin, 20260814160000) — tlačidlá sa
+  // preto pre employee vôbec nezobrazujú, namiesto toho, aby po kliknutí
+  // vždy skončili chybou z RLS. Default true, aby sa správanie nezmenilo
+  // nikde, odkiaľ by sa táto prop nepreposlala.
+  canManage?: boolean;
 };
 
 export default function VehicleCard({
   car,
   onDelete,
   onEdit,
+  canManage = true,
 }: Props) {
   return (
     <div className="rounded-2xl border bg-white p-5 shadow-sm">
@@ -37,19 +44,23 @@ export default function VehicleCard({
           Detail
         </Link>
 
-        <button
-          onClick={() => onEdit(car)}
-          className="rounded-xl bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
-        >
-          Upraviť
-        </button>
+        {canManage && (
+          <button
+            onClick={() => onEdit(car)}
+            className="rounded-xl bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
+          >
+            Upraviť
+          </button>
+        )}
 
-        <button
-          onClick={() => onDelete(car.id)}
-          className="rounded-xl bg-red-600 px-4 py-2 text-white hover:bg-red-700"
-        >
-          Vymazať
-        </button>
+        {canManage && (
+          <button
+            onClick={() => onDelete(car.id)}
+            className="rounded-xl bg-red-600 px-4 py-2 text-white hover:bg-red-700"
+          >
+            Vymazať
+          </button>
+        )}
       </div>
     </div>
   );

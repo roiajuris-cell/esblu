@@ -13,6 +13,7 @@ import VehicleCard from "../components/VehicleCard";
 import BackLink from "../components/BackLink";
 import {
   getMyActiveMembership,
+  isOwnerOrAdmin,
   type CompanyMemberRole,
 } from "@/lib/company";
 
@@ -873,6 +874,7 @@ export default function VozidlaPage() {
                 car={car}
                 onDelete={handleDeleteVehicle}
                 onEdit={handleEdit}
+                canManage={isOwnerOrAdmin(role)}
               />
             ))}
           </div>
