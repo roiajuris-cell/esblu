@@ -66,9 +66,38 @@ export default function Dashboard() {
   // Firemný názov + logo pre AKTÍVNEHO ČLENA firmy (owner/admin/employee
   // rovnako) — nie z vlastného, väčšinou prázdneho settings riadku
   // prihláseného používateľa. Pozri lib/company.ts a
-  // supabase/migrations/20260814180000_add_company_profile_rpc.sql.
+  // supabase/migrations/20260814180000_add_company_profile_rpc.sql /
+  // 20260814190000_fix_company_profile_rpc.sql.
+  //
+  // Bezpečnostná poistka proti regresii (pridané po nahlásenej chybe, kde
+  // fallback ESBLU videl aj owner): ak RPC z akéhokoľvek dôvodu (napr.
+  // migrácia ešte nie je aplikovaná na danom prostredí) nevráti žiadny
+  // profil, skús ako druhý krok priamo vlastný settings riadok
+  // prihláseného používateľa — presne to, čo appka robila PRED zavedením
+  // esblu_get_company_profile(). Pre ownera/admina, ktorí majú firemné
+  // údaje uložené vo svojom vlastnom riadku, sa tým hlavička obnoví aj bez
+  // funkčného RPC. Pre employee je vlastný riadok bežne prázdny, takže sa
+  // tu nič neprezradí — v tom prípade jednoducho ostane fallback.
   async function loadCompanyProfile() {
-    const profile = await getCompanyProfile();
+    let profile = await getCompanyProfile();
+
+    if (!profile?.company_name && !profile?.logo_path) {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (session) {
+        const { data: ownSettings } = await supabase
+          .from("settings")
+          .select("company_name, logo_path")
+          .eq("user_id", session.user.id)
+          .maybeSingle();
+
+        if (ownSettings?.company_name || ownSettings?.logo_path) {
+          profile = ownSettings;
+        }
+      }
+    }
 
     if (profile?.company_name) {
       setCompanyName(profile.company_name);
