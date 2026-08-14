@@ -17,20 +17,28 @@ begin;
 -- prostredí aplikovaná — `create or replace function` + `grant` sú
 -- idempotentné a bezpečné zavolať znova bez ohľadu na to.
 --
--- Zmena oproti 20260814180000: rovnaká logika (company_id odvodené výhradne
--- z auth.uid(), iba SELECT na company_name/logo_path aktívneho ownera
--- firmy, žiadna zápisová vetva), ale prepísaná ako jediný deklaratívny SQL
--- dotaz (language sql) namiesto plpgsql DECLARE/IF vetvy — menší povrch na
--- prípadnú procedurálnu chybu a jednoduchšie na overenie. Funkčne
--- ekvivalentné, iba čitateľnejšie/robustnejšie.
+-- Zmena oproti 20260814180000 (dve nezávislé sprísnenia):
+--   1. Prepísané ako jediný deklaratívny SQL dotaz (language sql) namiesto
+--      plpgsql DECLARE/IF vetvy — menší povrch na procedurálnu chybu,
+--      jednoduchšie na overenie.
+--   2. Owner sa teraz dohľadáva cez public.companies.owner_id (autoritatívny,
+--      FK-chránený stĺpec — companies.owner_id references auth.users(id) on
+--      delete restrict, 20260814110000), NIE cez
+--      company_members.role = 'owner'. company_members.role je meniteľný
+--      business stav (napr. budúci prevod vlastníctva by mohol dočasne
+--      nechať nekonzistentný stav dvoch riadkov), zatiaľ čo companies.id →
+--      companies.owner_id je jediný, vždy jednoznačný zdroj pravdy o tom,
+--      kto je vlastník danej firmy. company_id volajúceho sa stále odvodzuje
+--      VÝHRADNE z jeho vlastného aktívneho company_members riadku
+--      (auth.uid() → company_id) — rovnako pre owner/admin/employee.
 --
 -- Frontend (app/components/Dashboard.tsx) bol v tom istom kole doplnený o
 -- vlastnú poistku: ak toto RPC z akéhokoľvek dôvodu (napr. migrácia ešte
--- nebeží na danom prostredí) nevráti nič, appka skúsi ako druhý krok
--- priamy dotaz na vlastný settings riadok prihláseného používateľa —
--- presne pôvodné, pred-RPC správanie. Táto DB oprava aj tá frontendová
--- poistka sú navzájom nezávislé a obe musia byť aplikované/nasadené, aby
--- bola oprava kompletná pre owner AJ employee zároveň.
+-- nebeží na danom prostredí) nevráti nič, appka skúsi ako druhý krok priamy
+-- dotaz na vlastný settings riadok prihláseného používateľa. Táto poistka je
+-- zámerne iba núdzový fallback pre ownera (jeho vlastný riadok reálne
+-- obsahuje firemné údaje) — HLAVNÝM mechanizmom pre všetky role, najmä pre
+-- employee/admina bez vlastných dát v settings, zostáva výhradne toto RPC.
 -- =============================================================================
 
 create or replace function public.esblu_get_company_profile()
@@ -42,25 +50,26 @@ set search_path = ''
 as $function$
   select s.company_name, s.logo_path
   from public.company_members my_cm
-  join public.company_members owner_cm
-    on owner_cm.company_id = my_cm.company_id
-    and owner_cm.role = 'owner'
-    and owner_cm.status = 'active'
+  join public.companies c
+    on c.id = my_cm.company_id
   join public.settings s
-    on s.user_id = owner_cm.user_id
+    on s.user_id = c.owner_id
   where my_cm.user_id = auth.uid()
     and my_cm.status = 'active'
   limit 1;
 $function$;
 
 comment on function public.esblu_get_company_profile() is
-  'Read-only: company_name + logo_path aktívneho ownera firmy volajúceho '
-  '(company_id odvodené z auth.uid() cez company_members, rovnako pre '
+  'Read-only: company_name + logo_path vlastníka firmy volajúceho '
+  '(company_id volajúceho odvodené z auth.uid() cez jeho vlastný aktívny '
+  'company_members riadok; vlastník firmy sa dohľadá cez '
+  'public.companies.owner_id, nie cez company_members.role, rovnako pre '
   'owner/admin/employee). Nevracia nič, ak volajúci nemá aktívny membership '
   'alebo ak firma ešte nemá vyplnené meno/logo. Žiadna zápisová vetva — '
   'UPDATE settings ostáva nezmenené (iba vlastný riadok, owner/admin-only '
-  'na frontende). Prepísané v 20260814190000 z plpgsql na jediný SQL dotaz '
-  '(funkčne ekvivalentné 20260814180000).';
+  'na frontende). Prepísané v 20260814190000 z plpgsql na jediný SQL dotaz, '
+  'owner teraz cez companies.owner_id (predtým company_members.role = '
+  '''owner'' v 20260814180000).';
 
 revoke all on function public.esblu_get_company_profile() from public;
 grant execute on function public.esblu_get_company_profile() to authenticated;
