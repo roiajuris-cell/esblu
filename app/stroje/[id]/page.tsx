@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import BackLink from "@/app/components/BackLink";
+import { getMyActiveMembership } from "@/lib/company";
 
 type MachineService = {
   id: string;
@@ -117,6 +118,7 @@ export default function MachineDetailPage() {
   const machineId = String(id);
 
   const [userId, setUserId] = useState("");
+  const [companyId, setCompanyId] = useState("");
   const [machine, setMachine] = useState<any>(null);
   const [photos, setPhotos] = useState<any[]>([]);
   const [services, setServices] = useState<MachineService[]>([]);
@@ -145,43 +147,55 @@ export default function MachineDetailPage() {
     }
 
     setUserId(session.user.id);
-    loadMachine(session.user.id);
-    loadPhotos(session.user.id);
-    loadServices(session.user.id);
+
+    const membership = await getMyActiveMembership();
+
+    if (!membership) {
+      setCompanyId("");
+      setMachine(null);
+      setPhotos([]);
+      setServices([]);
+      return;
+    }
+
+    setCompanyId(membership.company_id);
+    loadMachine(membership.company_id);
+    loadPhotos(membership.company_id);
+    loadServices(membership.company_id);
   }
 
-  async function loadMachine(currentUserId: string) {
+  async function loadMachine(currentCompanyId: string) {
     const { data } = await supabase
       .from("machines")
       .select("*")
       .eq("id", machineId)
-      .eq("user_id", currentUserId)
+      .eq("company_id", currentCompanyId)
       .single();
 
     setMachine(data);
   }
 
-  async function loadPhotos(currentUserId: string = userId) {
-    if (!currentUserId) return;
+  async function loadPhotos(currentCompanyId: string = companyId) {
+    if (!currentCompanyId) return;
 
     const { data } = await supabase
       .from("machine_photos")
       .select("*")
       .eq("machine_id", machineId)
-      .eq("user_id", currentUserId)
+      .eq("company_id", currentCompanyId)
       .order("created_at", { ascending: false });
 
     setPhotos(data || []);
   }
 
-  async function loadServices(currentUserId: string = userId) {
-    if (!currentUserId) return;
+  async function loadServices(currentCompanyId: string = companyId) {
+    if (!currentCompanyId) return;
 
     const { data, error } = await supabase
       .from("machine_services")
       .select("*")
       .eq("machine_id", machineId)
-      .eq("user_id", currentUserId)
+      .eq("company_id", currentCompanyId)
       .order("service_date", { ascending: false });
 
     if (error) {
@@ -254,6 +268,14 @@ export default function MachineDetailPage() {
         );
       }
 
+      const membership = await getMyActiveMembership();
+
+      if (!membership) {
+        throw new Error(
+          "Na uloženie servisného záznamu musíte byť prihlásený."
+        );
+      }
+
       const payload = {
         machine_id: machineId,
         user_id: user.id,
@@ -272,7 +294,7 @@ export default function MachineDetailPage() {
           .update(payload)
           .eq("id", editingServiceId)
           .eq("machine_id", machineId)
-          .eq("user_id", user.id)
+          .eq("company_id", membership.company_id)
           .select("id");
 
         if (updateError) throw updateError;
@@ -298,7 +320,7 @@ export default function MachineDetailPage() {
       setService(emptyService);
       setEditingServiceId(null);
       setShowServiceForm(false);
-      await loadServices(user.id);
+      await loadServices(membership.company_id);
     } catch (saveError: unknown) {
       const message =
         saveError instanceof Error ? saveError.message : "Neznáma chyba.";
@@ -324,12 +346,9 @@ export default function MachineDetailPage() {
     setDeletingServiceId(serviceId);
 
     try {
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
+      const membership = await getMyActiveMembership();
 
-      if (userError || !user) {
+      if (!membership) {
         throw new Error(
           "Na vymazanie servisného záznamu musíte byť prihlásený."
         );
@@ -340,7 +359,7 @@ export default function MachineDetailPage() {
         .delete()
         .eq("id", serviceId)
         .eq("machine_id", machineId)
-        .eq("user_id", user.id)
+        .eq("company_id", membership.company_id)
         .select("id");
 
       if (deleteError) throw deleteError;
@@ -455,12 +474,9 @@ export default function MachineDetailPage() {
     setDeletingPhotoId(photoId);
 
     try {
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
+      const membership = await getMyActiveMembership();
 
-      if (userError || !user) {
+      if (!membership) {
         throw new Error("Nie ste prihlásený. Prihláste sa a skúste to znova.");
       }
 
@@ -469,7 +485,7 @@ export default function MachineDetailPage() {
         .delete()
         .eq("id", photoId)
         .eq("machine_id", machineId)
-        .eq("user_id", user.id)
+        .eq("company_id", membership.company_id)
         .select("id, file_path");
 
       if (deletePhotoError) throw deletePhotoError;

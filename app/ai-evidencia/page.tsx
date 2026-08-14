@@ -18,6 +18,11 @@ import {
   type AiInboxFolderKind,
 } from "@/lib/export-ai-inbox-documents-excel";
 import { normalizeSpz } from "@/lib/normalize-spz";
+import {
+  getMyActiveMembership,
+  isOwnerOrAdmin,
+  type CompanyMemberRole,
+} from "@/lib/company";
 import { normalizeWeightUnit } from "@/lib/normalize-weight-unit";
 import {
   convertWeightToTons,
@@ -230,7 +235,7 @@ function buildFlatWeighTicketResult(
 // -----------------------------------------------------------------------------
 
 async function resolveVehicleIdBySpz(
-  userId: string,
+  companyId: string,
   spz: unknown
 ): Promise<{ vehicleId: string | null; canonicalSpz: string | null }> {
   const normalizedSpz = normalizeSpz(spz);
@@ -242,7 +247,7 @@ async function resolveVehicleIdBySpz(
   const { data: vehicles, error: vehiclesError } = await supabase
     .from("vehicles")
     .select("id, spz")
-    .eq("user_id", userId);
+    .eq("company_id", companyId);
 
   if (vehiclesError) {
     console.error("Chyba pri načítaní vozidiel:", vehiclesError);
@@ -273,7 +278,7 @@ function normalizeMachineLabel(value: unknown): string {
 // kým sa táto funkcia nezapojí do reálneho save flow.
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function resolveMachineIdByLabel(
-  userId: string,
+  companyId: string,
   label: string
 ): Promise<{ machineId: string | null; machineLabel: string | null }> {
   const trimmedLabel = label.trim();
@@ -285,7 +290,7 @@ async function resolveMachineIdByLabel(
   const { data: machines, error: machinesError } = await supabase
     .from("machines")
     .select("id, name")
-    .eq("user_id", userId);
+    .eq("company_id", companyId);
 
   if (machinesError) {
     console.error("Chyba pri načítaní strojov:", machinesError);
@@ -543,6 +548,8 @@ async function compressImage(file: File, rotation: number): Promise<File> {
   }
 }
 export default function AiEvidenciaPage() {
+  const [companyId, setCompanyId] = useState("");
+  const [role, setRole] = useState<CompanyMemberRole | null>(null);
   const [fileName, setFileName] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [pendingImageFile, setPendingImageFile] = useState<File | null>(null);
@@ -1114,8 +1121,14 @@ function resolveMovementType(result: any): string | null {
       // ŠPZ v module Vozidlá neexistuje, uloženie NESMIE zlyhať — dokument
       // sa uloží so ŠPZ ako textom a vehicle_id zostane null.
       // resolveVehicleIdBySpz nikdy nevyhadzuje chybu.
+      const activeMembership = await getMyActiveMembership();
+
+      if (!activeMembership) {
+        throw new Error("Nie si prihlásený.");
+      }
+
       const { vehicleId, canonicalSpz } = await resolveVehicleIdBySpz(
-        session.user.id,
+        activeMembership.company_id,
         result.spz
       );
       // Vážny lístok/dodací list nemá ručné priradenie k stroju.
@@ -1445,11 +1458,17 @@ review_status: reviewStatus,
         throw new Error("Nie si prihlásený.");
       }
 
+      const membership = await getMyActiveMembership();
+
+      if (!membership) {
+        throw new Error("Nie si prihlásený.");
+      }
+
       const { data: docAttachments, error: attachmentsError } = await supabase
         .from("document_attachments")
         .select("storage_bucket, storage_path")
         .eq("document_id", doc.id)
-        .eq("user_id", session.user.id);
+        .eq("company_id", membership.company_id);
 
       if (attachmentsError) {
         throw new Error(
@@ -1486,7 +1505,7 @@ review_status: reviewStatus,
         .from("documents")
         .delete()
         .eq("id", doc.id)
-        .eq("user_id", session.user.id);
+        .eq("company_id", membership.company_id);
 
       if (deleteError) throw deleteError;
 
@@ -1736,14 +1755,21 @@ review_status: reviewStatus,
       return;
     }
 
+    const membership = await getMyActiveMembership();
+
+    if (!membership) {
+      alert("Nie si prihlásený.");
+      return;
+    }
+
     // Vlastníctvo overujeme explicitne (nielen cez RLS) — select je
-    // obmedzený na id AJ user_id prihláseného používateľa, takže cudzí
+    // obmedzený na id AJ company_id aktívnej firmy, takže cudzí
     // záznam sa sem nikdy nenačíta.
     const { data: record, error: recordError } = await supabase
       .from("ai_evidence")
       .select("photo_url")
       .eq("id", id)
-      .eq("user_id", session.user.id)
+      .eq("company_id", membership.company_id)
       .single();
 
     if (recordError) {
@@ -1770,13 +1796,13 @@ review_status: reviewStatus,
       }
     }
 
-    // Vymažeme databázový záznam — opäť obmedzené na id AJ user_id (defense
+    // Vymažeme databázový záznam — opäť obmedzené na id AJ company_id (defense
     // in depth, nespoliehame sa iba na RLS).
     const { error: deleteError } = await supabase
       .from("ai_evidence")
       .delete()
       .eq("id", id)
-      .eq("user_id", session.user.id);
+      .eq("company_id", membership.company_id);
 
     if (deleteError) {
       console.error("Chyba pri mazaní záznamu:", deleteError);
@@ -1791,17 +1817,30 @@ review_status: reviewStatus,
     await Promise.all([loadRecords(), refreshPlanUsage()]);
   }
 
-  async function loadRecords() {
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
+  async function loadMembership(): Promise<string | null> {
+  const membership = await getMyActiveMembership();
 
-  if (!session) return;
+  if (!membership) {
+    setCompanyId("");
+    setRole(null);
+    return null;
+  }
+
+  setCompanyId(membership.company_id);
+  setRole(membership.role);
+  return membership.company_id;
+}
+
+async function loadRecords(currentCompanyId: string = companyId) {
+  if (!currentCompanyId) {
+    setRecords([]);
+    return;
+  }
 
   const { data, error } = await supabase
     .from("ai_evidence")
     .select("*")
-    .eq("user_id", session.user.id)
+    .eq("company_id", currentCompanyId)
     .order("created_at", { ascending: false });
 
   if (!error && data) {
@@ -1809,26 +1848,28 @@ review_status: reviewStatus,
   }
 }
 
-// Vlastné vozidlá a stroje prihláseného používateľa — zdroj pre výberové
-// polia priradenia (dropdown), aby nikto nemusel ručne prepisovať
-// identifikátor entity, ktorá už v databáze existuje.
-async function loadVehicleAndMachineOptions() {
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-
-  if (!session) return;
+// Vlastné vozidlá a stroje firmy — zdroj pre výberové polia priradenia
+// (dropdown), aby nikto nemusel ručne prepisovať identifikátor entity,
+// ktorá už v databáze existuje.
+async function loadVehicleAndMachineOptions(
+  currentCompanyId: string = companyId
+) {
+  if (!currentCompanyId) {
+    setVehicleOptions([]);
+    setMachineOptions([]);
+    return;
+  }
 
   const [vehiclesResult, machinesResult] = await Promise.all([
     supabase
       .from("vehicles")
       .select("id, spz")
-      .eq("user_id", session.user.id)
+      .eq("company_id", currentCompanyId)
       .order("spz", { ascending: true }),
     supabase
       .from("machines")
       .select("id, name")
-      .eq("user_id", session.user.id)
+      .eq("company_id", currentCompanyId)
       .order("name", { ascending: true }),
   ]);
 
@@ -1845,17 +1886,16 @@ async function loadVehicleAndMachineOptions() {
 // doklad, iné) — uložené v public.documents, priradenie v
 // public.document_links (real FK na documents.id, PostgREST ho preto vie
 // vnoriť priamo do selectu).
-async function loadOtherDocuments() {
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-
-  if (!session) return;
+async function loadOtherDocuments(currentCompanyId: string = companyId) {
+  if (!currentCompanyId) {
+    setOtherDocuments([]);
+    return;
+  }
 
   const { data, error } = await supabase
     .from("documents")
     .select("*, document_links(*)")
-    .eq("user_id", session.user.id)
+    .eq("company_id", currentCompanyId)
     .is("deleted_at", null)
     .order("created_at", { ascending: false });
 
@@ -1927,10 +1967,12 @@ useEffect(() => {
 
 useEffect(() => {
   async function initialize() {
+    const activeCompanyId = await loadMembership();
+
     await Promise.all([
-      loadRecords(),
-      loadVehicleAndMachineOptions(),
-      loadOtherDocuments(),
+      loadRecords(activeCompanyId || ""),
+      loadVehicleAndMachineOptions(activeCompanyId || ""),
+      loadOtherDocuments(activeCompanyId || ""),
     ]);
   }
 
@@ -2752,6 +2794,7 @@ function formatDocDate(value: unknown): string {
     </div>
   </div>
 )}
+    {isOwnerOrAdmin(role) && (
     <div className="mt-10 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -2792,6 +2835,7 @@ function formatDocDate(value: unknown): string {
         </p>
       )}
     </div>
+    )}
 
     {/* Zložky "Bločky"/"Faktúry" — nepriradené dokumenty (bod 4 zadania). */}
     {!openFolder && (
@@ -2853,6 +2897,7 @@ function formatDocDate(value: unknown): string {
             </p>
           </div>
 
+          {isOwnerOrAdmin(role) && (
           <button
             type="button"
             onClick={() => handleExportFolder(openFolder)}
@@ -2862,6 +2907,7 @@ function formatDocDate(value: unknown): string {
           >
             {folderExportLoading ? "Generujem Excel..." : "Exportovať zložku"}
           </button>
+          )}
         </div>
 
         {folderExportFeedback && (
@@ -3083,12 +3129,14 @@ function formatDocDate(value: unknown): string {
       > 
         Zavrieť
       </button>
+{isOwnerOrAdmin(role) && (
 <button
   onClick={() => deleteRecord(selectedRecord.id)}
   className="mt-3 w-full rounded-2xl bg-red-600 py-4 font-bold text-white"
 >
   🗑 Vymazať záznam
 </button>
+)}
     </div>
   </div>
 )}
@@ -3238,16 +3286,18 @@ function formatDocDate(value: unknown): string {
                     >
                       Otvoriť
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => deleteAttachment(attachment)}
-                      disabled={deletingAttachmentId === attachment.id}
-                      className="rounded-xl bg-red-50 px-3 py-2 text-xs font-bold text-red-700 disabled:opacity-50"
-                    >
-                      {deletingAttachmentId === attachment.id
-                        ? "Mažem..."
-                        : "Vymazať"}
-                    </button>
+                    {isOwnerOrAdmin(role) && (
+                      <button
+                        type="button"
+                        onClick={() => deleteAttachment(attachment)}
+                        disabled={deletingAttachmentId === attachment.id}
+                        className="rounded-xl bg-red-50 px-3 py-2 text-xs font-bold text-red-700 disabled:opacity-50"
+                      >
+                        {deletingAttachmentId === attachment.id
+                          ? "Mažem..."
+                          : "Vymazať"}
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -3294,6 +3344,7 @@ function formatDocDate(value: unknown): string {
         Zavrieť
       </button>
 
+      {isOwnerOrAdmin(role) && (
       <button
         onClick={() => deleteOtherDocument(selectedOtherDocument)}
         disabled={deletingDocumentId === selectedOtherDocument.id}
@@ -3303,6 +3354,7 @@ function formatDocDate(value: unknown): string {
           ? "Mažem..."
           : "🗑 Vymazať dokument"}
       </button>
+      )}
     </div>
   </div>
 )}

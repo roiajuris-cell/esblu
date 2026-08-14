@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import Image from "next/image"
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { getMyActiveMembership } from "@/lib/company";
 function getGreeting() {
   const hour = new Date().getHours();
 
@@ -41,7 +42,17 @@ export default function Dashboard() {
       return;
     }
 
-    loadData(session.user.id);
+    const membership = await getMyActiveMembership();
+
+    if (!membership) {
+      setVehicles([]);
+      setMachines([]);
+      setItems([]);
+      loadSettings(session.user.id);
+      return;
+    }
+
+    loadData(membership.company_id, session.user.id);
   }
 
   async function logout() {
@@ -49,22 +60,7 @@ export default function Dashboard() {
     router.push("/login");
   }
 
-  async function loadData(currentUserId: string) {
-    const { data: vehicleData } = await supabase
-      .from("vehicles")
-      .select("*")
-      .eq("user_id", currentUserId);
-
-    const { data: machineData } = await supabase
-      .from("machines")
-      .select("*")
-      .eq("user_id", currentUserId);
-
-    const { data: itemData } = await supabase
-      .from("inventory_items")
-      .select("*")
-      .eq("user_id", currentUserId);
-
+  async function loadSettings(currentUserId: string) {
     const { data: settingsData } = await supabase
       .from("settings")
       .select("company_name, logo_path")
@@ -72,22 +68,41 @@ export default function Dashboard() {
       .limit(1)
       .single();
 
-    setVehicles(vehicleData || []);
-    setMachines(machineData || []);
-    setItems(itemData || []);
-
     if (settingsData?.company_name) {
       setCompanyName(settingsData.company_name);
     }
     if (settingsData?.logo_path) {
-  const { data: logoData } = supabase.storage
-    .from("company-logos")
-    .getPublicUrl(settingsData.logo_path);
+      const { data: logoData } = supabase.storage
+        .from("company-logos")
+        .getPublicUrl(settingsData.logo_path);
 
-  setCompanyLogoUrl(logoData.publicUrl);
-} else {
-  setCompanyLogoUrl("");
-}
+      setCompanyLogoUrl(logoData.publicUrl);
+    } else {
+      setCompanyLogoUrl("");
+    }
+  }
+
+  async function loadData(currentCompanyId: string, currentUserId: string) {
+    const { data: vehicleData } = await supabase
+      .from("vehicles")
+      .select("*")
+      .eq("company_id", currentCompanyId);
+
+    const { data: machineData } = await supabase
+      .from("machines")
+      .select("*")
+      .eq("company_id", currentCompanyId);
+
+    const { data: itemData } = await supabase
+      .from("inventory_items")
+      .select("*")
+      .eq("company_id", currentCompanyId);
+
+    setVehicles(vehicleData || []);
+    setMachines(machineData || []);
+    setItems(itemData || []);
+
+    await loadSettings(currentUserId);
   }
 
   function createAlerts() {

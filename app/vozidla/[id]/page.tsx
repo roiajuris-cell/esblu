@@ -4,6 +4,10 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import BackLink from "@/app/components/BackLink";
+import {
+  getMyActiveMembership,
+  type CompanyMemberRole,
+} from "@/lib/company";
 
 export default function VehicleDetailPage() {
   const { id } = useParams();
@@ -14,6 +18,7 @@ export default function VehicleDetailPage() {
   const [showForm, setShowForm] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [editingServiceId, setEditingServiceId] = useState<string | null>(null);
+  const [role, setRole] = useState<CompanyMemberRole | null>(null);
 
   const emptyService = {
     service_date: "",
@@ -30,7 +35,13 @@ export default function VehicleDetailPage() {
   useEffect(() => {
     loadVehicle();
     loadServices();
+    loadMembership();
   }, []);
+
+  async function loadMembership() {
+    const membership = await getMyActiveMembership();
+    setRole(membership?.role ?? null);
+  }
 
   async function loadVehicle() {
     const { data, error } = await supabase
@@ -341,12 +352,14 @@ export default function VehicleDetailPage() {
                     ✏️ Upraviť
                   </button>
 
-                  <button
-                    onClick={() => deleteService(item.id)}
-                    className="rounded-xl bg-red-600 px-4 py-2 text-white hover:bg-red-700"
-                  >
-                    🗑 Vymazať
-                  </button>
+                  {role !== "employee" && (
+                    <button
+                      onClick={() => deleteService(item.id)}
+                      className="rounded-xl bg-red-600 px-4 py-2 text-white hover:bg-red-700"
+                    >
+                      🗑 Vymazať
+                    </button>
+                  )}
                 </div>
               </div>
             ))}

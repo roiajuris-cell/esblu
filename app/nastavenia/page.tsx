@@ -7,10 +7,12 @@ import BackLink from "@/app/components/BackLink";
 import {
   createCompanyInvite,
   getCreateInviteErrorMessage,
+  isOwnerOrAdmin,
   listMyCompanyInvites,
   listMyCompanyMembers,
   type CompanyInviteRole,
   type CompanyInviteRow,
+  type CompanyMemberRole,
   type CompanyMemberRow,
 } from "@/lib/company";
 
@@ -60,7 +62,7 @@ export default function NastaveniaPage() {
   const [members, setMembers] = useState<CompanyMemberRow[]>([]);
   const [invites, setInvites] = useState<CompanyInviteRow[]>([]);
   const [usersLoading, setUsersLoading] = useState(false);
-  const [myRole, setMyRole] = useState<string | null>(null);
+  const [myRole, setMyRole] = useState<CompanyMemberRole | null>(null);
 
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<CompanyInviteRole>("employee");
@@ -549,6 +551,7 @@ export default function NastaveniaPage() {
       </div>
 
       <div className="mt-8 max-w-2xl space-y-6">
+        {isOwnerOrAdmin(myRole) && (
         <section className="rounded-3xl border border-white/20 bg-white/45 p-8 shadow-lg backdrop-blur-xl">
           <h2 className="text-2xl font-bold text-slate-900">
             Firma
@@ -631,6 +634,7 @@ export default function NastaveniaPage() {
             {settingsLoading ? "Ukladám..." : "💾 Uložiť"}
           </button>
         </section>
+        )}
 
         {myRole && (
           <section className="rounded-3xl border border-white/20 bg-white/45 p-8 shadow-lg backdrop-blur-xl">

@@ -10,6 +10,7 @@ import {
   isPlanLimitReachedError,
 } from "@/lib/plan-limits";
 import BackLink from "@/app/components/BackLink";
+import { getMyActiveMembership } from "@/lib/company";
 async function compressImage(file: File): Promise<File> {
   const imageUrl = URL.createObjectURL(file);
 
@@ -71,6 +72,7 @@ export default function SkladPage() {
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [userId, setUserId] = useState("");
+  const [companyId, setCompanyId] = useState("");
   const [items, setItems] = useState<any[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -118,16 +120,26 @@ function inventoryPhotoUrl(path: string) {
     }
 
     setUserId(session.user.id);
-    loadItems(session.user.id);
+
+    const membership = await getMyActiveMembership();
+
+    if (!membership) {
+      setCompanyId("");
+      setItems([]);
+      return;
+    }
+
+    setCompanyId(membership.company_id);
+    loadItems(membership.company_id);
   }
 
-  async function loadItems(currentUserId: string = userId) {
-    if (!currentUserId) return;
+  async function loadItems(currentCompanyId: string = companyId) {
+    if (!currentCompanyId) return;
 
     const { data, error } = await supabase
       .from("inventory_items")
       .select("*")
-      .eq("user_id", currentUserId)
+      .eq("company_id", currentCompanyId)
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -144,7 +156,7 @@ if (itemIds.length > 0) {
     .from("inventory_photos")
     .select("*")
     .in("inventory_item_id", itemIds)
-    .eq("user_id", currentUserId)
+    .eq("company_id", currentCompanyId)
     .order("created_at", { ascending: false });
 
   photosData = photos || [];
@@ -231,7 +243,7 @@ setItems(itemsWithPhotos);
       .from("inventory_items")
       .update(payload)
       .eq("id", editingId)
-      .eq("user_id", userId);
+      .eq("company_id", companyId);
 
     if (error) throw error;
   } else {
@@ -293,9 +305,9 @@ setItems(itemsWithPhotos);
 
   setPhotoPreview(null);
   if (createdNewItem) {
-    await Promise.all([loadItems(), refreshPlanUsage()]);
+    await Promise.all([loadItems(companyId), refreshPlanUsage()]);
   } else {
-    await loadItems();
+    await loadItems(companyId);
   }
 } catch (saveError: unknown) {
   if (isPlanLimitReachedError(saveError, "inventory_items")) {
@@ -344,7 +356,7 @@ setItems(itemsWithPhotos);
     .from("inventory_photos")
     .select("file_path")
     .eq("inventory_item_id", id)
-    .eq("user_id", userId);
+    .eq("company_id", companyId);
 
   if (photosError) {
     console.error(
@@ -380,14 +392,14 @@ setItems(itemsWithPhotos);
     .from("inventory_items")
     .delete()
     .eq("id", id)
-    .eq("user_id", userId);
+    .eq("company_id", companyId);
 
   if (deleteError) {
     alert("Chyba pri mazaní položky: " + deleteError.message);
     return;
   }
 
-  await Promise.all([loadItems(), refreshPlanUsage()]);
+  await Promise.all([loadItems(companyId), refreshPlanUsage()]);
 }
 
   function isLowStock(row: any) {

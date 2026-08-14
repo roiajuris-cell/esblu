@@ -10,9 +10,11 @@ import {
   isPlanLimitReachedError,
 } from "@/lib/plan-limits";
 import BackLink from "@/app/components/BackLink";
+import { getMyActiveMembership } from "@/lib/company";
 
 export default function StrojePage() {
   const [userId, setUserId] = useState("");
+  const [companyId, setCompanyId] = useState("");
   const [machines, setMachines] = useState<any[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -65,16 +67,26 @@ export default function StrojePage() {
     }
 
     setUserId(session.user.id);
-    loadMachines(session.user.id);
+
+    const membership = await getMyActiveMembership();
+
+    if (!membership) {
+      setCompanyId("");
+      setMachines([]);
+      return;
+    }
+
+    setCompanyId(membership.company_id);
+    loadMachines(membership.company_id);
   }
 
-  async function loadMachines(currentUserId: string = userId) {
-    if (!currentUserId) return;
+  async function loadMachines(currentCompanyId: string = companyId) {
+    if (!currentCompanyId) return;
 
     const { data: machinesData, error } = await supabase
       .from("machines")
       .select("*")
-      .eq("user_id", currentUserId)
+      .eq("company_id", currentCompanyId)
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -91,7 +103,7 @@ export default function StrojePage() {
         .from("machine_photos")
         .select("*")
         .in("machine_id", machineIds)
-        .eq("user_id", currentUserId)
+        .eq("company_id", currentCompanyId)
         .order("created_at", { ascending: false });
 
       photosData = data || [];
@@ -153,7 +165,7 @@ export default function StrojePage() {
           .from("machines")
           .update(payload)
           .eq("id", editingId)
-          .eq("user_id", userId);
+          .eq("company_id", companyId);
 
         if (error) throw error;
 
@@ -221,20 +233,19 @@ export default function StrojePage() {
     setDeletingMachineId(machineId);
 
     try {
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
+      const membership = await getMyActiveMembership();
 
-      if (userError || !user) {
+      if (!membership) {
         throw new Error("Nie ste prihlásený. Prihláste sa a skúste to znova.");
       }
+
+      const activeCompanyId = membership.company_id;
 
       const { data: machinePhotos, error: photosError } = await supabase
         .from("machine_photos")
         .select("id, file_path")
         .eq("machine_id", machineId)
-        .eq("user_id", user.id);
+        .eq("company_id", activeCompanyId);
 
       if (photosError) throw photosError;
 
@@ -250,7 +261,7 @@ export default function StrojePage() {
           .from("machines")
           .delete()
           .eq("id", machineId)
-          .eq("user_id", user.id)
+          .eq("company_id", activeCompanyId)
           .select("id");
 
       // Pri RESTRICT foreign key najprv bezpečne odstránime DB riadky fotiek
@@ -261,7 +272,7 @@ export default function StrojePage() {
           .from("machine_photos")
           .delete()
           .eq("machine_id", machineId)
-          .eq("user_id", user.id)
+          .eq("company_id", activeCompanyId)
           .select("id");
 
         if (restrictedPhotosError) throw restrictedPhotosError;
@@ -270,7 +281,7 @@ export default function StrojePage() {
           .from("machines")
           .delete()
           .eq("id", machineId)
-          .eq("user_id", user.id)
+          .eq("company_id", activeCompanyId)
           .select("id");
 
         deletedMachines = retryResult.data;
@@ -291,7 +302,7 @@ export default function StrojePage() {
         .from("machine_photos")
         .delete()
         .eq("machine_id", machineId)
-        .eq("user_id", user.id)
+        .eq("company_id", activeCompanyId)
         .select("id");
 
       if (deletePhotosError) throw deletePhotosError;
@@ -300,7 +311,7 @@ export default function StrojePage() {
         .from("machine_photos")
         .select("id")
         .eq("machine_id", machineId)
-        .eq("user_id", user.id);
+        .eq("company_id", activeCompanyId);
 
       if (verifyPhotosError) throw verifyPhotosError;
 
@@ -312,7 +323,7 @@ export default function StrojePage() {
 
       // UI obnovíme až po potvrdenom vymazaní databázových záznamov.
       await Promise.all([
-        loadMachines(user.id),
+        loadMachines(activeCompanyId),
         refreshPlanUsage(),
       ]);
 

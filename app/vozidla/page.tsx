@@ -11,6 +11,10 @@ import {
 import { normalizeSpz } from "@/lib/normalize-spz";
 import VehicleCard from "../components/VehicleCard";
 import BackLink from "../components/BackLink";
+import {
+  getMyActiveMembership,
+  type CompanyMemberRole,
+} from "@/lib/company";
 
 type RegistrationSide = "front" | "back";
 
@@ -123,6 +127,8 @@ async function compressRegistrationImage(file: File): Promise<File> {
 
 export default function VozidlaPage() {
   const [userId, setUserId] = useState("");
+  const [companyId, setCompanyId] = useState("");
+  const [role, setRole] = useState<CompanyMemberRole | null>(null);
   const [frontFile, setFrontFile] = useState<File | null>(null);
   const [frontPreview, setFrontPreview] = useState<string | null>(null);
   const [backFile, setBackFile] = useState<File | null>(null);
@@ -176,16 +182,28 @@ export default function VozidlaPage() {
     }
 
     setUserId(session.user.id);
-    loadVehicles(session.user.id);
+
+    const membership = await getMyActiveMembership();
+
+    if (!membership) {
+      setCompanyId("");
+      setRole(null);
+      setVehicles([]);
+      return;
+    }
+
+    setCompanyId(membership.company_id);
+    setRole(membership.role);
+    loadVehicles(membership.company_id);
   }
 
-  async function loadVehicles(currentUserId: string = userId) {
-    if (!currentUserId) return;
+  async function loadVehicles(currentCompanyId: string = companyId) {
+    if (!currentCompanyId) return;
 
     const { data, error } = await supabase
       .from("vehicles")
       .select("*")
-      .eq("user_id", currentUserId)
+      .eq("company_id", currentCompanyId)
       .order("znacka", { ascending: true });
 
     if (error) {
@@ -426,7 +444,7 @@ export default function VozidlaPage() {
           .from("vehicles")
           .update(vehiclePayload())
           .eq("id", editingId)
-          .eq("user_id", userId);
+          .eq("company_id", companyId);
 
         if (error) throw error;
 
@@ -504,7 +522,7 @@ export default function VozidlaPage() {
       .from("vehicles")
       .delete()
       .eq("id", id)
-      .eq("user_id", userId);
+      .eq("company_id", companyId);
 
     if (error) {
       alert("Chyba pri mazaní: " + error.message);
@@ -564,6 +582,7 @@ export default function VozidlaPage() {
         />
       )}
 
+      {role !== "employee" && (
       <div className="mt-8 rounded-2xl border border-white/20 bg-white/45 p-6 shadow-lg backdrop-blur-xl">
         <h2 className="text-2xl font-bold">Načítať technický preukaz</h2>
         <p className="mt-2 text-sm text-slate-700">
@@ -750,8 +769,9 @@ export default function VozidlaPage() {
           </div>
         )}
       </div>
+      )}
 
-      {vehicle && (
+      {role !== "employee" && vehicle && (
         <div className="mt-8 rounded-2xl bg-white p-6 shadow">
           <h2 className="mb-6 text-2xl font-bold">
             {editingId ? "Upraviť vozidlo" : "Skontrolujte údaje vozidla"}

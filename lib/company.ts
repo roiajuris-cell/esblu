@@ -19,6 +19,53 @@ export type CompanyMemberRow = {
   created_at: string;
 };
 
+export type MyActiveMembership = {
+  company_id: string;
+  role: CompanyMemberRole;
+};
+
+/**
+ * Aktívny membership prihláseného používateľa (company_id + rola), priamo z
+ * company_members (RLS company_members_select_own: user_id = auth.uid(),
+ * z 20260814110000 — každý používateľ vidí vždy iba svoj vlastný riadok,
+ * bez ohľadu na rolu). Toto je frontendový náprotivok DB funkcií
+ * public.esblu_my_active_company_id() / public.esblu_my_active_role() z
+ * 20260814160000 — slúži IBA na to, aby appka vedela, čo zobraziť/skryť v
+ * UI (company-wide dáta, owner/admin-only akcie). Skutočná autorizácia sa
+ * vždy vynucuje na strane DB (RLS + triggery), toto je iba UI vrstva.
+ *
+ * Vracia null, ak používateľ nemá žiadny aktívny membership (nemalo by
+ * nastať pre bežne prihláseného používateľa po onboardingu, ale appka sa
+ * musí správať bezpečne aj v tomto prípade — zobrazí prázdny stav namiesto
+ * pádu).
+ */
+export async function getMyActiveMembership(): Promise<MyActiveMembership | null> {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (!session) {
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from("company_members")
+    .select("company_id, role")
+    .eq("user_id", session.user.id)
+    .eq("status", "active")
+    .maybeSingle();
+
+  if (error || !data) {
+    return null;
+  }
+
+  return { company_id: data.company_id, role: data.role as CompanyMemberRole };
+}
+
+export function isOwnerOrAdmin(role: CompanyMemberRole | null | undefined) {
+  return role === "owner" || role === "admin";
+}
+
 export type CompanyInviteRow = {
   invite_id: string;
   email: string;
