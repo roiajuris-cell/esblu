@@ -20,6 +20,43 @@ const supabaseAuth = createClient(
 
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
 
+const ALLOWED_IMAGE_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+]);
+
+// Rovnaký magic-byte vzor ako app/api/scan-vehicle-registration/route.ts —
+// klientom deklarovaný Content-Type sa dá ľahko sfalšovať, skutočný obsah
+// súboru nie. Pridané po security audite (scan-vehicle-doc mal doteraz iba
+// slabšiu kontrolu `type.startsWith("image/")` bez allowlistu a bez overenia
+// obsahu).
+function hasValidImageSignature(bytes: Uint8Array, type: string) {
+  if (type === "image/jpeg") {
+    return bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+  }
+
+  if (type === "image/png") {
+    const signature = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+    return signature.every((value, index) => bytes[index] === value);
+  }
+
+  if (type === "image/webp") {
+    return (
+      bytes[0] === 0x52 &&
+      bytes[1] === 0x49 &&
+      bytes[2] === 0x46 &&
+      bytes[3] === 0x46 &&
+      bytes[8] === 0x57 &&
+      bytes[9] === 0x45 &&
+      bytes[10] === 0x42 &&
+      bytes[11] === 0x50
+    );
+  }
+
+  return false;
+}
+
 const AI_EVIDENCE_SCHEMA = {
   type: "object",
   additionalProperties: false,
@@ -348,10 +385,20 @@ export async function POST(req: Request) {
       );
     }
 
-    if (!fileValue.type.startsWith("image/")) {
+    if (fileValue.size === 0) {
       return Response.json(
-        { success: false, error: "Nahrať je možné iba obrázok." },
+        { success: false, error: "Nahraný súbor je prázdny." },
         { status: 400 }
+      );
+    }
+
+    if (!ALLOWED_IMAGE_TYPES.has(fileValue.type)) {
+      return Response.json(
+        {
+          success: false,
+          error: "Nahrať je možné iba obrázok vo formáte JPEG, PNG alebo WebP.",
+        },
+        { status: 415 }
       );
     }
 
@@ -362,9 +409,16 @@ export async function POST(req: Request) {
       );
     }
 
-    const base64Image = Buffer.from(await fileValue.arrayBuffer()).toString(
-      "base64"
-    );
+    const fileBytes = new Uint8Array(await fileValue.arrayBuffer());
+
+    if (!hasValidImageSignature(fileBytes, fileValue.type)) {
+      return Response.json(
+        { success: false, error: "Súbor nemá platný obsah obrázka." },
+        { status: 400 }
+      );
+    }
+
+    const base64Image = Buffer.from(fileBytes).toString("base64");
     const imageUrl = `data:${fileValue.type};base64,${base64Image}`;
 
     const response = await client.responses.create({

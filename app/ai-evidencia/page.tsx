@@ -1714,56 +1714,82 @@ review_status: reviewStatus,
     window.open(data.signedUrl, "_blank", "noopener,noreferrer");
   }
 
+  // Bezpečný delete flow (opravené po security audite): najprv overíme
+  // vlastníctvo a existenciu záznamu, potom vymažeme Storage objekt, a AŽ PO
+  // jeho úspešnom (alebo bezpečne no-op, ak súbor už neexistuje) odstránení
+  // vymažeme DB riadok. Predtým sa mazal DB riadok skôr než Storage súbor —
+  // pri zlyhaní Storage delete tak mohol vzniknúť osirotený súbor bez
+  // akejkoľvek DB stopy, ktorý sa už nedal dohľadať. Storage-first poradie je
+  // bezpečnejšie: ak zlyhá Storage delete, DB riadok ostáva a operáciu možno
+  // bezpečne zopakovať; `remove()` na už neexistujúcej ceste nie je chyba
+  // (Supabase Storage to považuje za úspešný no-op), takže opakovaný pokus
+  // po čiastočnom zlyhaní je vždy bezpečný.
   async function deleteRecord(id: string) {
-  if (!confirm("Naozaj chceš vymazať tento záznam?")) return;
+    if (!confirm("Naozaj chceš vymazať tento záznam?")) return;
 
-  // Najprv zistíme, či má záznam uloženú fotografiu.
-  const { data: record, error: recordError } = await supabase
-    .from("ai_evidence")
-    .select("photo_url")
-    .eq("id", id)
-    .single();
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
 
-  if (recordError) {
-    console.error("Chyba pri načítaní záznamu:", recordError);
-    alert("Záznam sa nepodarilo načítať.");
-    return;
-  }
-
-  // Vymažeme databázový záznam.
-  const { error: deleteError } = await supabase
-    .from("ai_evidence")
-    .delete()
-    .eq("id", id);
-
-  if (deleteError) {
-    console.error("Chyba pri mazaní záznamu:", deleteError);
-    alert("Vymazanie záznamu zlyhalo.");
-    return;
-  }
-
-  // Ak existuje fotografia, vymažeme ju aj zo Storage.
-  if (record?.photo_url) {
-    const { error: photoDeleteError } = await supabase.storage
-      .from("ai-evidence-documents")
-      .remove([record.photo_url]);
-
-    if (photoDeleteError) {
-      console.error(
-        "Záznam bol vymazaný, ale fotografia zostala v Storage:",
-        photoDeleteError
-      );
-
-      alert(
-        "Záznam bol vymazaný, ale fotografiu sa nepodarilo odstrániť z úložiska."
-      );
+    if (!session) {
+      alert("Nie si prihlásený.");
+      return;
     }
-  }
 
-  setSelectedRecord(null);
-  setDocumentPhotoUrl(null);
-  await Promise.all([loadRecords(), refreshPlanUsage()]);
-}
+    // Vlastníctvo overujeme explicitne (nielen cez RLS) — select je
+    // obmedzený na id AJ user_id prihláseného používateľa, takže cudzí
+    // záznam sa sem nikdy nenačíta.
+    const { data: record, error: recordError } = await supabase
+      .from("ai_evidence")
+      .select("photo_url")
+      .eq("id", id)
+      .eq("user_id", session.user.id)
+      .single();
+
+    if (recordError) {
+      console.error("Chyba pri načítaní záznamu:", recordError);
+      alert("Záznam sa nepodarilo načítať alebo ti nepatrí.");
+      return;
+    }
+
+    // Ak existuje fotografia, vymažeme ju zo Storage skôr než DB riadok.
+    if (record?.photo_url) {
+      const { error: photoDeleteError } = await supabase.storage
+        .from("ai-evidence-documents")
+        .remove([record.photo_url]);
+
+      if (photoDeleteError) {
+        console.error(
+          "Fotografiu sa nepodarilo odstrániť zo Storage, záznam nebol vymazaný:",
+          photoDeleteError
+        );
+        alert(
+          "Fotografiu sa nepodarilo odstrániť z úložiska. Záznam nebol vymazaný, skús to prosím znova."
+        );
+        return;
+      }
+    }
+
+    // Vymažeme databázový záznam — opäť obmedzené na id AJ user_id (defense
+    // in depth, nespoliehame sa iba na RLS).
+    const { error: deleteError } = await supabase
+      .from("ai_evidence")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", session.user.id);
+
+    if (deleteError) {
+      console.error("Chyba pri mazaní záznamu:", deleteError);
+      alert(
+        "Fotografia bola odstránená z úložiska, ale záznam sa nepodarilo vymazať z databázy. Skús to prosím znova."
+      );
+      return;
+    }
+
+    setSelectedRecord(null);
+    setDocumentPhotoUrl(null);
+    await Promise.all([loadRecords(), refreshPlanUsage()]);
+  }
 
   async function loadRecords() {
   const {
@@ -1844,8 +1870,6 @@ useEffect(() => {
   async function loadDocumentPhoto() {
     setDocumentPhotoUrl(null);
 
-    console.log("PHOTO PATH:", selectedRecord?.photo_url);
-
     if (!selectedRecord?.photo_url) {
       return;
     }
@@ -1853,8 +1877,6 @@ useEffect(() => {
     const { data, error } = await supabase.storage
       .from("ai-evidence-documents")
       .createSignedUrl(selectedRecord.photo_url, 3600);
-
-    console.log("SIGNED URL RESULT:", { data, error });
 
     if (error) {
       console.error("Chyba pri načítaní fotografie:", error);
