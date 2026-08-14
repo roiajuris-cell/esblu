@@ -5,6 +5,15 @@ import Dashboard from "./components/Dashboard";
 import PublicLandingPage from "./components/PublicLandingPage";
 import { supabase } from "@/lib/supabase";
 
+// Poznámka: táto stránka zámerne NEVOLÁ esblu_ensure_my_owner_company().
+// Owner bootstrap sa spúšťa VÝHRADNE z explicitného owner-registration/
+// onboarding flow v app/login/page.tsx (po úspešnom register()/login()) —
+// nie globálne pri každej session. Dôvod: /invite/[token] flow zdieľa
+// rovnaký Supabase Auth session storage (localStorage) naprieč kartami; keby
+// táto stránka volala bootstrap pri každom SIGNED_IN evente, mohla by sa
+// spustiť súbežne s prijímaním pozvánky v inej karte. Pozri report k tejto
+// zmene pre detailný rozbor poradia volaní.
+
 export default function Home() {
   const [hasSession, setHasSession] = useState<boolean | null>(null);
 

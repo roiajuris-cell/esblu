@@ -4,6 +4,28 @@ import { ChangeEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import BackLink from "@/app/components/BackLink";
+import {
+  createCompanyInvite,
+  getCreateInviteErrorMessage,
+  listMyCompanyInvites,
+  listMyCompanyMembers,
+  type CompanyInviteRole,
+  type CompanyInviteRow,
+  type CompanyMemberRow,
+} from "@/lib/company";
+
+const MEMBER_ROLE_LABELS: Record<string, string> = {
+  owner: "Majiteľ",
+  admin: "Plný prístup",
+  employee: "Zamestnanec",
+};
+
+const INVITE_STATUS_LABELS: Record<string, string> = {
+  pending: "Čaká na prijatie",
+  accepted: "Prijatá",
+  revoked: "Zrušená",
+  expired: "Vypršala",
+};
 
 const feedbackSubject = "Spätná väzba k Esblu";
 const feedbackBody = `Dobrý deň,
@@ -35,9 +57,108 @@ export default function NastaveniaPage() {
   const [logoLoading, setLogoLoading] = useState(false);
   const [passwordLoading, setPasswordLoading] = useState(false);
 
+  const [members, setMembers] = useState<CompanyMemberRow[]>([]);
+  const [invites, setInvites] = useState<CompanyInviteRow[]>([]);
+  const [usersLoading, setUsersLoading] = useState(false);
+  const [myRole, setMyRole] = useState<string | null>(null);
+
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState<CompanyInviteRole>("employee");
+  const [inviteSubmitting, setInviteSubmitting] = useState(false);
+  const [inviteError, setInviteError] = useState("");
+  const [lastInviteLink, setLastInviteLink] = useState("");
+  const [linkCopied, setLinkCopied] = useState(false);
+
   useEffect(() => {
     checkUser();
   }, []);
+
+  async function loadCompanyUsers(currentUserId: string) {
+    setUsersLoading(true);
+
+    try {
+      // Vlastný membership riadok je dostupný cez existujúcu RLS policy
+      // (company_members_select_own, z 20260814110000) pre KAŽDÚ rolu
+      // vrátane employee. Preto sa číta priamo z tabuľky — na rozdiel od
+      // esblu_list_my_company_members()/..._invites(), ktoré sú teraz
+      // vyhradené iba pre aktívneho owner/admin a employee by pre ne
+      // dostal chybu (zámerne, pozri report).
+      const { data: ownMembership, error: ownMembershipError } =
+        await supabase
+          .from("company_members")
+          .select("role")
+          .eq("user_id", currentUserId)
+          .eq("status", "active")
+          .maybeSingle();
+
+      if (ownMembershipError) {
+        throw ownMembershipError;
+      }
+
+      const role = ownMembership?.role ?? null;
+      setMyRole(role);
+
+      if (role === "owner" || role === "admin") {
+        const [memberRows, inviteRows] = await Promise.all([
+          listMyCompanyMembers(),
+          listMyCompanyInvites(),
+        ]);
+
+        setMembers(memberRows);
+        setInvites(inviteRows);
+      } else {
+        setMembers([]);
+        setInvites([]);
+      }
+    } catch (error) {
+      console.error("Načítanie používateľov firmy zlyhalo:", error);
+    } finally {
+      setUsersLoading(false);
+    }
+  }
+
+  async function handleCreateInvite() {
+    setInviteError("");
+    setLastInviteLink("");
+    setLinkCopied(false);
+
+    const normalizedEmail = inviteEmail.trim().toLowerCase();
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+      setInviteError("Zadaj platnú e-mailovú adresu.");
+      return;
+    }
+
+    setInviteSubmitting(true);
+
+    try {
+      const result = await createCompanyInvite(normalizedEmail, inviteRole);
+      const inviteLink = `${window.location.origin}/invite/${result.token}`;
+
+      setLastInviteLink(inviteLink);
+      setInviteEmail("");
+
+      if (userId) {
+        await loadCompanyUsers(userId);
+      }
+    } catch (error) {
+      setInviteError(getCreateInviteErrorMessage(error));
+    } finally {
+      setInviteSubmitting(false);
+    }
+  }
+
+  async function copyInviteLink() {
+    if (!lastInviteLink) return;
+
+    try {
+      await navigator.clipboard.writeText(lastInviteLink);
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2000);
+    } catch (error) {
+      console.error("Kopírovanie odkazu zlyhalo:", error);
+    }
+  }
 
   function getLogoPublicUrl(path: string) {
     if (!path) {
@@ -63,6 +184,7 @@ export default function NastaveniaPage() {
 
     setUserId(session.user.id);
     await loadSettings(session.user.id);
+    await loadCompanyUsers(session.user.id);
   }
 
   async function loadSettings(currentUserId: string) {
@@ -509,6 +631,162 @@ export default function NastaveniaPage() {
             {settingsLoading ? "Ukladám..." : "💾 Uložiť"}
           </button>
         </section>
+
+        {myRole && (
+          <section className="rounded-3xl border border-white/20 bg-white/45 p-8 shadow-lg backdrop-blur-xl">
+            <h2 className="text-2xl font-bold text-slate-900">
+              Používatelia
+            </h2>
+
+            <p className="mt-2 text-sm text-slate-700">
+              Vaše členstvo:{" "}
+              <span className="font-semibold">
+                {MEMBER_ROLE_LABELS[myRole] || myRole}
+              </span>
+            </p>
+
+            {usersLoading ? (
+              <p className="mt-4 text-sm text-slate-600">Načítavam...</p>
+            ) : (
+              <>
+                {members.length > 0 && (
+                  <div className="mt-6">
+                    <h3 className="font-semibold text-slate-900">Členovia</h3>
+
+                    <ul className="mt-3 space-y-2">
+                      {members.map((member) => (
+                        <li
+                          key={member.member_id}
+                          className="flex items-center justify-between rounded-xl bg-white/80 px-4 py-3"
+                        >
+                          <span className="text-sm text-slate-800">
+                            {member.email}
+                          </span>
+                          <span className="text-xs font-semibold text-slate-600">
+                            {MEMBER_ROLE_LABELS[member.role] || member.role}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {(myRole === "owner" || myRole === "admin") && (
+                  <>
+                    {invites.length > 0 && (
+                      <div className="mt-6">
+                        <h3 className="font-semibold text-slate-900">
+                          Pozvánky
+                        </h3>
+
+                        <ul className="mt-3 space-y-2">
+                          {invites.map((invite) => (
+                            <li
+                              key={invite.invite_id}
+                              className="flex items-center justify-between rounded-xl bg-white/80 px-4 py-3"
+                            >
+                              <span className="text-sm text-slate-800">
+                                {invite.email}{" "}
+                                <span className="text-xs text-slate-500">
+                                  (
+                                  {MEMBER_ROLE_LABELS[invite.role] ||
+                                    invite.role}
+                                  )
+                                </span>
+                              </span>
+                              <span className="text-xs font-semibold text-slate-600">
+                                {INVITE_STATUS_LABELS[invite.status] ||
+                                  invite.status}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    <div className="mt-6 rounded-2xl border border-dashed border-slate-300 p-5">
+                      <h3 className="font-semibold text-slate-900">
+                        Pozvať používateľa
+                      </h3>
+
+                      <div className="mt-4 space-y-3">
+                        <input
+                          type="email"
+                          placeholder="Email"
+                          className="w-full rounded-xl border p-3"
+                          value={inviteEmail}
+                          onChange={(event) =>
+                            setInviteEmail(event.target.value)
+                          }
+                          disabled={inviteSubmitting}
+                        />
+
+                        <div className="flex flex-col gap-2 sm:flex-row">
+                          <label className="flex flex-1 items-center gap-2 rounded-xl border p-3 text-sm">
+                            <input
+                              type="radio"
+                              name="inviteRole"
+                              checked={inviteRole === "admin"}
+                              onChange={() => setInviteRole("admin")}
+                              disabled={inviteSubmitting}
+                            />
+                            Plný prístup
+                          </label>
+
+                          <label className="flex flex-1 items-center gap-2 rounded-xl border p-3 text-sm">
+                            <input
+                              type="radio"
+                              name="inviteRole"
+                              checked={inviteRole === "employee"}
+                              onChange={() => setInviteRole("employee")}
+                              disabled={inviteSubmitting}
+                            />
+                            Zamestnanec
+                          </label>
+                        </div>
+                      </div>
+
+                      {inviteError && (
+                        <p className="mt-3 text-sm font-medium text-red-700">
+                          {inviteError}
+                        </p>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={handleCreateInvite}
+                        disabled={inviteSubmitting}
+                        className="mt-4 rounded-xl bg-blue-600 px-6 py-3 font-semibold text-white hover:bg-blue-700 disabled:bg-gray-400"
+                      >
+                        {inviteSubmitting
+                          ? "Vytváram..."
+                          : "Pozvať používateľa"}
+                      </button>
+
+                      {lastInviteLink && (
+                        <div className="mt-4 rounded-xl bg-slate-100 p-4">
+                          <p className="text-sm font-semibold text-slate-800">
+                            Pozvánka bola vytvorená
+                          </p>
+                          <p className="mt-2 break-all text-xs text-slate-600">
+                            {lastInviteLink}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={copyInviteLink}
+                            className="mt-3 rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-white"
+                          >
+                            {linkCopied ? "Skopírované ✓" : "Kopírovať odkaz"}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+              </>
+            )}
+          </section>
+        )}
 
         <section className="rounded-3xl border border-white/20 bg-white/45 p-8 shadow-lg backdrop-blur-xl">
           <h2 className="text-2xl font-bold text-slate-900">

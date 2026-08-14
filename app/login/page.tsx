@@ -4,6 +4,28 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { ensureMyOwnerCompany } from "@/lib/company";
+
+// DÔLEŽITÉ: táto stránka slúži AJ existujúcim používateľom (owner, admin,
+// employee) na bežné prihlásenie — login() preto NIKDY nesmie volať
+// ensureMyOwnerCompany(). Keby ju volal, pozvaný employee/admin, ktorý sa
+// omylom prihlási tu namiesto prijatia pozvánky na /invite/[token], by si
+// automaticky založil vlastnú owner company a znemožnil by si tým prijatie
+// pôvodnej pozvánky (esblu_accept_company_invite by následne zlyhala s
+// ESBLU_ALREADY_HAS_ACTIVE_MEMBERSHIP).
+//
+// register() SMIE volať ensureMyOwnerCompany() iba v prípade, že Supabase
+// vráti session OKAMŽITE (email confirmation vypnuté) — vtedy sme stále
+// vnútri explicitného "Registrovať firmu" klik-handlera, čiže intent je
+// jednoznačný z volajúcej funkcie, nie odvodený z toho, či user má/nemá
+// membership.
+//
+// Keď session okamžite nepríde (čaká sa na potvrdenie e-mailu), owner-
+// registration intent sa NEPRENÁŠA cez /login (tá slúži univerzálne aj pre
+// bežný login) — namiesto toho signUp() smeruje emailRedirectTo na
+// samostatnú, explicitnú route /onboarding/company, ktorá jediná (mimo
+// register() vyššie) smie zavolať bootstrap. Pozri
+// app/onboarding/company/page.tsx.
 
 export default function LoginPage() {
   const router = useRouter();
@@ -46,6 +68,9 @@ export default function LoginPage() {
       return;
     }
 
+    // Zámerne ŽIADNY bootstrap tu — bežné prihlásenie iba pokračuje podľa
+    // existujúceho membershipu používateľa (alebo jeho absencie). Pozri
+    // komentár nad komponentom.
     router.push("/");
     router.refresh();
   }
@@ -74,13 +99,15 @@ export default function LoginPage() {
   email: normalizedEmail,
   password,
   options: {
-    emailRedirectTo: "https://esblu.com/login",
+    // NIE "/login" — /login slúži aj bežnému loginu existujúcich
+    // používateľov a nesmie z toho odvodzovať owner-registration intent.
+    // /onboarding/company je explicitná, na tento účel vyhradená route.
+    emailRedirectTo: "https://esblu.com/onboarding/company",
   },
 });
 
-    setLoading(false);
-
     if (error) {
+      setLoading(false);
       alert("Registrácia sa nepodarila: " + error.message);
       return;
     }
@@ -89,11 +116,18 @@ export default function LoginPage() {
     setConfirmPassword("");
 
     if (data.session) {
+      // Explicitný owner-registration flow — session prišla hneď (email
+      // confirmation je vypnuté alebo bolo už predtým potvrdené).
+      await ensureMyOwnerCompany();
+
+      setLoading(false);
       alert("Účet bol vytvorený. Teraz si prihlásený.");
       router.push("/");
       router.refresh();
       return;
     }
+
+    setLoading(false);
 
     alert(
       "Registrácia prebehla úspešne. Skontroluj svoj e-mail a potvrď registráciu."
