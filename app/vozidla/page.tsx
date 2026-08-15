@@ -16,6 +16,8 @@ import {
   isOwnerOrAdmin,
   type CompanyMemberRole,
 } from "@/lib/company";
+import { useCompanyDpaLegalHold } from "@/app/components/CompanyDpaGate";
+import { LEGAL_HOLD_MESSAGE } from "@/lib/company-dpa";
 
 type RegistrationSide = "front" | "back";
 
@@ -153,8 +155,14 @@ export default function VozidlaPage() {
     loading: planUsageLoading,
     refresh: refreshPlanUsage,
   } = usePlanUsage("vehicles");
+  const { legalHold } = useCompanyDpaLegalHold();
+  // Legal-hold blokuje IBA vytváranie NOVÝCH vozidiel (rovnako ako
+  // plan-limit vyššie) — presne to, čo by aj tak odmietol DB trigger
+  // esblu_require_company_dpa_before_insert na tabuľke vehicles
+  // (20260816090000_add_company_dpa_acceptance.sql). Úprava/mazanie
+  // existujúceho vozidla (editingId nastavené) ostáva nedotknutá.
   const isNewVehicleBlocked =
-    !editingId && (planUsageLoading || isPlanLimited);
+    !editingId && (planUsageLoading || isPlanLimited || legalHold);
 
   useEffect(() => {
     checkUser();
@@ -242,7 +250,9 @@ export default function VozidlaPage() {
       setScanError(
         planUsageLoading
           ? "Overujem dostupnosť limitu. Skús to znova o chvíľu."
-          : PLAN_LIMIT_MESSAGE
+          : legalHold
+            ? LEGAL_HOLD_MESSAGE
+            : PLAN_LIMIT_MESSAGE
       );
       return;
     }
@@ -298,7 +308,9 @@ export default function VozidlaPage() {
       setScanError(
         planUsageLoading
           ? "Overujem dostupnosť limitu. Skús to znova o chvíľu."
-          : PLAN_LIMIT_MESSAGE
+          : legalHold
+            ? LEGAL_HOLD_MESSAGE
+            : PLAN_LIMIT_MESSAGE
       );
       return;
     }
@@ -433,6 +445,15 @@ export default function VozidlaPage() {
 
     if (!userId) {
       alert("Nie si prihlásený.");
+      return;
+    }
+
+    // Obranná kontrola pred samotným INSERTom (nad rámec toho, že tlačidlo
+    // je pri legalHold už disabled) — používateľ nemá vyplniť celý
+    // formulár a až pri uložení naraziť na ESBLU_COMPANY_DPA_NOT_ACCEPTED
+    // z DB triggera. Netýka sa editácie existujúceho vozidla.
+    if (!editingId && legalHold) {
+      alert(LEGAL_HOLD_MESSAGE);
       return;
     }
 

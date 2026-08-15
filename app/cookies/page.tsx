@@ -5,25 +5,26 @@ import { readLegalMarkdown } from "@/lib/legal-content";
 import { legalConfig } from "@/lib/legal-config";
 
 export const metadata: Metadata = {
-  title: "Zásady ochrany osobných údajov | Esblu",
-  description: "Informácie o spracúvaní osobných údajov v službe Esblu.",
+  title: "Cookies | Esblu",
+  description:
+    "Informácie o tom, ako Esblu pristupuje k cookies a podobným technológiám.",
 };
 
 // Rendering shell — právne záväzný text je nemenný súbor
-// legal/privacy/<version>.md (pozri lib/legal-content.ts), ktorého SHA-256
+// legal/cookies/<version>.md (pozri lib/legal-content.ts), ktorého SHA-256
 // je uložený v legal_documents.content_hash. Úprava textu = nová verzia
-// (nový .md súbor + nová hodnota legalConfig.privacyPolicyVersion), nikdy
+// (nový .md súbor + nová hodnota legalConfig.cookiePolicyVersion), nikdy
 // úprava existujúceho .md súboru.
-export default function PrivacyPolicyPage() {
+export default function CookiesPage() {
   const markdown = readLegalMarkdown(
-    "privacy_policy",
-    legalConfig.privacyPolicyVersion
+    "cookie_policy",
+    legalConfig.cookiePolicyVersion
   );
 
   return (
     <PublicLegalLayout
-      title="Zásady ochrany osobných údajov"
-      updatedAt={`15. augusta 2026 (verzia ${legalConfig.privacyPolicyVersion})`}
+      title="Cookies"
+      updatedAt={`15. augusta 2026 (verzia ${legalConfig.cookiePolicyVersion})`}
     >
       <LegalMarkdown markdown={markdown} />
     </PublicLegalLayout>

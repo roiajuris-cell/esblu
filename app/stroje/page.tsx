@@ -11,6 +11,8 @@ import {
 } from "@/lib/plan-limits";
 import BackLink from "@/app/components/BackLink";
 import { getMyActiveMembership } from "@/lib/company";
+import { useCompanyDpaLegalHold } from "@/app/components/CompanyDpaGate";
+import { LEGAL_HOLD_MESSAGE } from "@/lib/company-dpa";
 
 export default function StrojePage() {
   const [userId, setUserId] = useState("");
@@ -28,7 +30,9 @@ export default function StrojePage() {
     loading: planUsageLoading,
     refresh: refreshPlanUsage,
   } = usePlanUsage("machines");
-  const isMachineCreationUnavailable = planUsageLoading || isPlanLimited;
+  const { legalHold } = useCompanyDpaLegalHold();
+  const isMachineCreationUnavailable =
+    planUsageLoading || isPlanLimited || legalHold;
 
   const emptyMachine = {
     name: "",
@@ -140,6 +144,11 @@ export default function StrojePage() {
 
     if (!userId) {
       alert("Nie si prihlásený.");
+      return;
+    }
+
+    if (!editingId && legalHold) {
+      alert(LEGAL_HOLD_MESSAGE);
       return;
     }
 
@@ -405,6 +414,10 @@ export default function StrojePage() {
       >
         ➕ Pridať stroj
       </button>
+
+      {legalHold && (
+        <p className="mt-3 text-sm text-amber-800">{LEGAL_HOLD_MESSAGE}</p>
+      )}
 
       {showForm && (
         <div className="mt-8 rounded-2xl bg-white/45 border border-white/20 backdrop-blur-xl p-6 shadow-lg">

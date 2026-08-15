@@ -5,6 +5,8 @@ import { useParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import BackLink from "@/app/components/BackLink";
 import { getMyActiveMembership } from "@/lib/company";
+import { useCompanyDpaLegalHold } from "@/app/components/CompanyDpaGate";
+import { LEGAL_HOLD_MESSAGE } from "@/lib/company-dpa";
 
 type MachineService = {
   id: string;
@@ -131,6 +133,7 @@ export default function MachineDetailPage() {
   const [deletingPhotoId, setDeletingPhotoId] = useState<string | null>(null);
   const serviceSaveInProgressRef = useRef(false);
   const serviceDeleteInProgressRef = useRef(false);
+  const { legalHold } = useCompanyDpaLegalHold();
 
   useEffect(() => {
     checkUser();
@@ -243,6 +246,11 @@ export default function MachineDetailPage() {
 
     if (!service.service_date || !service.title.trim()) {
       alert("Vyplňte dátum servisu a názov servisu.");
+      return;
+    }
+
+    if (!editingServiceId && legalHold) {
+      alert(LEGAL_HOLD_MESSAGE);
       return;
     }
 
@@ -393,6 +401,12 @@ export default function MachineDetailPage() {
   const originalFile = event.target.files?.[0];
 
   if (!originalFile || !userId || !machineId) return;
+
+  if (legalHold) {
+    event.target.value = "";
+    alert(LEGAL_HOLD_MESSAGE);
+    return;
+  }
 
   setIsUploading(true);
 
@@ -584,17 +598,29 @@ export default function MachineDetailPage() {
               if (showServiceForm) {
                 cancelServiceEdit();
               } else {
+                if (legalHold) {
+                  alert(LEGAL_HOLD_MESSAGE);
+                  return;
+                }
                 setService(emptyService);
                 setEditingServiceId(null);
                 setShowServiceForm(true);
               }
             }}
-            disabled={isServiceSaving || deletingServiceId !== null}
+            disabled={
+              isServiceSaving ||
+              deletingServiceId !== null ||
+              (!showServiceForm && legalHold)
+            }
             className="w-full rounded-xl bg-blue-600 px-5 py-3 text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-400 sm:w-auto"
           >
             {showServiceForm ? "Zavrieť formulár" : "➕ Pridať servis"}
           </button>
         </div>
+
+        {legalHold && !showServiceForm && (
+          <p className="mt-3 text-sm text-amber-800">{LEGAL_HOLD_MESSAGE}</p>
+        )}
 
         {showServiceForm && (
           <div className="mt-6 rounded-2xl border bg-slate-50 p-4 sm:p-6">
@@ -824,7 +850,7 @@ export default function MachineDetailPage() {
       capture="environment"
       className="hidden"
       onChange={uploadPhoto}
-      disabled={isUploading}
+      disabled={isUploading || legalHold}
     />
   </label>
 
@@ -835,11 +861,15 @@ export default function MachineDetailPage() {
       accept="image/*"
       className="hidden"
       onChange={uploadPhoto}
-      disabled={isUploading}
+      disabled={isUploading || legalHold}
     />
   </label>
 </div>
         </div>
+
+        {legalHold && (
+          <p className="mt-3 text-sm text-amber-800">{LEGAL_HOLD_MESSAGE}</p>
+        )}
 
         {photos.length === 0 ? (
           <p className="mt-6 text-slate-500">

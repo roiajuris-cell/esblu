@@ -58,6 +58,18 @@ export function PublicLegalLayout({
             >
               Podmienky používania
             </Link>
+            <Link href="/cookies" className="text-blue-700 hover:underline">
+              Cookies
+            </Link>
+            <Link href="/dpa" className="text-blue-700 hover:underline">
+              DPA (spracúvanie pre firmy)
+            </Link>
+            <Link
+              href="/subprocessors"
+              className="text-blue-700 hover:underline"
+            >
+              Sprostredkovatelia
+            </Link>
             <Link href="/kontakt" className="text-blue-700 hover:underline">
               Kontakt
             </Link>

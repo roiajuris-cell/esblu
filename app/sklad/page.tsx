@@ -11,6 +11,8 @@ import {
 } from "@/lib/plan-limits";
 import BackLink from "@/app/components/BackLink";
 import { getMyActiveMembership } from "@/lib/company";
+import { useCompanyDpaLegalHold } from "@/app/components/CompanyDpaGate";
+import { LEGAL_HOLD_MESSAGE } from "@/lib/company-dpa";
 async function compressImage(file: File): Promise<File> {
   const imageUrl = URL.createObjectURL(file);
 
@@ -85,7 +87,9 @@ export default function SkladPage() {
     loading: planUsageLoading,
     refresh: refreshPlanUsage,
   } = usePlanUsage("inventory_items");
-  const isItemCreationUnavailable = planUsageLoading || isPlanLimited;
+  const { legalHold } = useCompanyDpaLegalHold();
+  const isItemCreationUnavailable =
+    planUsageLoading || isPlanLimited || legalHold;
 
   const emptyItem = {
     name: "",
@@ -216,6 +220,11 @@ setItems(itemsWithPhotos);
 
     if (!userId) {
       alert("Nie si prihlásený.");
+      return;
+    }
+
+    if (!editingId && legalHold) {
+      alert(LEGAL_HOLD_MESSAGE);
       return;
     }
 
@@ -449,6 +458,10 @@ setItems(itemsWithPhotos);
       >
         ➕ Pridať položku
       </button>
+
+      {legalHold && (
+        <p className="mt-3 text-sm text-amber-800">{LEGAL_HOLD_MESSAGE}</p>
+      )}
 
       {showForm && (
         <div className="mt-8 rounded-2xl border border-white/20 bg-white/45 p-6 shadow-lg backdrop-blur-xl">

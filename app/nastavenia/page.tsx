@@ -15,6 +15,11 @@ import {
   type CompanyMemberRole,
   type CompanyMemberRow,
 } from "@/lib/company";
+import {
+  listMyLegalAcceptances,
+  type MyLegalAcceptanceRow,
+} from "@/lib/legal-acceptance";
+import { legalConfig } from "@/lib/legal-config";
 
 const MEMBER_ROLE_LABELS: Record<string, string> = {
   owner: "Majiteľ",
@@ -45,6 +50,62 @@ const feedbackMailto = `mailto:info@esblu.com?subject=${encodeURIComponent(
   feedbackSubject
 )}&body=${encodeURIComponent(feedbackBody)}`;
 
+const DOC_TYPE_LABELS: Record<string, string> = {
+  terms: "Podmienky používania",
+  privacy_policy: "Zásady ochrany osobných údajov",
+  dpa: "Zmluva o spracúvaní osobných údajov (DPA)",
+  cookie_policy: "Cookies",
+};
+
+function buildPrivacyRequestMailto(subject: string, body: string) {
+  return `mailto:privacy@esblu.com?subject=${encodeURIComponent(
+    subject
+  )}&body=${encodeURIComponent(body)}`;
+}
+
+const exportRequestMailto = buildPrivacyRequestMailto(
+  "Žiadosť o export osobných údajov — Esblu",
+  `Dobrý deň,
+
+žiadam o export osobných údajov spojených s mojím účtom v Esblu (e-mail účtu: ).
+
+Ďakujem.`
+);
+
+const correctionRequestMailto = buildPrivacyRequestMailto(
+  "Žiadosť o opravu osobných údajov — Esblu",
+  `Dobrý deň,
+
+žiadam o opravu nasledujúcich osobných údajov spojených s mojím účtom v Esblu (e-mail účtu: ):
+
+Nesprávny/neúplný údaj:
+Správna hodnota:
+
+Ďakujem.`
+);
+
+const employeeAccountDeletionMailto = buildPrivacyRequestMailto(
+  "Žiadosť o vymazanie môjho účtu — Esblu",
+  `Dobrý deň,
+
+žiadam o vymazanie svojho osobného účtu (identity) v Esblu (e-mail účtu: ).
+
+Rozumiem, že týmto sa vymaže moja prihlasovacia identita a členstvo vo firme, NIE firemné dáta (vozidlá, stroje, sklad, dokumenty), ktoré zostávajú majetkom firmy.
+
+Ďakujem.`
+);
+
+const ownerCompanyTerminationMailto = buildPrivacyRequestMailto(
+  "Žiadosť o ukončenie firemného účtu — Esblu",
+  `Dobrý deň,
+
+ako majiteľ firmy žiadam o ukončenie firemného účtu v Esblu (e-mail účtu: ) vrátane vymazania firemných dát (vozidlá, stroje, sklad, dokumenty, AI evidencia) a zrušenia prístupu všetkých členov firmy.
+
+Rozumiem, že táto operácia je nezvratná a týka sa VŠETKÝCH členov firmy, nie iba môjho vlastného účtu.
+
+Ďakujem.`
+);
+
 export default function NastaveniaPage() {
   const [userId, setUserId] = useState("");
   const [companyName, setCompanyName] = useState("");
@@ -70,6 +131,9 @@ export default function NastaveniaPage() {
   const [inviteError, setInviteError] = useState("");
   const [lastInviteLink, setLastInviteLink] = useState("");
   const [linkCopied, setLinkCopied] = useState(false);
+
+  const [acceptances, setAcceptances] = useState<MyLegalAcceptanceRow[]>([]);
+  const [acceptancesLoading, setAcceptancesLoading] = useState(false);
 
   useEffect(() => {
     checkUser();
@@ -187,6 +251,14 @@ export default function NastaveniaPage() {
     setUserId(session.user.id);
     await loadSettings(session.user.id);
     await loadCompanyUsers(session.user.id);
+    await loadAcceptances();
+  }
+
+  async function loadAcceptances() {
+    setAcceptancesLoading(true);
+    const rows = await listMyLegalAcceptances();
+    setAcceptances(rows);
+    setAcceptancesLoading(false);
   }
 
   async function loadSettings(currentUserId: string) {
@@ -901,12 +973,139 @@ export default function NastaveniaPage() {
               Podmienky používania Esblu
             </Link>
             <Link
+              href="/cookies"
+              className="rounded-xl border border-slate-300 bg-white/80 px-5 py-3 font-semibold text-blue-700 transition hover:bg-white"
+            >
+              Cookies
+            </Link>
+            <Link
+              href="/dpa"
+              className="rounded-xl border border-slate-300 bg-white/80 px-5 py-3 font-semibold text-blue-700 transition hover:bg-white"
+            >
+              Zmluva o spracúvaní osobných údajov (DPA)
+            </Link>
+            <Link
+              href="/subprocessors"
+              className="rounded-xl border border-slate-300 bg-white/80 px-5 py-3 font-semibold text-blue-700 transition hover:bg-white"
+            >
+              Zoznam sprostredkovateľov
+            </Link>
+            <Link
               href="/kontakt"
               className="rounded-xl border border-slate-300 bg-white/80 px-5 py-3 font-semibold text-blue-700 transition hover:bg-white"
             >
               Kontakt
             </Link>
           </nav>
+        </section>
+
+        <section className="rounded-3xl border border-white/20 bg-white/45 p-8 shadow-lg backdrop-blur-xl">
+          <h2 className="text-2xl font-bold text-slate-900">
+            Súkromie a dáta
+          </h2>
+
+          <p className="mt-2 text-sm text-slate-700">
+            Prehľad toho, ktoré verzie právnych dokumentov ste potvrdili, a
+            možnosť požiadať o uplatnenie svojich práv k osobným údajom.
+          </p>
+
+          <div className="mt-6">
+            <h3 className="font-semibold text-slate-900">
+              Vaše potvrdené dokumenty
+            </h3>
+
+            {acceptancesLoading ? (
+              <p className="mt-3 text-sm text-slate-600">Načítavam...</p>
+            ) : acceptances.length > 0 ? (
+              <ul className="mt-3 space-y-2">
+                {acceptances.map((row) => (
+                  <li
+                    key={`${row.document_type}-${row.version}`}
+                    className="flex flex-col gap-1 rounded-xl bg-white/80 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <span className="font-semibold text-slate-800">
+                      {DOC_TYPE_LABELS[row.document_type] || row.document_type}{" "}
+                      <span className="font-normal text-slate-500">
+                        (verzia {row.version})
+                      </span>
+                    </span>
+                    <span className="text-xs text-slate-500">
+                      potvrdené{" "}
+                      {new Date(row.accepted_at).toLocaleString("sk-SK")}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-3 text-sm text-slate-600">
+                Zatiaľ nemáme záznam o potvrdení žiadneho dokumentu (alebo
+                ešte nebola nasadená databázová funkcia na ich evidenciu).
+              </p>
+            )}
+
+            <p className="mt-3 text-xs text-slate-500">
+              Aktuálne platné verzie: Podmienky používania v
+              {legalConfig.termsVersion}, Zásady ochrany osobných údajov v
+              {legalConfig.privacyPolicyVersion}.
+            </p>
+          </div>
+
+          <div className="mt-8 grid gap-3 sm:grid-cols-2">
+            <a
+              href={exportRequestMailto}
+              className="rounded-xl border border-slate-300 bg-white/80 px-5 py-3 text-center font-semibold text-blue-700 transition hover:bg-white"
+            >
+              Požiadať o export mojich údajov
+            </a>
+            <a
+              href={correctionRequestMailto}
+              className="rounded-xl border border-slate-300 bg-white/80 px-5 py-3 text-center font-semibold text-blue-700 transition hover:bg-white"
+            >
+              Požiadať o opravu mojich údajov
+            </a>
+          </div>
+
+          <div className="mt-8 rounded-2xl border border-dashed border-slate-300 p-5">
+            <h3 className="font-semibold text-slate-900">Vymazanie účtu</h3>
+
+            {myRole === "owner" ? (
+              <>
+                <p className="mt-2 text-sm text-slate-700">
+                  Ako majiteľ firmy spravujete firemný účet, ku ktorému majú
+                  prístup aj ďalší členovia (admin/zamestnanci). Vymazanie
+                  firemného účtu je samostatný, nezvratný proces, ktorý
+                  ukončí prístup všetkých členov a vymaže firemné dáta —
+                  nejde o bežné vymazanie osobného účtu.
+                </p>
+                <a
+                  href={ownerCompanyTerminationMailto}
+                  className="mt-4 inline-flex rounded-xl bg-red-600 px-5 py-3 text-center font-semibold text-white transition hover:bg-red-700"
+                >
+                  Požiadať o ukončenie firemného účtu
+                </a>
+              </>
+            ) : (
+              <>
+                <p className="mt-2 text-sm text-slate-700">
+                  Môžete požiadať o vymazanie svojej osobnej identity a
+                  členstva vo firme. Firemné dáta (vozidlá, stroje, sklad,
+                  dokumenty), ktoré patria firme, sa tým NEVYMAŽÚ — sú
+                  majetkom firmy, nie vášho osobného účtu.
+                </p>
+                <a
+                  href={employeeAccountDeletionMailto}
+                  className="mt-4 inline-flex rounded-xl bg-red-600 px-5 py-3 text-center font-semibold text-white transition hover:bg-red-700"
+                >
+                  Požiadať o vymazanie môjho účtu
+                </a>
+              </>
+            )}
+
+            <p className="mt-3 text-xs text-slate-500">
+              Žiadosti aktuálne spracúvame manuálne po overení totožnosti.
+              Odpovieme na e-mail, z ktorého žiadosť odošlete.
+            </p>
+          </div>
         </section>
       </div>
     </main>

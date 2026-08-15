@@ -23,6 +23,8 @@ import {
   isOwnerOrAdmin,
   type CompanyMemberRole,
 } from "@/lib/company";
+import { useCompanyDpaLegalHold } from "@/app/components/CompanyDpaGate";
+import { LEGAL_HOLD_MESSAGE } from "@/lib/company-dpa";
 import { normalizeWeightUnit } from "@/lib/normalize-weight-unit";
 import {
   convertWeightToTons,
@@ -631,7 +633,13 @@ export default function AiEvidenciaPage() {
     loading: planUsageLoading,
     refresh: refreshPlanUsage,
   } = usePlanUsage("ai_evidence");
-  const isCreationBlocked = !planUsageLoading && isPlanLimited;
+  const { legalHold } = useCompanyDpaLegalHold();
+  // Legal-hold blokuje vytváranie NOVÝCH ai_evidence/documents/
+  // document_attachments záznamov — presne tabuľky, ktoré chráni
+  // esblu_require_company_dpa_before_insert
+  // (20260816090000_add_company_dpa_acceptance.sql). Rovnaký vzor ako
+  // plan-limit blokovanie o riadok nižšie.
+  const isCreationBlocked = (!planUsageLoading && isPlanLimited) || legalHold;
 
 const groupedRecords = records.reduce((groups: any, record: any) => {
   const spz = getSpzGroupKey(record.spz);
@@ -804,7 +812,9 @@ const openFolderDocuments =
       setError(
         planUsageLoading
           ? "Overujem dostupnosť limitu. Skús to znova o chvíľu."
-          : PLAN_LIMIT_MESSAGE
+          : legalHold
+            ? LEGAL_HOLD_MESSAGE
+            : PLAN_LIMIT_MESSAGE
       );
       return;
     }
@@ -823,7 +833,9 @@ const openFolderDocuments =
       setError(
         planUsageLoading
           ? "Overujem dostupnosť limitu. Skús to znova o chvíľu."
-          : PLAN_LIMIT_MESSAGE
+          : legalHold
+            ? LEGAL_HOLD_MESSAGE
+            : PLAN_LIMIT_MESSAGE
       );
       return;
     }
@@ -1073,6 +1085,11 @@ function resolveMovementType(result: any): string | null {
   async function saveEvidence() {
     if (!result || saveInProgressRef.current) return;
 
+    if (legalHold) {
+      setError(LEGAL_HOLD_MESSAGE);
+      return;
+    }
+
     saveInProgressRef.current = true;
     setIsSaving(true);
     setError("");
@@ -1257,6 +1274,11 @@ review_status: reviewStatus,
 
     if (assignmentTarget === "machine" && !selectedMachineId) {
       setError("Vyber stroj, ku ktorému chceš dokument priradiť.");
+      return;
+    }
+
+    if (legalHold) {
+      setError(LEGAL_HOLD_MESSAGE);
       return;
     }
 
@@ -1552,6 +1574,11 @@ review_status: reviewStatus,
     event.target.value = "";
 
     if (!file || !selectedOtherDocument) return;
+
+    if (legalHold) {
+      setError(LEGAL_HOLD_MESSAGE);
+      return;
+    }
 
     setIsUploadingAttachment(true);
     setError("");
@@ -2089,6 +2116,12 @@ function formatDocDate(value: unknown): string {
           />
         )}
 
+        {legalHold && (
+          <p className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-900">
+            {LEGAL_HOLD_MESSAGE}
+          </p>
+        )}
+
         <div className="mt-10 rounded-3xl border-2 border-dashed border-blue-300 bg-blue-50 p-6 text-center">
   <span className="text-5xl">📄</span>
 
@@ -2103,7 +2136,7 @@ function formatDocDate(value: unknown): string {
   <div className="mt-6 grid grid-cols-2 gap-3">
     <label
       className={`rounded-2xl bg-blue-600 px-4 py-4 font-bold text-white ${
-        planUsageLoading || isPlanLimited || isProcessing || isSaving
+        planUsageLoading || isCreationBlocked || isProcessing || isSaving
           ? "cursor-not-allowed opacity-60"
           : "cursor-pointer"
       }`}
@@ -2114,14 +2147,14 @@ function formatDocDate(value: unknown): string {
         accept="image/*"
         capture="environment"
         className="hidden"
-        disabled={planUsageLoading || isPlanLimited || isProcessing || isSaving}
+        disabled={planUsageLoading || isCreationBlocked || isProcessing || isSaving}
         onChange={handleFile}
       />
     </label>
 
     <label
       className={`rounded-2xl bg-white px-4 py-4 font-bold text-blue-700 shadow ${
-        planUsageLoading || isPlanLimited || isProcessing || isSaving
+        planUsageLoading || isCreationBlocked || isProcessing || isSaving
           ? "cursor-not-allowed opacity-60"
           : "cursor-pointer"
       }`}
@@ -2131,7 +2164,7 @@ function formatDocDate(value: unknown): string {
         type="file"
         accept="image/*"
         className="hidden"
-        disabled={planUsageLoading || isPlanLimited || isProcessing || isSaving}
+        disabled={planUsageLoading || isCreationBlocked || isProcessing || isSaving}
         onChange={handleFile}
       />
     </label>
@@ -2188,9 +2221,7 @@ function formatDocDate(value: unknown): string {
               <button
                 type="button"
                 onClick={processPendingDocument}
-                disabled={
-                  isProcessing || planUsageLoading || isCreationBlocked
-                }
+                disabled={isProcessing || planUsageLoading || isCreationBlocked}
                 className="flex-1 rounded-2xl bg-blue-600 px-5 py-4 font-black text-white disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isProcessing
@@ -2292,7 +2323,7 @@ function formatDocDate(value: unknown): string {
               disabled={
                 isSaving ||
                 planUsageLoading ||
-                isPlanLimited ||
+                isCreationBlocked ||
                 Boolean(currentWeightValidation?.invalidFields.length)
               }
               className="mt-4 w-full rounded-2xl bg-blue-600 px-5 py-4 text-lg font-black text-white disabled:opacity-60"
@@ -2451,6 +2482,7 @@ function formatDocDate(value: unknown): string {
               disabled={
                 isSavingOtherDocument ||
                 planUsageLoading ||
+                legalHold ||
                 !assignmentTarget ||
                 (assignmentTarget === "vehicle" && !selectedVehicleId) ||
                 (assignmentTarget === "machine" && !selectedMachineId)
@@ -3329,7 +3361,7 @@ function formatDocDate(value: unknown): string {
                 type="file"
                 accept="image/jpeg,image/png,image/webp,application/pdf"
                 className="hidden"
-                disabled={isUploadingAttachment}
+                disabled={isUploadingAttachment || legalHold}
                 onChange={handleAttachmentUpload}
               />
             </label>

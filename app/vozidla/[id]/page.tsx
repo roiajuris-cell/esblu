@@ -8,6 +8,8 @@ import {
   getMyActiveMembership,
   type CompanyMemberRole,
 } from "@/lib/company";
+import { useCompanyDpaLegalHold } from "@/app/components/CompanyDpaGate";
+import { LEGAL_HOLD_MESSAGE } from "@/lib/company-dpa";
 
 export default function VehicleDetailPage() {
   const { id } = useParams();
@@ -31,6 +33,7 @@ export default function VehicleDetailPage() {
   };
 
   const [service, setService] = useState(emptyService);
+  const { legalHold } = useCompanyDpaLegalHold();
 
   useEffect(() => {
     loadVehicle();
@@ -93,6 +96,15 @@ export default function VehicleDetailPage() {
   async function saveService() {
     if (!service.service_date || !service.title) {
       alert("Vyplň dátum servisu a názov servisu.");
+      return;
+    }
+
+    // Obranná kontrola pred INSERTom — DB trigger na vehicle_services by
+    // to aj tak odmietol (ESBLU_COMPANY_DPA_NOT_ACCEPTED), ale používateľ
+    // nemá vyplniť celý formulár a až pri uložení naraziť na chybu.
+    // Úpravu existujúceho servisu (editingServiceId nastavené) neblokuje.
+    if (!editingServiceId && legalHold) {
+      alert(LEGAL_HOLD_MESSAGE);
       return;
     }
 
@@ -192,15 +204,26 @@ export default function VehicleDetailPage() {
 
           <button
             onClick={() => {
+              if (!editingServiceId && legalHold) {
+                alert(LEGAL_HOLD_MESSAGE);
+                return;
+              }
               setShowForm(!showForm);
               setEditingServiceId(null);
               setService(emptyService);
             }}
-            className="rounded-xl bg-blue-600 px-5 py-3 text-white hover:bg-blue-700"
+            disabled={!editingServiceId && legalHold && !showForm}
+            className="rounded-xl bg-blue-600 px-5 py-3 text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-400"
           >
             ➕ Pridať servis
           </button>
         </div>
+
+        {!editingServiceId && legalHold && (
+          <p className="mt-3 text-sm text-amber-800">
+            {LEGAL_HOLD_MESSAGE}
+          </p>
+        )}
 
         {showForm && (
           <div className="mt-6 rounded-2xl border bg-slate-50 p-6">

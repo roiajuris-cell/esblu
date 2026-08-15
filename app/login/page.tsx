@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { ensureMyOwnerCompany } from "@/lib/company";
+import { acceptLegalDocumentAtRegistration } from "@/lib/legal-acceptance";
+import { REQUIRED_ACCEPTANCE_DOCUMENTS } from "@/lib/legal-config";
 
 // DÔLEŽITÉ: táto stránka slúži AJ existujúcim používateľom (owner, admin,
 // employee) na bežné prihlásenie — login() preto NIKDY nesmie volať
@@ -36,6 +38,8 @@ export default function LoginPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [resetLoading, setResetLoading] = useState(false);
+  const [agreedTerms, setAgreedTerms] = useState(false);
+  const [agreedPrivacy, setAgreedPrivacy] = useState(false);
 
   function validateEmail(value: string) {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
@@ -93,6 +97,13 @@ export default function LoginPage() {
       return;
     }
 
+    if (!agreedTerms || !agreedPrivacy) {
+      alert(
+        "Pred registráciou musíš súhlasiť s Podmienkami používania a potvrdiť oboznámenie sa so Zásadami ochrany osobných údajov."
+      );
+      return;
+    }
+
     setLoading(true);
 
     const { data, error } = await supabase.auth.signUp({
@@ -119,6 +130,17 @@ export default function LoginPage() {
       // Explicitný owner-registration flow — session prišla hneď (email
       // confirmation je vypnuté alebo bolo už predtým potvrdené).
       await ensureMyOwnerCompany();
+
+      // Zápis acceptance hneď, keď už máme session — checkboxy boli
+      // povinne odškrtnuté vyššie. Ak session príde až po potvrdení
+      // e-mailu (branch nižšie), acceptance sa nezapíše tu, ale
+      // LegalAcceptanceGate ju vyžiada pri prvom prihlásení po potvrdení
+      // (fail-safe, nie "dôveruj a zabudni").
+      await Promise.all(
+        REQUIRED_ACCEPTANCE_DOCUMENTS.map((doc) =>
+          acceptLegalDocumentAtRegistration(doc.type, doc.version)
+        )
+      );
 
       setLoading(false);
       alert("Účet bol vytvorený. Teraz si prihlásený.");
@@ -224,29 +246,58 @@ async function resetPassword() {
         </div>
 
         {mode === "register" && (
-          <p className="mt-4 text-sm leading-6 text-slate-600">
-            Registráciou potvrdzujete, že ste sa oboznámili s{" "}
-            <Link
-              href="/podmienky-pouzivania"
-              className="font-semibold text-blue-700 hover:underline"
-            >
-              Podmienkami používania
-            </Link>{" "}
-            a{" "}
-            <Link
-              href="/ochrana-osobnych-udajov"
-              className="font-semibold text-blue-700 hover:underline"
-            >
-              Zásadami ochrany osobných údajov
-            </Link>
-            .
-          </p>
+          <div className="mt-4 space-y-3">
+            <label className="flex items-start gap-3 text-sm leading-6 text-slate-700">
+              <input
+                type="checkbox"
+                className="mt-1 h-4 w-4"
+                checked={agreedTerms}
+                onChange={(event) => setAgreedTerms(event.target.checked)}
+                disabled={loading}
+              />
+              <span>
+                Súhlasím s{" "}
+                <Link
+                  href="/podmienky-pouzivania"
+                  target="_blank"
+                  className="font-semibold text-blue-700 hover:underline"
+                >
+                  Podmienkami používania
+                </Link>
+                .
+              </span>
+            </label>
+
+            <label className="flex items-start gap-3 text-sm leading-6 text-slate-700">
+              <input
+                type="checkbox"
+                className="mt-1 h-4 w-4"
+                checked={agreedPrivacy}
+                onChange={(event) => setAgreedPrivacy(event.target.checked)}
+                disabled={loading}
+              />
+              <span>
+                Potvrdzujem, že som sa oboznámil/a so{" "}
+                <Link
+                  href="/ochrana-osobnych-udajov"
+                  target="_blank"
+                  className="font-semibold text-blue-700 hover:underline"
+                >
+                  Zásadami ochrany osobných údajov
+                </Link>
+                .
+              </span>
+            </label>
+          </div>
         )}
 
         <button
   type="button"
   onClick={mode === "login" ? login : register}
-  disabled={loading}
+  disabled={
+    loading ||
+    (mode === "register" && (!agreedTerms || !agreedPrivacy))
+  }
   className="mt-6 w-full rounded-xl bg-blue-600 px-6 py-3 font-semibold text-white hover:bg-blue-700 disabled:bg-gray-400"
 >
   {loading
@@ -289,6 +340,9 @@ async function resetPassword() {
           </Link>
           <Link href="/podmienky-pouzivania" className="hover:text-blue-700 hover:underline">
             Podmienky používania
+          </Link>
+          <Link href="/cookies" className="hover:text-blue-700 hover:underline">
+            Cookies
           </Link>
           <Link href="/kontakt" className="hover:text-blue-700 hover:underline">
             Kontakt

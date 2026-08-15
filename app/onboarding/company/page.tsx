@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { ensureMyOwnerCompany } from "@/lib/company";
+import { acceptLegalDocumentAtRegistration } from "@/lib/legal-acceptance";
+import { REQUIRED_ACCEPTANCE_DOCUMENTS } from "@/lib/legal-config";
 
 // Explicitná, na jeden účel vyhradená route: JEDINÉ miesto (spolu s
 // register() v app/login/page.tsx pri okamžitej session) v celej aplikácii,
@@ -50,6 +52,29 @@ export default function OnboardingCompanyPage() {
 
     try {
       await ensureMyOwnerCompany();
+
+      // Session tu existuje prvýkrát až TERAZ (potvrdenie e-mailu bolo
+      // vyžadované, takže signUp() v app/login/page.tsx nemohol zapísať
+      // acceptance okamžite — auth.uid() by vtedy ešte bolo NULL). Checkboxy
+      // "Súhlasím s Podmienkami" a "Potvrdzujem oboznámenie sa so Zásadami"
+      // boli napriek tomu povinnou podmienkou PRED zavolaním signUp() na
+      // registračnej stránke — táto route je jediné miesto, kam vedie
+      // emailRedirectTo z toho istého signUp() volania, takže dosiahnutie
+      // tejto stránky je vždy priamym pokračovaním presne toho istého
+      // registračného flow. Acceptance sa preto zapisuje s
+      // acceptance_method='registration' (esblu_accept_legal_document_
+      // registration), NIE 'legal_gate' — 'legal_gate' je vyhradené pre
+      // existujúcich používateľov, ktorí required verziu nepotvrdili pri
+      // registrácii a boli kvôli tomu dodatočne zablokovaní
+      // (LegalAcceptanceGate). Zámerne "fire and forget" (nečaká sa/nerobí
+      // sa blokujúci error state) — ak by toto zlyhalo, LegalAcceptanceGate
+      // to pri prvom reálnom vstupe do appky odchytí ako fail-safe.
+      await Promise.all(
+        REQUIRED_ACCEPTANCE_DOCUMENTS.map((doc) =>
+          acceptLegalDocumentAtRegistration(doc.type, doc.version)
+        )
+      );
+
       router.push("/");
       router.refresh();
     } catch (error) {
