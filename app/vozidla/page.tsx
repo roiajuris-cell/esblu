@@ -576,10 +576,7 @@ export default function VozidlaPage() {
     : [];
 
   return (
-    <main
-  className="min-h-screen bg-cover bg-center bg-fixed p-4 sm:p-6 lg:p-10"
-  style={{ backgroundImage: "url('/images/background-dark.png')" }}
->
+    <main className="app-shell-bg min-h-screen p-4 sm:p-6 lg:p-10">
       <BackLink href="/" label="Hlavné menu" className="mb-4" />
 
       <div className="flex items-center gap-4">
@@ -588,10 +585,10 @@ export default function VozidlaPage() {
     alt="Vozidlá"
     className="h-20 w-20 object-contain"
   />
-  <h1 className="text-4xl font-bold text-white drop-shadow-lg">Vozidlá</h1>
+  <h1 className="text-4xl font-bold text-primary">Vozidlá</h1>
 </div>
 
-      <p className="mt-4 text-white/80">
+      <p className="mt-4 text-secondary">
         Evidencia firemných vozidiel.
       </p>
 
@@ -605,17 +602,17 @@ export default function VozidlaPage() {
       )}
 
       {role !== "employee" && (
-      <div className="mt-8 rounded-2xl border border-white/20 bg-white/45 p-6 shadow-lg backdrop-blur-xl">
+      <div className="mt-8 rounded-2xl border border-subtle bg-surface-1 p-6 shadow-lg backdrop-blur-xl">
         <h2 className="text-2xl font-bold">Načítať technický preukaz</h2>
-        <p className="mt-2 text-sm text-slate-700">
+        <p className="mt-2 text-sm text-secondary">
           Fotografie sa použijú iba na AI načítanie a nikam sa trvalo
           neukladajú. Predná strana je povinná, zadná je voliteľná.
         </p>
 
         <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <section className="rounded-2xl bg-white/80 p-5 shadow-sm">
+          <section className="rounded-2xl bg-surface-2 p-5 shadow-sm">
             <h3 className="text-lg font-bold">Predná strana</h3>
-            <p className="mt-1 text-sm text-slate-600">Povinná fotografia</p>
+            <p className="mt-1 text-sm text-secondary">Povinná fotografia</p>
 
             <div className="mt-4 flex flex-wrap gap-3">
               <label className="cursor-pointer rounded-xl bg-blue-600 px-4 py-3 font-medium text-white hover:bg-blue-700">
@@ -634,7 +631,7 @@ export default function VozidlaPage() {
                 />
               </label>
 
-              <label className="cursor-pointer rounded-xl border bg-white px-4 py-3 font-medium text-slate-700 hover:bg-slate-50">
+              <label className="cursor-pointer rounded-xl border border-subtle bg-surface-1 px-4 py-3 font-medium text-secondary hover:bg-surface-2">
                 🖼️ Vybrať z galérie
                 <input
                   type="file"
@@ -655,10 +652,10 @@ export default function VozidlaPage() {
                 <img
                   src={frontPreview}
                   alt="Predná strana technického preukazu"
-                  className="h-64 w-full rounded-xl border bg-white object-contain"
+                  className="h-64 w-full rounded-xl border border-subtle bg-surface-1 object-contain"
                 />
                 <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-muted-esblu">
                     Novým výberom fotografiu vymeníš.
                   </p>
                   <button
@@ -672,15 +669,15 @@ export default function VozidlaPage() {
                 </div>
               </div>
             ) : (
-              <div className="mt-4 rounded-xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500">
+              <div className="mt-4 rounded-xl border border-dashed border-subtle p-8 text-center text-sm text-muted-esblu">
                 Predná strana zatiaľ nie je vybraná.
               </div>
             )}
           </section>
 
-          <section className="rounded-2xl bg-white/80 p-5 shadow-sm">
+          <section className="rounded-2xl bg-surface-2 p-5 shadow-sm">
             <h3 className="text-lg font-bold">Zadná strana</h3>
-            <p className="mt-1 text-sm text-slate-600">Voliteľná fotografia</p>
+            <p className="mt-1 text-sm text-secondary">Voliteľná fotografia</p>
 
             <div className="mt-4 flex flex-wrap gap-3">
               <label className="cursor-pointer rounded-xl bg-blue-600 px-4 py-3 font-medium text-white hover:bg-blue-700">
@@ -699,7 +696,7 @@ export default function VozidlaPage() {
                 />
               </label>
 
-              <label className="cursor-pointer rounded-xl border bg-white px-4 py-3 font-medium text-slate-700 hover:bg-slate-50">
+              <label className="cursor-pointer rounded-xl border border-subtle bg-surface-1 px-4 py-3 font-medium text-secondary hover:bg-surface-2">
                 🖼️ Vybrať z galérie
                 <input
                   type="file"
@@ -720,10 +717,10 @@ export default function VozidlaPage() {
                 <img
                   src={backPreview}
                   alt="Zadná strana technického preukazu"
-                  className="h-64 w-full rounded-xl border bg-white object-contain"
+                  className="h-64 w-full rounded-xl border border-subtle bg-surface-1 object-contain"
                 />
                 <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-muted-esblu">
                     Novým výberom fotografiu vymeníš.
                   </p>
                   <button
@@ -737,7 +734,7 @@ export default function VozidlaPage() {
                 </div>
               </div>
             ) : (
-              <div className="mt-4 rounded-xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500">
+              <div className="mt-4 rounded-xl border border-dashed border-subtle p-8 text-center text-sm text-muted-esblu">
                 Zadná strana zatiaľ nie je vybraná.
               </div>
             )}
@@ -762,29 +759,29 @@ export default function VozidlaPage() {
         </button>
 
         {scanError && (
-          <p className="mt-4 rounded-xl bg-red-100 p-4 text-sm font-medium text-red-700">
+          <p className="mt-4 rounded-xl bg-danger-soft p-4 text-sm font-medium text-red-700">
             {scanError}
           </p>
         )}
 
         {scanMessage && (
-          <p className="mt-4 rounded-xl bg-green-100 p-4 text-sm font-medium text-green-800">
+          <p className="badge-success mt-4 rounded-xl p-4 text-sm font-medium">
             {scanMessage}
           </p>
         )}
 
         {additionalRegistrationFields.length > 0 && (
-          <div className="mt-5 rounded-2xl bg-white/80 p-5">
+          <div className="mt-5 rounded-2xl bg-surface-2 p-5">
             <h3 className="font-bold">Ďalšie načítané údaje</h3>
-            <p className="mt-1 text-xs text-slate-500">
+            <p className="mt-1 text-xs text-muted-esblu">
               Tieto údaje zatiaľ nemajú polia v databáze a pri uložení vozidla
               sa neuložia.
             </p>
             <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
               {additionalRegistrationFields.map(([label, value]) => (
-                <div key={label} className="rounded-xl bg-slate-100 p-3">
-                  <p className="text-xs text-slate-500">{label}</p>
-                  <p className="mt-1 font-semibold text-slate-900">{value}</p>
+                <div key={label} className="rounded-xl bg-surface-2 p-3">
+                  <p className="text-xs text-muted-esblu">{label}</p>
+                  <p className="mt-1 font-semibold text-primary">{value}</p>
                 </div>
               ))}
             </div>
@@ -794,7 +791,7 @@ export default function VozidlaPage() {
       )}
 
       {role !== "employee" && vehicle && (
-        <div className="mt-8 rounded-2xl bg-white p-6 shadow">
+        <div className="mt-8 rounded-2xl bg-surface-1 p-6 shadow">
           <h2 className="mb-6 text-2xl font-bold">
             {editingId ? "Upraviť vozidlo" : "Skontrolujte údaje vozidla"}
           </h2>
@@ -815,7 +812,7 @@ export default function VozidlaPage() {
               ["Počet miest", "pocetMiest"],
             ].map(([label, key]) => (
               <label key={key} className="block">
-                <span className="text-sm font-medium text-slate-600">
+                <span className="text-sm font-medium text-secondary">
                   {label}
                 </span>
                 <input
@@ -827,7 +824,7 @@ export default function VozidlaPage() {
             ))}
 
             <label className="block">
-              <span className="text-sm font-medium text-slate-600">
+              <span className="text-sm font-medium text-secondary">
                 STK platí do
               </span>
               <input
@@ -839,7 +836,7 @@ export default function VozidlaPage() {
             </label>
 
             <label className="block">
-              <span className="text-sm font-medium text-slate-600">
+              <span className="text-sm font-medium text-secondary">
                 EK platí do
               </span>
               <input
@@ -867,7 +864,7 @@ export default function VozidlaPage() {
             {editingId && (
               <button
                 onClick={cancelEdit}
-                className="rounded-xl bg-slate-300 px-6 py-3 text-slate-900 hover:bg-slate-400"
+                className="rounded-xl bg-surface-2 px-6 py-3 text-primary hover:bg-surface-hover"
               >
                 Zrušiť úpravu
               </button>
@@ -877,13 +874,13 @@ export default function VozidlaPage() {
       )}
 
       <div className="mt-10">
-        <h2 className="mb-4 text-2xl font-bold text-white drop-shadow-lg">
+        <h2 className="mb-4 text-2xl font-bold text-primary">
   Uložené vozidlá
 </h2>
 
         {vehicles.length === 0 ? (
-          <div className="rounded-2xl bg-white p-6 shadow">
-            <p className="text-slate-500">
+          <div className="rounded-2xl bg-surface-1 p-6 shadow">
+            <p className="text-muted-esblu">
               Zatiaľ nie je uložené žiadne vozidlo.
             </p>
           </div>

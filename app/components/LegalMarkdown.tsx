@@ -107,7 +107,7 @@ function renderInline(text: string, keyPrefix: string): ReactNode[] {
       nodes.push(
         <code
           key={`${keyPrefix}-c${idx++}`}
-          className="rounded bg-slate-100 px-1.5 py-0.5 text-sm"
+          className="rounded bg-surface-2 px-1.5 py-0.5 text-sm"
         >
           {match[4]}
         </code>

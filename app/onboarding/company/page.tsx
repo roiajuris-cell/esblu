@@ -97,7 +97,7 @@ export default function OnboardingCompanyPage() {
   if (state === "checking" || state === "bootstrapping") {
     return (
       <Centered>
-        <p className="text-slate-600">
+        <p className="text-secondary">
           {state === "checking"
             ? "Overujem potvrdenie e-mailu..."
             : "Zakladám firemný účet..."}
@@ -109,10 +109,10 @@ export default function OnboardingCompanyPage() {
   if (state === "no-session") {
     return (
       <Centered>
-        <h1 className="text-2xl font-bold text-slate-900">
+        <h1 className="text-2xl font-bold text-primary">
           Odkaz nie je platný
         </h1>
-        <p className="mt-3 text-slate-600">
+        <p className="mt-3 text-secondary">
           Tento odkaz je platný iba bezprostredne po potvrdení e-mailu z
           registrácie novej firmy. Skús sa prihlásiť znova.
         </p>
@@ -128,10 +128,10 @@ export default function OnboardingCompanyPage() {
 
   return (
     <Centered>
-      <h1 className="text-2xl font-bold text-slate-900">
+      <h1 className="text-2xl font-bold text-primary">
         Niečo sa nepodarilo
       </h1>
-      <p className="mt-3 text-slate-600">
+      <p className="mt-3 text-secondary">
         Firemný účet sa nepodarilo založiť. Skús sa prihlásiť znova — ak
         problém pretrváva, kontaktuj podporu.
       </p>
@@ -147,8 +147,8 @@ export default function OnboardingCompanyPage() {
 
 function Centered({ children }: { children: React.ReactNode }) {
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-100 p-6">
-      <div className="w-full max-w-md rounded-2xl bg-white p-8 text-center shadow">
+    <main className="app-shell-bg flex min-h-screen items-center justify-center p-6">
+      <div className="w-full max-w-md rounded-2xl bg-surface-1 p-8 text-center shadow">
         {children}
       </div>
     </main>

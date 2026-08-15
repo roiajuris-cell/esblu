@@ -1,8 +1,106 @@
 @import "tailwindcss";
 
+/* =============================================================================
+   ESBLU DESIGN SYSTEM — vizuálny redesign (tmavý premium/tech vzhľad)
+   =============================================================================
+   Centrálne design tokeny podľa priloženej vizuálnej referencie: veľmi tmavé
+   navy/black-blue pozadie, jemné cyan/blue glow, tmavé karty s jemným
+   borderom, cyan/electric-blue + oranžový (Stroje) akcent. Tieto tokeny sú
+   jediný zdroj pravdy pre farby/rádiusy/tiene naprieč appkou — jednotlivé
+   stránky by nemali definovať vlastné ad-hoc farby, ale používať tieto
+   premenné (priamo cez Tailwind @theme utility triedy nižšie, napr.
+   bg-surface-1, text-text-secondary, border-border-subtle, alebo cez
+   pomocné .surface-card / .glow-* triedy v @layer utilities nižšie).
+
+   DÔLEŽITÉ: toto je čisto vizuálna vrstva. Nič v tomto súbore nemení
+   business logiku, routy, Supabase volania ani permissions.
+   ============================================================================= */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Page / layout — KOREKCIA v3: takmer čierna navy (nie modrastá plocha).
+     Sidebar (page-bg-elevated) je zámerne TMAVŠÍ než hlavná plocha a menej
+     kontrastný, aby nepôsobil ako samostatný svetlejší panel. */
+  --color-page-bg: #030812;
+  --color-page-bg-elevated: #020509;
+
+  /* Surfaces (tmavé karty) — veľmi blízko page-bg, odlíšenie robí hlavne
+     border + jemný vnútorný sheen (pozri .surface-card), nie svetlejšia
+     výplň. */
+  --color-surface-1: #060b16;
+  --color-surface-2: #0a1120;
+  --color-surface-hover: #101a2c;
+  --color-surface-glass: rgba(6, 11, 22, 0.78);
+
+  /* Borders — jemne cyan/modrý nádych namiesto neutrálne sivého */
+  --color-border-subtle: rgba(94, 149, 214, 0.16);
+  --color-border-strong: rgba(94, 149, 214, 0.32);
+
+  /* Text */
+  --color-text-primary: #f3f6fc;
+  --color-text-secondary: #8ea0bd;
+  --color-text-muted: #5b6d8a;
+
+  /* Accents */
+  --color-accent-cyan: #22d3ee;
+  --color-accent-cyan-strong: #06b6d4;
+  --color-accent-blue: #3b82f6;
+  --color-accent-blue-strong: #2563eb;
+  --color-accent-orange: #f59e0b;
+  --color-accent-orange-strong: #ea8a06;
+  /* Jemný "warm/blue" accent pre Sklad (odlíšený od cyan/AI aj electric
+     blue/Vozidlá) — teplejší tón medzi cyan a modrou. Pridané pri korekcii
+     redizajnu (dashboard v2). */
+  --color-accent-teal: #2dd4bf;
+  --color-accent-teal-strong: #14b8a6;
+
+  /* Status */
+  --color-success: #22c55e;
+  --color-success-bg: rgba(34, 197, 94, 0.12);
+  --color-warning: #f59e0b;
+  --color-warning-bg: rgba(245, 158, 11, 0.12);
+  --color-danger: #f87171;
+  --color-danger-bg: rgba(248, 113, 113, 0.12);
+
+  /* Inputs */
+  --color-input-bg: rgba(9, 15, 28, 0.65);
+  --color-input-border: rgba(148, 178, 224, 0.2);
+
+  /* Radius */
+  --radius-card: 1.5rem;
+  --radius-card-lg: 1.75rem;
+  --radius-control: 0.9rem;
+
+  /* Legacy Next.js template vars — necháme kvôli spätnej kompatibilite,
+     appka ich už prakticky nepoužíva (nahradené vyššie). */
+  --background: var(--color-page-bg);
+  --foreground: var(--color-text-primary);
+}
+
+/* Cielené prejasnenie 3 krokov Tailwindovej vstavanej "blue" palety —
+   samostatný @theme blok (priamy override defaultnej palety, nie
+   "@theme inline"). Desiatky miest v appke používajú
+   text-blue-600/700/800 ako farbu odkazov/accentov — tieto hodnoty boli
+   navrhnuté pre text na SVETLOM pozadí a na novom tmavom pozadí appky by
+   mali nedostatočný kontrast (takmer by splynuli s pozadím). Namiesto
+   hľadania a úpravy každého jednotlivého výskytu preraďujeme tieto 3
+   kroky palety na svetlejšie, na tmavom pozadí dobre čitateľné odtiene —
+   čím sa OKAMŽITE opraví každé použitie text-blue-600/700/800,
+   bg-blue-600/700 (tlačidlá) aj hover varianty naprieč celou appkou.
+   Ostatné kroky (blue-50/100/300/400/500) sa nemenia, sú používané
+   primárne ako jemné accent bordery/tinty, ktoré na tmavom pozadí
+   fungujú aj bez zmeny. */
+@theme {
+  --color-blue-600: #3b82f6;
+  --color-blue-700: #60a5fa;
+  --color-blue-800: #93c5fd;
+
+  /* text-red-700 sa v appke používa VÝHRADNE ako farba chybového textu
+     (nikdy nie ako bg-red-700 — overené grepom), preto je bezpečné
+     preradiť aj tento krok palety na svetlejší, na tmavom pozadí
+     čitateľný odtieň zhodný s --color-danger. bg-red-600/700 (tlačidlá
+     "Vymazať") zostávajú nezmenené, pretože red-600 je aktívne používaný
+     ako pozadie a jeho zmena by oslabila vzhľad danger tlačidiel. */
+  --color-red-700: #f87171;
 }
 
 @theme inline {
@@ -10,17 +108,260 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+
+  --color-page-bg: var(--color-page-bg);
+  --color-page-bg-elevated: var(--color-page-bg-elevated);
+  --color-surface-1: var(--color-surface-1);
+  --color-surface-2: var(--color-surface-2);
+  --color-surface-hover: var(--color-surface-hover);
+  --color-border-subtle: var(--color-border-subtle);
+  --color-border-strong: var(--color-border-strong);
+  --color-text-primary: var(--color-text-primary);
+  --color-text-secondary: var(--color-text-secondary);
+  --color-text-muted: var(--color-text-muted);
+  --color-accent-cyan: var(--color-accent-cyan);
+  --color-accent-blue: var(--color-accent-blue);
+  --color-accent-orange: var(--color-accent-orange);
+  --color-accent-teal: var(--color-accent-teal);
+  --color-success: var(--color-success);
+  --color-warning: var(--color-warning);
+  --color-danger: var(--color-danger);
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  background: var(--color-page-bg);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+}
+
+/* =============================================================================
+   Globálny fallback pre formulárové prvky. Appka má desiatky <input>/
+   <select>/<textarea> polí naprieč modulmi, väčšina iba s holými triedami
+   ako "rounded-xl border p-3" (bez explicitnej farby pozadia/textu — pri
+   pôvodnom svetlom dizajne to fungovalo vďaka prehliadačovému default
+   bielemu pozadiu). Aby VŠETKY formulárové polia v CELEJ appke automaticky
+   dostali správny tmavý vzhľad (bez nutnosti ručne dohľadať a upraviť
+   každý jeden input), definujeme tu bezpečný default na úrovni elementov.
+   Explicitné triedy (napr. .input-dark, alebo inak štylizované custom
+   prvky) môžu tento default kedykoľvek prebiť vyššou špecificitou. */
+@layer base {
+  input,
+  textarea,
+  select {
+    background-color: var(--color-input-bg);
+    border-color: var(--color-input-border);
+    color: var(--color-text-primary);
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--color-text-muted);
+  }
+
+  input:focus,
+  textarea:focus,
+  select:focus {
+    outline: none;
+    border-color: var(--color-accent-cyan);
+    box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.18);
+  }
+
+  input[type="checkbox"],
+  input[type="radio"] {
+    accent-color: var(--color-accent-cyan);
+    background-color: transparent;
+  }
+
+  select option {
+    background-color: var(--color-surface-1);
+    color: var(--color-text-primary);
+  }
+}
+
+/* =============================================================================
+   Reusable design-system utility classes (@layer utilities). Preferuj tieto
+   pred copy-paste dlhými Tailwind reťazcami — jedno miesto na úpravu vzhľadu
+   kariet/glow/badge naprieč celou appkou.
+   ============================================================================= */
+@layer utilities {
+  /* Základné pozadie stránky — KOREKCIA v3: takmer čisto čierna navy plocha.
+     Cyan/modrá sa smie objaviť IBA ako veľmi malý, slabý lokálny glow v
+     jednom rohu (nie ako plošný wash cez celú stránku — preto extrémne
+     malý radius a nízka opacity). Statický (bez JS), funguje aj v server
+     komponentoch. */
+  .app-shell-bg {
+    background-color: var(--color-page-bg);
+    background-image:
+      radial-gradient(28% 22% at 6% -6%, rgba(34, 211, 238, 0.05) 0%, rgba(34, 211, 238, 0) 70%);
+    background-attachment: fixed;
+  }
+
+  /* Primárna tmavá karta — KOREKCIA v3: farba takmer splýva s pozadím,
+     odlíšenie tvorí hlavne 1px cyan/modrý border + veľmi jemný vnútorný
+     sheen (svetlo zhora), NIE svetlejšia výplň ani glow na celej karte
+     (glow patrí lokálne k akcentu vnútri karty, napr. ikone). */
+  .surface-card {
+    background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.025) 0%, rgba(255, 255, 255, 0) 40%);
+    background-color: var(--color-surface-1);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-card);
+    box-shadow: 0 20px 45px -30px rgba(0, 0, 0, 0.9);
+  }
+
+  .surface-card-2 {
+    background-color: var(--color-surface-2);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-card);
+  }
+
+  .surface-card-hover {
+    transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+  }
+  .surface-card-hover:hover {
+    background-color: var(--color-surface-hover);
+    border-color: var(--color-border-strong);
+  }
+
+  .surface-glass {
+    background-color: var(--color-surface-glass);
+    backdrop-filter: blur(16px);
+    border: 1px solid var(--color-border-subtle);
+  }
+
+  /* Jemný glow okolo hlavných/aktívnych prvkov — použi triedny mix
+     glow-cyan / glow-blue / glow-orange podľa modulu. */
+  .glow-cyan {
+    box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.25), 0 12px 30px -10px rgba(34, 211, 238, 0.35);
+  }
+  .glow-blue {
+    box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.25), 0 12px 30px -10px rgba(59, 130, 246, 0.35);
+  }
+  .glow-orange {
+    box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.25), 0 12px 30px -10px rgba(245, 158, 11, 0.35);
+  }
+
+  /* KOREKCIA v3: lokálny glow VÝHRADNE za ikonovým chipom modulových kariet
+     (nie za celou kartou) — presne to, čo referencia ukazuje ako "farba sa
+     objavuje iba lokálne okolo akcentu". */
+  .icon-glow-cyan {
+    box-shadow: 0 0 22px -2px rgba(34, 211, 238, 0.45);
+  }
+  .icon-glow-blue {
+    box-shadow: 0 0 22px -2px rgba(59, 130, 246, 0.45);
+  }
+  .icon-glow-orange {
+    box-shadow: 0 0 22px -2px rgba(245, 158, 11, 0.45);
+  }
+  .icon-glow-teal {
+    box-shadow: 0 0 22px -2px rgba(45, 212, 191, 0.45);
+  }
+
+  .text-primary {
+    color: var(--color-text-primary);
+  }
+  .text-secondary {
+    color: var(--color-text-secondary);
+  }
+  .text-muted-esblu {
+    color: var(--color-text-muted);
+  }
+
+  .border-subtle {
+    border-color: var(--color-border-subtle);
+  }
+
+  /* Vstupy formulárov v tmavom štýle */
+  .input-dark {
+    background-color: var(--color-input-bg);
+    border: 1px solid var(--color-input-border);
+    border-radius: var(--radius-control);
+    color: var(--color-text-primary);
+  }
+  .input-dark::placeholder {
+    color: var(--color-text-muted);
+  }
+  .input-dark:focus {
+    outline: none;
+    border-color: var(--color-accent-cyan);
+    box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.18);
+  }
+
+  /* Kompaktné status badge */
+  .badge-success {
+    background-color: var(--color-success-bg);
+    color: var(--color-success);
+  }
+  .badge-warning {
+    background-color: var(--color-warning-bg);
+    color: var(--color-warning);
+  }
+  .badge-danger {
+    background-color: var(--color-danger-bg);
+    color: var(--color-danger);
+  }
+
+  /* Iba pozadie (bez farby textu) — na miesta, kde pôvodný kód mal
+     samostatnú bg-{color}-50 triedu a existujúcu text-{color}-NNN triedu
+     inde v tom istom reťazci (nesúsediace, takže sa nedali bezpečne
+     nahradiť jednou badge-* triedou bez rizika konfliktu farby textu). */
+  .bg-danger-soft { background-color: var(--color-danger-bg); }
+  .bg-warning-soft { background-color: var(--color-warning-bg); }
+  .bg-success-soft { background-color: var(--color-success-bg); }
+  .bg-info-soft { background-color: rgba(34, 211, 238, 0.12); }
+
+  /* Primárne CTA tlačidlo (cyan→blue gradient, konzistentné naprieč appkou) */
+  .btn-primary {
+    background-image: linear-gradient(135deg, var(--color-accent-cyan) 0%, var(--color-accent-blue-strong) 100%);
+    color: #051221;
+    font-weight: 700;
+    border-radius: var(--radius-control);
+    box-shadow: 0 10px 25px -8px rgba(34, 211, 238, 0.45);
+    transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+  }
+  .btn-primary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 14px 30px -8px rgba(34, 211, 238, 0.55);
+  }
+  .btn-primary:disabled {
+    opacity: 0.5;
+    box-shadow: none;
+    transform: none;
+    cursor: not-allowed;
+  }
+
+  .btn-secondary {
+    background-color: var(--color-surface-2);
+    border: 1px solid var(--color-border-subtle);
+    color: var(--color-text-primary);
+    font-weight: 600;
+    border-radius: var(--radius-control);
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+  }
+  .btn-secondary:hover {
+    background-color: var(--color-surface-hover);
+    border-color: var(--color-border-strong);
+  }
+
+  .btn-danger {
+    background-color: rgba(248, 113, 113, 0.14);
+    border: 1px solid rgba(248, 113, 113, 0.3);
+    color: #fca5a5;
+    font-weight: 600;
+    border-radius: var(--radius-control);
+    transition: background-color 0.15s ease;
+  }
+  .btn-danger:hover {
+    background-color: rgba(248, 113, 113, 0.22);
+  }
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: var(--color-page-bg);
+    --foreground: var(--color-text-primary);
   }
-}
-
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
 }

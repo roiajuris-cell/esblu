@@ -143,12 +143,12 @@ export default function LegalAcceptanceGate({
 
       {mustBlock && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl sm:p-8">
-            <h2 className="text-2xl font-bold text-slate-900">
+          <div className="w-full max-w-lg rounded-2xl bg-surface-1 p-6 shadow-2xl sm:p-8">
+            <h2 className="text-2xl font-bold text-primary">
               Aktualizované právne dokumenty
             </h2>
 
-            <p className="mt-3 text-sm leading-6 text-slate-600">
+            <p className="mt-3 text-sm leading-6 text-secondary">
               Aby ste mohli pokračovať v používaní Esblu, potvrďte prosím
               nasledujúce aktuálne dokumenty. Toto potvrdenie je potrebné iba
               raz a je viazané na váš účet.
@@ -156,7 +156,7 @@ export default function LegalAcceptanceGate({
 
             <div className="mt-6 space-y-4">
               {termsDoc && (
-                <label className="flex items-start gap-3 rounded-xl border border-slate-200 p-4 text-sm">
+                <label className="flex items-start gap-3 rounded-xl border border-subtle p-4 text-sm">
                   <input
                     type="checkbox"
                     className="mt-1 h-4 w-4"
@@ -181,7 +181,7 @@ export default function LegalAcceptanceGate({
               )}
 
               {privacyDoc && (
-                <label className="flex items-start gap-3 rounded-xl border border-slate-200 p-4 text-sm">
+                <label className="flex items-start gap-3 rounded-xl border border-subtle p-4 text-sm">
                   <input
                     type="checkbox"
                     className="mt-1 h-4 w-4"
@@ -225,7 +225,7 @@ export default function LegalAcceptanceGate({
               type="button"
               onClick={handleLogout}
               disabled={submitting}
-              className="mt-3 w-full text-center text-sm font-semibold text-slate-500 hover:underline"
+              className="mt-3 w-full text-center text-sm font-semibold text-muted-esblu hover:underline"
             >
               Odhlásiť sa
             </button>

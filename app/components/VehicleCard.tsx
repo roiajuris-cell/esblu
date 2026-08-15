@@ -19,27 +19,30 @@ export default function VehicleCard({
   canManage = true,
 }: Props) {
   return (
-    <div className="rounded-2xl border bg-white p-5 shadow-sm">
-      <div className="mb-4 inline-block rounded-lg border-2 border-slate-900 bg-white px-5 py-2 text-2xl font-bold tracking-widest">
+    <div className="surface-card surface-card-hover p-5">
+      {/* Zámerne ponechané ako biela/čierna "fyzická" ŠPZ tabuľka (aj v
+          tmavom dizajne) — čitateľný, rozpoznateľný skutočný objekt, nie
+          pozostatok svetlého motívu. */}
+      <div className="mb-4 inline-block rounded-lg border-2 border-slate-900 bg-white px-5 py-2 text-2xl font-bold tracking-widest text-slate-900">
         {car.spz || "BEZ ŠPZ"}
       </div>
 
-      <h3 className="text-2xl font-bold text-slate-900">
+      <h3 className="text-2xl font-bold text-primary">
         {car.znacka} {car.model}
       </h3>
 
-      <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
-        <p><b>VIN:</b> {car.vin}</p>
-        <p><b>Palivo:</b> {car.palivo}</p>
-        <p><b>Výkon:</b> {car.vykon}</p>
-        <p><b>STK:</b> {car.stk || "nedoplnené"}</p>
-        <p><b>EK:</b> {car.ek || "nedoplnené"}</p>
+      <div className="mt-4 grid grid-cols-2 gap-2 text-sm text-secondary">
+        <p><b className="text-primary">VIN:</b> {car.vin}</p>
+        <p><b className="text-primary">Palivo:</b> {car.palivo}</p>
+        <p><b className="text-primary">Výkon:</b> {car.vykon}</p>
+        <p><b className="text-primary">STK:</b> {car.stk || "nedoplnené"}</p>
+        <p><b className="text-primary">EK:</b> {car.ek || "nedoplnené"}</p>
       </div>
 
       <div className="mt-5 flex gap-3">
         <Link
           href={`/vozidla/${car.id}`}
-          className="rounded-xl bg-slate-900 px-4 py-2 text-white hover:bg-slate-800"
+          className="btn-secondary px-4 py-2"
         >
           Detail
         </Link>

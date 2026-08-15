@@ -175,14 +175,14 @@ export default function VehicleDetailPage() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-100 p-10">
+    <main className="app-shell-bg min-h-screen p-10">
       <BackLink href="/vozidla" label="Vozidlá" className="mb-4" />
 
       <h1 className="text-4xl font-bold">
         {vehicle.znacka} {vehicle.model}
       </h1>
 
-      <div className="mt-8 rounded-2xl bg-white p-8 shadow">
+      <div className="surface-card mt-8 p-8">
         <div className="grid grid-cols-2 gap-5">
           <p><b>ŠPZ:</b> {vehicle.spz}</p>
           <p><b>VIN:</b> {vehicle.vin}</p>
@@ -198,7 +198,7 @@ export default function VehicleDetailPage() {
         </div>
       </div>
 
-      <div className="mt-10 rounded-2xl bg-white p-8 shadow">
+      <div className="surface-card mt-10 p-8">
         <div className="flex items-center justify-between">
           <h2 className="text-2xl font-bold">História servisov</h2>
 
@@ -220,13 +220,13 @@ export default function VehicleDetailPage() {
         </div>
 
         {!editingServiceId && legalHold && (
-          <p className="mt-3 text-sm text-amber-800">
+          <p className="mt-3 text-sm text-amber-400">
             {LEGAL_HOLD_MESSAGE}
           </p>
         )}
 
         {showForm && (
-          <div className="mt-6 rounded-2xl border bg-slate-50 p-6">
+          <div className="mt-6 rounded-2xl border border-subtle bg-surface-2 p-6">
             <h3 className="mb-4 text-xl font-bold">
               {editingServiceId ? "Upraviť servis" : "Pridať servis"}
             </h3>
@@ -302,7 +302,7 @@ export default function VehicleDetailPage() {
               {editingServiceId && (
                 <button
                   onClick={cancelServiceEdit}
-                  className="rounded-xl bg-slate-300 px-5 py-3 text-slate-900 hover:bg-slate-400"
+                  className="rounded-xl bg-surface-2 px-5 py-3 text-primary hover:bg-surface-hover"
                 >
                   Zrušiť úpravu
                 </button>
@@ -312,7 +312,7 @@ export default function VehicleDetailPage() {
         )}
 
         {services.length === 0 ? (
-          <p className="mt-6 text-slate-500">
+          <p className="mt-6 text-muted-esblu">
             Zatiaľ nebol pridaný žiadny servis.
           </p>
         ) : (
@@ -320,41 +320,41 @@ export default function VehicleDetailPage() {
             {services.map((item) => (
               <div
                 key={item.id}
-                className="rounded-2xl border bg-slate-50 p-6 shadow-sm"
+                className="rounded-2xl border border-subtle bg-surface-2 p-6 shadow-sm"
               >
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <h3 className="text-2xl font-bold text-slate-900">
+                    <h3 className="text-2xl font-bold text-primary">
                       🔧 {item.title}
                     </h3>
 
-                    <p className="mt-1 text-sm text-slate-500">
+                    <p className="mt-1 text-sm text-muted-esblu">
                       📅 {item.service_date}
                     </p>
                   </div>
 
-                  <div className="rounded-xl bg-green-100 px-4 py-2 text-lg font-bold text-green-700">
+                  <div className="badge-success rounded-xl px-4 py-2 text-lg font-bold">
                     {item.cost ? `${item.cost} €` : "Cena neuvedená"}
                   </div>
                 </div>
 
                 <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-3">
-                  <div className="rounded-xl bg-white p-4">
-                    <p className="text-sm text-slate-500">Stav km</p>
+                  <div className="rounded-xl bg-surface-1 p-4">
+                    <p className="text-sm text-muted-esblu">Stav km</p>
                     <p className="text-lg font-bold">
                       {item.mileage ? `${item.mileage} km` : "—"}
                     </p>
                   </div>
 
-                  <div className="rounded-xl bg-white p-4">
-                    <p className="text-sm text-slate-500">Servisoval</p>
+                  <div className="rounded-xl bg-surface-1 p-4">
+                    <p className="text-sm text-muted-esblu">Servisoval</p>
                     <p className="text-lg font-bold">
                       {item.technician || "—"}
                     </p>
                   </div>
 
-                  <div className="rounded-xl bg-white p-4">
-                    <p className="text-sm text-slate-500">Ďalší servis</p>
+                  <div className="rounded-xl bg-surface-1 p-4">
+                    <p className="text-sm text-muted-esblu">Ďalší servis</p>
                     <p className="text-lg font-bold">
                       {item.next_service_date || "—"}
                     </p>
@@ -362,7 +362,7 @@ export default function VehicleDetailPage() {
                 </div>
 
                 {item.description && (
-                  <p className="mt-5 rounded-xl bg-white p-4 text-slate-700">
+                  <p className="mt-5 rounded-xl bg-surface-1 p-4 text-secondary">
                     {item.description}
                   </p>
                 )}

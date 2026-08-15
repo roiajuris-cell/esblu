@@ -394,9 +394,9 @@ function addRecordToSummary(
 
 function Info({ title, value }: { title: string; value: any }) {
   return (
-    <div className="rounded-2xl bg-slate-100 p-4">
-      <p className="text-xs text-slate-500">{title}</p>
-      <p className="mt-1 font-bold text-slate-900">{value || "-"}</p>
+    <div className="rounded-2xl bg-surface-2 p-4">
+      <p className="text-xs text-muted-esblu">{title}</p>
+      <p className="mt-1 font-bold text-primary">{value || "-"}</p>
     </div>
   );
 }
@@ -2089,10 +2089,7 @@ function formatDocDate(value: unknown): string {
 }
 
   return (
-    <main
-  className="min-h-screen bg-cover bg-center bg-fixed p-4 sm:p-6 lg:p-10"
-  style={{ backgroundImage: "url('/images/background-dark.png')" }}
->
+    <main className="app-shell-bg min-h-screen p-4 sm:p-6 lg:p-10">
       <div className="mx-auto max-w-3xl">
         <BackLink href="/" label="Hlavné menu" className="mb-4" />
 
@@ -2102,7 +2099,7 @@ function formatDocDate(value: unknown): string {
     alt="AI Inbox"
     className="h-16 w-16 object-contain"
   />
-  <h1 className="text-4xl font-bold text-white drop-shadow-lg">
+  <h1 className="text-4xl font-bold text-primary">
     AI INBOX
   </h1>
 </div>
@@ -2117,19 +2114,19 @@ function formatDocDate(value: unknown): string {
         )}
 
         {legalHold && (
-          <p className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-900">
+          <p className="mt-6 rounded-2xl border border-amber-200/30 bg-warning-soft p-4 text-sm font-semibold text-amber-400">
             {LEGAL_HOLD_MESSAGE}
           </p>
         )}
 
-        <div className="mt-10 rounded-3xl border-2 border-dashed border-blue-300 bg-blue-50 p-6 text-center">
+        <div className="mt-10 rounded-3xl border-2 border-dashed border-blue-300 bg-info-soft p-6 text-center">
   <span className="text-5xl">📄</span>
 
-  <h2 className="mt-4 text-2xl font-bold text-slate-900">
+  <h2 className="mt-4 text-2xl font-bold text-primary">
     PRIDAŤ DOKUMENT
   </h2>
 
-  <p className="mt-2 text-slate-700">
+  <p className="mt-2 text-secondary">
     Odfotiť dokument alebo vybrať obrázok zo zariadenia
   </p>
 
@@ -2153,7 +2150,7 @@ function formatDocDate(value: unknown): string {
     </label>
 
     <label
-      className={`rounded-2xl bg-white px-4 py-4 font-bold text-blue-700 shadow ${
+      className={`rounded-2xl bg-surface-1 px-4 py-4 font-bold text-blue-700 shadow ${
         planUsageLoading || isCreationBlocked || isProcessing || isSaving
           ? "cursor-not-allowed opacity-60"
           : "cursor-pointer"
@@ -2172,12 +2169,12 @@ function formatDocDate(value: unknown): string {
 </div>
 
         {previewUrl && pendingImageFile && (
-          <section className="mt-8 rounded-3xl bg-slate-50 p-5 sm:p-6">
+          <section className="mt-8 rounded-3xl bg-surface-2 p-5 sm:p-6">
             <div className="text-center">
-              <h2 className="text-xl font-black text-slate-950">
+              <h2 className="text-xl font-black text-primary">
                 Skontrolujte orientáciu dokumentu
               </h2>
-              <p className="mt-2 text-sm text-slate-600">
+              <p className="mt-2 text-sm text-secondary">
                 Pred AI spracovaním otočte dokument tak, aby bol text čitateľný.
               </p>
               <p className="mt-2 text-sm font-bold text-blue-700">
@@ -2185,7 +2182,7 @@ function formatDocDate(value: unknown): string {
               </p>
             </div>
 
-            <div className="mx-auto mt-5 flex aspect-square w-full max-w-xl items-center justify-center overflow-hidden rounded-2xl bg-slate-200 p-3">
+            <div className="mx-auto mt-5 flex aspect-square w-full max-w-xl items-center justify-center overflow-hidden rounded-2xl bg-surface-2 p-3">
               <img
                 src={previewUrl}
                 alt="Náhľad dokumentu pred AI spracovaním"
@@ -2201,7 +2198,7 @@ function formatDocDate(value: unknown): string {
                   setRotation((current) => normalizeRotation(current - 90))
                 }
                 disabled={isProcessing}
-                className="rounded-2xl bg-white px-4 py-3 font-bold text-slate-800 shadow disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-2xl bg-surface-1 px-4 py-3 font-bold text-primary shadow disabled:cursor-not-allowed disabled:opacity-60"
               >
                 ↺ Otočiť doľava
               </button>
@@ -2211,7 +2208,7 @@ function formatDocDate(value: unknown): string {
                   setRotation((current) => normalizeRotation(current + 90))
                 }
                 disabled={isProcessing}
-                className="rounded-2xl bg-white px-4 py-3 font-bold text-slate-800 shadow disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-2xl bg-surface-1 px-4 py-3 font-bold text-primary shadow disabled:cursor-not-allowed disabled:opacity-60"
               >
                 ↻ Otočiť doprava
               </button>
@@ -2232,7 +2229,7 @@ function formatDocDate(value: unknown): string {
                 type="button"
                 onClick={cancelPendingDocument}
                 disabled={isProcessing}
-                className="rounded-2xl bg-slate-200 px-5 py-4 font-bold text-slate-800 disabled:cursor-not-allowed disabled:opacity-60 sm:min-w-32"
+                className="rounded-2xl bg-surface-2 px-5 py-4 font-bold text-primary disabled:cursor-not-allowed disabled:opacity-60 sm:min-w-32"
               >
                 Zrušiť
               </button>
@@ -2241,9 +2238,9 @@ function formatDocDate(value: unknown): string {
         )}
 
         {fileName && (
-          <div className="mt-8 rounded-2xl bg-slate-50 p-5">
-            <p className="font-bold text-slate-900">Vybraný dokument:</p>
-            <p className="mt-1 text-slate-600">{fileName}</p>
+          <div className="mt-8 rounded-2xl bg-surface-2 p-5">
+            <p className="font-bold text-primary">Vybraný dokument:</p>
+            <p className="mt-1 text-secondary">{fileName}</p>
 
             {isProcessing && (
               <p className="mt-4 font-semibold text-blue-600">
@@ -2252,14 +2249,14 @@ function formatDocDate(value: unknown): string {
             )}
 
             {error && (
-              <p className="mt-4 font-semibold text-red-600">Chyba: {error}</p>
+              <p className="mt-4 font-semibold text-red-400">Chyba: {error}</p>
             )}
           </div>
         )}
 
         {result && (
-          <div className="mt-8 space-y-4 rounded-3xl bg-slate-50 p-6">
-            <h2 className="text-2xl font-black text-slate-950">
+          <div className="mt-8 space-y-4 rounded-3xl bg-surface-2 p-6">
+            <h2 className="text-2xl font-black text-primary">
               Načítané údaje — {DOCUMENT_TYPE_LABELS[scanDocumentType ?? "weigh_ticket"]}
             </h2>
 
@@ -2288,29 +2285,29 @@ function formatDocDate(value: unknown): string {
               ["documentTime", "Čas"],
             ].map(([field, label]) => (
               <div key={field}>
-                <label className="text-sm font-bold text-slate-600">
+                <label className="text-sm font-bold text-secondary">
                   {label}
                 </label>
                 <input
                   value={result[field] ?? ""}
                   onChange={(e) => updateResult(field, e.target.value)}
-                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 outline-none"
+                  className="mt-1 w-full rounded-xl border border-subtle bg-surface-1 px-4 py-3 outline-none"
                 />
               </div>
             ))}
 
             {currentWeightValidation?.invalidFields.length ? (
-              <p className="rounded-xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+              <p className="rounded-xl bg-danger-soft px-4 py-3 text-sm font-semibold text-red-700">
                 Skontrolujte číselný formát polí: {" "}
                 {currentWeightValidation.invalidFields.join(", ")}.
               </p>
             ) : currentWeightValidation?.hasMathMismatch ? (
-              <p className="rounded-xl bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
+              <p className="rounded-xl bg-warning-soft px-4 py-3 text-sm font-semibold text-amber-400">
                 Brutto, tara a netto si matematicky nezodpovedajú. Hodnoty sa
                 automaticky neopravili a záznam bude označený na kontrolu.
               </p>
             ) : currentWeightValidation?.isUnitMissing ? (
-              <p className="rounded-xl bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
+              <p className="rounded-xl bg-warning-soft px-4 py-3 text-sm font-semibold text-amber-400">
                 Pri hmotnosti chýba rozpoznaná jednotka. Záznam bude označený
                 na kontrolu.
               </p>
@@ -2337,8 +2334,8 @@ function formatDocDate(value: unknown): string {
           scanDocumentType &&
           scanDocumentType !== "weigh_ticket" &&
           scanDocumentType !== "delivery_note" && (
-          <div className="mt-8 space-y-4 rounded-3xl bg-slate-50 p-6">
-            <h2 className="text-2xl font-black text-slate-950">
+          <div className="mt-8 space-y-4 rounded-3xl bg-surface-2 p-6">
+            <h2 className="text-2xl font-black text-primary">
               Načítané údaje — {DOCUMENT_TYPE_LABELS[scanDocumentType]}
             </h2>
 
@@ -2352,13 +2349,13 @@ function formatDocDate(value: unknown): string {
             {REVIEW_ONLY_FIELD_LABELS[scanDocumentType].map(
               ([field, label]) => (
                 <div key={field}>
-                  <label className="text-sm font-bold text-slate-600">
+                  <label className="text-sm font-bold text-secondary">
                     {label}
                   </label>
                   <input
                     value={otherResult.fields[field] ?? ""}
                     onChange={(e) => updateOtherResult(field, e.target.value)}
-                    className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 outline-none"
+                    className="mt-1 w-full rounded-xl border border-subtle bg-surface-1 px-4 py-3 outline-none"
                   />
                 </div>
               )
@@ -2368,7 +2365,7 @@ function formatDocDate(value: unknown): string {
             {(scanDocumentType === "invoice" ||
               scanDocumentType === "receipt") && (
               <div>
-                <label className="text-sm font-bold text-slate-600">
+                <label className="text-sm font-bold text-secondary">
                   Poznámka (nepovinné)
                 </label>
                 <textarea
@@ -2376,7 +2373,7 @@ function formatDocDate(value: unknown): string {
                   onChange={(e) => setDocumentNote(e.target.value)}
                   rows={3}
                   placeholder="Napr. na čo bol nákup, kto ho schválil..."
-                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 outline-none"
+                  className="mt-1 w-full rounded-xl border border-subtle bg-surface-1 px-4 py-3 outline-none"
                 />
               </div>
             )}
@@ -2384,8 +2381,8 @@ function formatDocDate(value: unknown): string {
             {/* Priradenie MUSÍ byť pred tlačidlom Uložiť — rovnaká zásada
                 ako pri vážnom lístku, aby sa nedalo uložiť skôr, než sa
                 používateľ k priradeniu vôbec dostane. */}
-            <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5">
-              <h3 className="text-lg font-black text-slate-950">
+            <div className="space-y-4 rounded-2xl border border-subtle bg-surface-1 p-5">
+              <h3 className="text-lg font-black text-primary">
                 Chcete dokument priradiť?
               </h3>
 
@@ -2396,7 +2393,7 @@ function formatDocDate(value: unknown): string {
                   className={`rounded-2xl px-3 py-4 text-sm font-bold ${
                     assignmentTarget === "vehicle"
                       ? "bg-blue-600 text-white"
-                      : "bg-slate-100 text-slate-700"
+                      : "bg-surface-2 text-secondary"
                   }`}
                 >
                   🚛 Vozidlo
@@ -2407,7 +2404,7 @@ function formatDocDate(value: unknown): string {
                   className={`rounded-2xl px-3 py-4 text-sm font-bold ${
                     assignmentTarget === "machine"
                       ? "bg-blue-600 text-white"
-                      : "bg-slate-100 text-slate-700"
+                      : "bg-surface-2 text-secondary"
                   }`}
                 >
                   🚜 Stroj
@@ -2418,7 +2415,7 @@ function formatDocDate(value: unknown): string {
                   className={`rounded-2xl px-3 py-4 text-sm font-bold ${
                     assignmentTarget === "none"
                       ? "bg-blue-600 text-white"
-                      : "bg-slate-100 text-slate-700"
+                      : "bg-surface-2 text-secondary"
                   }`}
                 >
                   Bez priradenia
@@ -2427,13 +2424,13 @@ function formatDocDate(value: unknown): string {
 
               {assignmentTarget === "vehicle" && (
                 <div>
-                  <label className="text-sm font-bold text-slate-600">
+                  <label className="text-sm font-bold text-secondary">
                     Vozidlo
                   </label>
                   <select
                     value={selectedVehicleId}
                     onChange={(e) => setSelectedVehicleId(e.target.value)}
-                    className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 outline-none"
+                    className="mt-1 w-full rounded-xl border border-subtle bg-surface-1 px-4 py-3 outline-none"
                   >
                     <option value="">— vyber vozidlo —</option>
                     {vehicleOptions.map((vehicle) => (
@@ -2443,7 +2440,7 @@ function formatDocDate(value: unknown): string {
                     ))}
                   </select>
                   {vehicleOptions.length === 0 && (
-                    <p className="mt-1 text-xs text-slate-500">
+                    <p className="mt-1 text-xs text-muted-esblu">
                       Zatiaľ nemáš pridané žiadne vozidlo v module Vozidlá.
                     </p>
                   )}
@@ -2452,13 +2449,13 @@ function formatDocDate(value: unknown): string {
 
               {assignmentTarget === "machine" && (
                 <div>
-                  <label className="text-sm font-bold text-slate-600">
+                  <label className="text-sm font-bold text-secondary">
                     Stroj
                   </label>
                   <select
                     value={selectedMachineId}
                     onChange={(e) => setSelectedMachineId(e.target.value)}
-                    className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 outline-none"
+                    className="mt-1 w-full rounded-xl border border-subtle bg-surface-1 px-4 py-3 outline-none"
                   >
                     <option value="">— vyber stroj —</option>
                     {machineOptions.map((machine) => (
@@ -2468,7 +2465,7 @@ function formatDocDate(value: unknown): string {
                     ))}
                   </select>
                   {machineOptions.length === 0 && (
-                    <p className="mt-1 text-xs text-slate-500">
+                    <p className="mt-1 text-xs text-muted-esblu">
                       Zatiaľ nemáš pridaný žiadny stroj v module Stroje.
                     </p>
                   )}
@@ -2518,7 +2515,7 @@ function formatDocDate(value: unknown): string {
               type="button"
               onClick={cancelPendingDocument}
               disabled={isSavingOtherDocument}
-              className="mt-2 w-full rounded-2xl bg-slate-200 px-5 py-4 font-bold text-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+              className="mt-2 w-full rounded-2xl bg-surface-2 px-5 py-4 font-bold text-primary disabled:cursor-not-allowed disabled:opacity-60"
             >
               Nahrať iný dokument
             </button>
@@ -2527,21 +2524,21 @@ function formatDocDate(value: unknown): string {
 
          {records.length > 0 && (
   <div className="mt-10">
-    <h2 className="mb-4 text-2xl font-bold text-white drop-shadow-lg">
+    <h2 className="mb-4 text-2xl font-bold text-primary">
       Prehľad materiálu
     </h2>
 
     <div className="grid gap-4 md:grid-cols-2">
-      <div className="rounded-3xl border border-green-200 bg-white p-6 shadow-sm">
-        <p className="text-sm font-bold uppercase tracking-wide text-green-700">
+      <div className="rounded-3xl border border-green-200 bg-surface-1 p-6 shadow-sm">
+        <p className="text-sm font-bold uppercase tracking-wide text-green-400">
           Dovoz
         </p>
 
-        <p className="mt-2 text-4xl font-black text-slate-950">
+        <p className="mt-2 text-4xl font-black text-primary">
           {summary.totalImport.toFixed(2)} t
         </p>
 
-        <p className="mt-1 text-sm text-slate-600">
+        <p className="mt-1 text-sm text-secondary">
           {summary.importCount} dokladov
         </p>
 
@@ -2550,13 +2547,13 @@ function formatDocDate(value: unknown): string {
             ([material, weight]: any) => (
               <div
                 key={material}
-                className="flex items-center justify-between rounded-xl bg-green-50 px-4 py-3"
+                className="flex items-center justify-between rounded-xl bg-success-soft px-4 py-3"
               >
-                <span className="font-semibold text-slate-800">
+                <span className="font-semibold text-primary">
                   {material}
                 </span>
 
-                <span className="font-black text-green-700">
+                <span className="font-black text-green-400">
                   {Number(weight).toFixed(2)} t
                 </span>
               </div>
@@ -2564,23 +2561,23 @@ function formatDocDate(value: unknown): string {
           )}
 
           {Object.keys(summary.importByMaterial).length === 0 && (
-            <p className="text-sm text-slate-500">
+            <p className="text-sm text-muted-esblu">
               Zatiaľ nie je evidovaný žiadny dovoz.
             </p>
           )}
         </div>
       </div>
 
-      <div className="rounded-3xl border border-orange-200 bg-white p-6 shadow-sm">
-        <p className="text-sm font-bold uppercase tracking-wide text-orange-700">
+      <div className="rounded-3xl border border-orange-200 bg-surface-1 p-6 shadow-sm">
+        <p className="text-sm font-bold uppercase tracking-wide text-orange-400">
           Vývoz
         </p>
 
-        <p className="mt-2 text-4xl font-black text-slate-950">
+        <p className="mt-2 text-4xl font-black text-primary">
           {summary.totalExport.toFixed(2)} t
         </p>
 
-        <p className="mt-1 text-sm text-slate-600">
+        <p className="mt-1 text-sm text-secondary">
           {summary.exportCount} dokladov
         </p>
 
@@ -2589,13 +2586,13 @@ function formatDocDate(value: unknown): string {
             ([material, weight]: any) => (
               <div
                 key={material}
-                className="flex items-center justify-between rounded-xl bg-orange-50 px-4 py-3"
+                className="flex items-center justify-between rounded-xl bg-warning-soft px-4 py-3"
               >
-                <span className="font-semibold text-slate-800">
+                <span className="font-semibold text-primary">
                   {material}
                 </span>
 
-                <span className="font-black text-orange-700">
+                <span className="font-black text-orange-400">
                   {Number(weight).toFixed(2)} t
                 </span>
               </div>
@@ -2603,7 +2600,7 @@ function formatDocDate(value: unknown): string {
           )}
 
           {Object.keys(summary.exportByMaterial).length === 0 && (
-            <p className="text-sm text-slate-500">
+            <p className="text-sm text-muted-esblu">
               Zatiaľ nie je evidovaný žiadny vývoz.
             </p>
           )}
@@ -2614,7 +2611,7 @@ function formatDocDate(value: unknown): string {
   )}
   {records.length > 0 && (
   <div className="mt-10">
-    <h2 className="mb-4 text-2xl font-bold text-white drop-shadow-lg">
+    <h2 className="mb-4 text-2xl font-bold text-primary">
       Prehľad podľa ŠPZ
     </h2>
 
@@ -2623,7 +2620,7 @@ function formatDocDate(value: unknown): string {
         ([spz, vehicleSummary]: any) => (
           <div
             key={spz}
-            className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm"
+            className="rounded-3xl border border-subtle bg-surface-1 p-6 shadow-sm"
           >
             <div className="mb-5 flex items-center justify-between gap-4">
               <div>
@@ -2631,12 +2628,12 @@ function formatDocDate(value: unknown): string {
                   Vozidlo
                 </p>
 
-                <h3 className="text-2xl font-black text-slate-950">
+                <h3 className="text-2xl font-black text-primary">
                   {spz}
                 </h3>
               </div>
 
-              <p className="text-sm text-slate-500">
+              <p className="text-sm text-muted-esblu">
                 {vehicleSummary.importCount +
                   vehicleSummary.exportCount}{" "}
                 dokladov
@@ -2644,12 +2641,12 @@ function formatDocDate(value: unknown): string {
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
-              <div className="rounded-2xl bg-green-50 p-5">
-                <p className="text-sm font-bold uppercase text-green-700">
+              <div className="rounded-2xl bg-success-soft p-5">
+                <p className="text-sm font-bold uppercase text-green-400">
                   Dovoz
                 </p>
 
-                <p className="mt-2 text-3xl font-black text-slate-950">
+                <p className="mt-2 text-3xl font-black text-primary">
                   {vehicleSummary.totalImport.toFixed(2)} t
                 </p>
 
@@ -2659,13 +2656,13 @@ function formatDocDate(value: unknown): string {
                   ).map(([material, weight]: any) => (
                     <div
                       key={material}
-                      className="flex justify-between rounded-xl bg-white px-3 py-2"
+                      className="flex justify-between rounded-xl bg-surface-1 px-3 py-2"
                     >
-                      <span className="font-semibold text-slate-700">
+                      <span className="font-semibold text-secondary">
                         {material}
                       </span>
 
-                      <span className="font-black text-green-700">
+                      <span className="font-black text-green-400">
                         {Number(weight).toFixed(2)} t
                       </span>
                     </div>
@@ -2674,19 +2671,19 @@ function formatDocDate(value: unknown): string {
                   {Object.keys(
                     vehicleSummary.importByMaterial
                   ).length === 0 && (
-                    <p className="text-sm text-slate-500">
+                    <p className="text-sm text-muted-esblu">
                       Žiadny dovoz.
                     </p>
                   )}
                 </div>
               </div>
 
-              <div className="rounded-2xl bg-orange-50 p-5">
-                <p className="text-sm font-bold uppercase text-orange-700">
+              <div className="rounded-2xl bg-warning-soft p-5">
+                <p className="text-sm font-bold uppercase text-orange-400">
                   Vývoz
                 </p>
 
-                <p className="mt-2 text-3xl font-black text-slate-950">
+                <p className="mt-2 text-3xl font-black text-primary">
                   {vehicleSummary.totalExport.toFixed(2)} t
                 </p>
 
@@ -2696,13 +2693,13 @@ function formatDocDate(value: unknown): string {
                   ).map(([material, weight]: any) => (
                     <div
                       key={material}
-                      className="flex justify-between rounded-xl bg-white px-3 py-2"
+                      className="flex justify-between rounded-xl bg-surface-1 px-3 py-2"
                     >
-                      <span className="font-semibold text-slate-700">
+                      <span className="font-semibold text-secondary">
                         {material}
                       </span>
 
-                      <span className="font-black text-orange-700">
+                      <span className="font-black text-orange-400">
                         {Number(weight).toFixed(2)} t
                       </span>
                     </div>
@@ -2711,7 +2708,7 @@ function formatDocDate(value: unknown): string {
                   {Object.keys(
                     vehicleSummary.exportByMaterial
                   ).length === 0 && (
-                    <p className="text-sm text-slate-500">
+                    <p className="text-sm text-muted-esblu">
                       Žiadny vývoz.
                     </p>
                   )}
@@ -2726,7 +2723,7 @@ function formatDocDate(value: unknown): string {
 )}
     {records.length > 0 && (
       <div className="mt-10">
-    <h2 className="mb-4 text-2xl font-bold text-white drop-shadow-lg">
+    <h2 className="mb-4 text-2xl font-bold text-primary">
       Uložené doklady
     </h2>
 
@@ -2735,7 +2732,7 @@ function formatDocDate(value: unknown): string {
   Object.entries(groupedRecords).map(([spz, items]: any) => (
     <div
       key={spz}
-      className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"
+      className="rounded-3xl border border-subtle bg-surface-1 p-5 shadow-sm"
     >
       <div className="flex items-center justify-between gap-4">
         <div>
@@ -2743,11 +2740,11 @@ function formatDocDate(value: unknown): string {
             🚛 Vozidlo
           </p>
 
-          <h3 className="mt-2 text-2xl font-black text-slate-950">
+          <h3 className="mt-2 text-2xl font-black text-primary">
             {spz}
           </h3>
 
-          <p className="mt-1 text-sm text-slate-600">
+          <p className="mt-1 text-sm text-secondary">
             {items.length} {items.length === 1 ? "doklad" : "dokladov"}
           </p>
         </div>
@@ -2766,12 +2763,12 @@ function formatDocDate(value: unknown): string {
   <>
     <button
       onClick={() => setSelectedSpz(null)}
-      className="mb-4 rounded-2xl bg-slate-200 px-4 py-3 font-bold text-slate-700"
+      className="mb-4 rounded-2xl bg-surface-2 px-4 py-3 font-bold text-secondary"
     >
       ← Späť na všetky ŠPZ
     </button>
 
-    <h3 className="mb-4 text-2xl font-bold text-white drop-shadow-lg">
+    <h3 className="mb-4 text-2xl font-bold text-primary">
       🚛 {selectedSpz}
     </h3>
 
@@ -2779,7 +2776,7 @@ function formatDocDate(value: unknown): string {
       {groupedRecords[selectedSpz]?.map((record: any) => (
         <div
           key={record.id}
-          className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"
+          className="rounded-3xl border border-subtle bg-surface-1 p-5 shadow-sm"
         >
           <div className="flex items-start justify-between gap-4">
             <div>
@@ -2787,17 +2784,17 @@ function formatDocDate(value: unknown): string {
                 📄 {record.document_type || "Doklad"}
               </p>
 
-              <h3 className="mt-2 text-xl font-black text-slate-950">
+              <h3 className="mt-2 text-xl font-black text-primary">
                 {record.spz || "Bez ŠPZ"}
               </h3>
             </div>
 
-            <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">
+            <span className="rounded-full bg-info-soft px-3 py-1 text-xs font-bold text-blue-700">
               {record.movement_type || "nezaradené"}
             </span>
           </div>
 
-          <div className="mt-4 space-y-2 text-sm text-slate-600">
+          <div className="mt-4 space-y-2 text-sm text-secondary">
             <p>🏗️ {record.construction_site || "Bez stavby"}</p>
             <p>🏢 {record.supplier || "Bez dodávateľa"}</p>
             <p>👤 {record.customer || "Bez zákazníka"}</p>
@@ -2827,13 +2824,13 @@ function formatDocDate(value: unknown): string {
   </div>
 )}
     {isOwnerOrAdmin(role) && (
-    <div className="mt-10 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+    <div className="mt-10 rounded-3xl border border-subtle bg-surface-1 p-5 shadow-sm sm:p-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-2xl font-black text-slate-950">
+          <h2 className="text-2xl font-black text-primary">
             Export dokumentov
           </h2>
-          <p className="mt-1 text-sm text-slate-600">
+          <p className="mt-1 text-sm text-secondary">
             Exportuje všetky načítané dokumenty rozdelené podľa ŠPZ.
           </p>
         </div>
@@ -2850,7 +2847,7 @@ function formatDocDate(value: unknown): string {
       </div>
 
       {visibleDocuments.length === 0 && (
-        <p className="mt-4 rounded-xl bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
+        <p className="mt-4 rounded-xl bg-warning-soft px-4 py-3 text-sm font-semibold text-amber-400">
           Nie sú dostupné žiadne dokumenty na export.
         </p>
       )}
@@ -2859,8 +2856,8 @@ function formatDocDate(value: unknown): string {
         <p
           className={`mt-4 rounded-xl px-4 py-3 text-sm font-semibold ${
             exportFeedback.type === "success"
-              ? "bg-emerald-50 text-emerald-800"
-              : "bg-red-50 text-red-700"
+              ? "badge-success"
+              : "badge-danger"
           }`}
         >
           {exportFeedback.text}
@@ -2872,7 +2869,7 @@ function formatDocDate(value: unknown): string {
     {/* Zložky "Bločky"/"Faktúry" — nepriradené dokumenty (bod 4 zadania). */}
     {!openFolder && (
       <div className="mt-10">
-        <h2 className="text-2xl font-black text-white drop-shadow-lg">
+        <h2 className="text-2xl font-black text-primary">
           Zložky
         </h2>
 
@@ -2880,11 +2877,11 @@ function formatDocDate(value: unknown): string {
           <button
             type="button"
             onClick={() => setOpenFolder("receipt")}
-            className="rounded-3xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:border-blue-300"
+            className="rounded-3xl border border-subtle bg-surface-1 p-5 text-left shadow-sm transition hover:border-blue-300"
           >
             <p className="text-3xl">🧾</p>
-            <h3 className="mt-2 text-xl font-black text-slate-950">Bločky</h3>
-            <p className="mt-1 text-sm text-slate-600">
+            <h3 className="mt-2 text-xl font-black text-primary">Bločky</h3>
+            <p className="mt-1 text-sm text-secondary">
               {unassignedReceipts.length}{" "}
               {unassignedReceipts.length === 1 ? "nepriradený bloček" : "nepriradených bločkov"}
             </p>
@@ -2893,11 +2890,11 @@ function formatDocDate(value: unknown): string {
           <button
             type="button"
             onClick={() => setOpenFolder("invoice")}
-            className="rounded-3xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:border-blue-300"
+            className="rounded-3xl border border-subtle bg-surface-1 p-5 text-left shadow-sm transition hover:border-blue-300"
           >
             <p className="text-3xl">📃</p>
-            <h3 className="mt-2 text-xl font-black text-slate-950">Faktúry</h3>
-            <p className="mt-1 text-sm text-slate-600">
+            <h3 className="mt-2 text-xl font-black text-primary">Faktúry</h3>
+            <p className="mt-1 text-sm text-secondary">
               {unassignedInvoices.length}{" "}
               {unassignedInvoices.length === 1 ? "nepriradená faktúra" : "nepriradených faktúr"}
             </p>
@@ -2913,17 +2910,17 @@ function formatDocDate(value: unknown): string {
             setOpenFolder(null);
             setFolderExportFeedback(null);
           }}
-          className="mb-4 rounded-2xl bg-slate-200 px-4 py-3 font-bold text-slate-700"
+          className="mb-4 rounded-2xl bg-surface-2 px-4 py-3 font-bold text-secondary"
         >
           ← Späť na zložky
         </button>
 
-        <div className="flex flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:p-6">
+        <div className="flex flex-col gap-4 rounded-3xl border border-subtle bg-surface-1 p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:p-6">
           <div>
-            <h2 className="text-2xl font-black text-slate-950">
+            <h2 className="text-2xl font-black text-primary">
               {openFolder === "receipt" ? "🧾 Bločky" : "📃 Faktúry"}
             </h2>
-            <p className="mt-1 text-sm text-slate-600">
+            <p className="mt-1 text-sm text-secondary">
               {openFolderDocuments.length}{" "}
               {openFolderDocuments.length === 1 ? "nepriradený dokument" : "nepriradených dokumentov"}
             </p>
@@ -2946,8 +2943,8 @@ function formatDocDate(value: unknown): string {
           <p
             className={`mt-4 rounded-xl px-4 py-3 text-sm font-semibold ${
               folderExportFeedback.type === "success"
-                ? "bg-emerald-50 text-emerald-800"
-                : "bg-red-50 text-red-700"
+                ? "badge-success"
+                : "badge-danger"
             }`}
           >
             {folderExportFeedback.text}
@@ -2955,7 +2952,7 @@ function formatDocDate(value: unknown): string {
         )}
 
         {openFolderDocuments.length === 0 ? (
-          <p className="mt-4 rounded-xl bg-slate-100 px-4 py-3 text-sm text-slate-600">
+          <p className="mt-4 rounded-xl bg-surface-2 px-4 py-3 text-sm text-secondary">
             Zatiaľ tu nie sú žiadne nepriradené dokumenty.
           </p>
         ) : (
@@ -2965,20 +2962,20 @@ function formatDocDate(value: unknown): string {
               return (
                 <div
                   key={doc.id}
-                  className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"
+                  className="rounded-3xl border border-subtle bg-surface-1 p-5 shadow-sm"
                 >
                   <div className="flex items-start justify-between gap-4">
                     <div>
                       {openFolder === "receipt" ? (
-                        <h3 className="text-lg font-black text-slate-950">
+                        <h3 className="text-lg font-black text-primary">
                           {(fields.merchant as string) || "Bez obchodníka"}
                         </h3>
                       ) : (
-                        <h3 className="text-lg font-black text-slate-950">
+                        <h3 className="text-lg font-black text-primary">
                           {(fields.supplier as string) || "Bez dodávateľa"}
                         </h3>
                       )}
-                      <p className="mt-1 text-sm text-slate-600">
+                      <p className="mt-1 text-sm text-secondary">
                         📅{" "}
                         {formatDocDate(
                           openFolder === "receipt"
@@ -2989,13 +2986,13 @@ function formatDocDate(value: unknown): string {
                     </div>
 
                     {doc.status === "needs_review" && (
-                      <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-bold text-amber-700">
+                      <span className="rounded-full bg-warning-soft px-3 py-1 text-xs font-bold text-amber-400">
                         na kontrolu
                       </span>
                     )}
                   </div>
 
-                  <div className="mt-4 space-y-1 text-sm text-slate-600">
+                  <div className="mt-4 space-y-1 text-sm text-secondary">
                     <p>💶 {formatAmount(fields.totalAmount, fields.currency)}</p>
                     {openFolder === "invoice" && (
                       <p>
@@ -3021,15 +3018,15 @@ function formatDocDate(value: unknown): string {
     )}
 
     <div className="mt-10">
-      <h2 className="text-2xl font-black text-slate-950">
+      <h2 className="text-2xl font-black text-primary">
         Ostatné dokumenty
       </h2>
-      <p className="mt-1 text-sm text-slate-600">
+      <p className="mt-1 text-sm text-secondary">
         PZP, servisné doklady, ostatné dokumenty a priradené faktúry/bločky uložené cez AI Inbox.
       </p>
 
       {otherDocumentsFlatList.length === 0 ? (
-        <p className="mt-4 rounded-xl bg-slate-100 px-4 py-3 text-sm text-slate-600">
+        <p className="mt-4 rounded-xl bg-surface-2 px-4 py-3 text-sm text-secondary">
           Zatiaľ tu nie sú žiadne uložené dokumenty.
         </p>
       ) : (
@@ -3037,7 +3034,7 @@ function formatDocDate(value: unknown): string {
           {otherDocumentsFlatList.map((doc) => (
             <div
               key={doc.id}
-              className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"
+              className="rounded-3xl border border-subtle bg-surface-1 p-5 shadow-sm"
             >
               <div className="flex items-start justify-between gap-4">
                 <div>
@@ -3048,19 +3045,19 @@ function formatDocDate(value: unknown): string {
                       "Doklad"}
                   </p>
 
-                  <h3 className="mt-2 text-lg font-black text-slate-950">
+                  <h3 className="mt-2 text-lg font-black text-primary">
                     {summarizeDocument(doc)}
                   </h3>
                 </div>
 
                 {doc.status === "needs_review" && (
-                  <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-bold text-amber-700">
+                  <span className="rounded-full bg-warning-soft px-3 py-1 text-xs font-bold text-amber-400">
                     na kontrolu
                   </span>
                 )}
               </div>
 
-              <div className="mt-4 space-y-2 text-sm text-slate-600">
+              <div className="mt-4 space-y-2 text-sm text-secondary">
                 <p>🔗 {describeDocumentAssignment(doc)}</p>
                 <p>
                   📅{" "}
@@ -3084,7 +3081,7 @@ function formatDocDate(value: unknown): string {
 
 {selectedRecord && (
   <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-3 sm:items-center sm:p-4">
-    <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white p-5 shadow-2xl sm:p-8">
+    <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl bg-surface-1 p-5 shadow-2xl sm:p-8">
 
       <div className="flex items-center justify-between">
         <h2 className="text-3xl font-black">
@@ -3093,7 +3090,7 @@ function formatDocDate(value: unknown): string {
 
         <button
           onClick={() => setSelectedRecord(null)}
-          className="rounded-xl bg-slate-100 px-4 py-2"
+          className="rounded-xl bg-surface-2 px-4 py-2"
         >
           ✕
         </button>
@@ -3132,7 +3129,7 @@ function formatDocDate(value: unknown): string {
       </div>
       {selectedRecord.photo_url && (
   <div className="mt-5">
-    <p className="mb-2 text-sm font-bold text-slate-700">
+    <p className="mb-2 text-sm font-bold text-secondary">
       Originálny dokument
     </p>
 
@@ -3145,11 +3142,11 @@ function formatDocDate(value: unknown): string {
         <img
           src={documentPhotoUrl}
           alt="Originálny dokument"
-          className="max-h-[500px] w-full rounded-2xl border border-slate-200 object-contain"
+          className="max-h-[500px] w-full rounded-2xl border border-subtle object-contain"
         />
       </a>
     ) : (
-      <p className="text-sm text-slate-500">
+      <p className="text-sm text-muted-esblu">
         Načítavam fotografiu...
       </p>
     )}
@@ -3174,7 +3171,7 @@ function formatDocDate(value: unknown): string {
 )}
 {selectedOtherDocument && (
   <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-3 sm:items-center sm:p-4">
-    <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white p-5 shadow-2xl sm:p-8">
+    <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl bg-surface-1 p-5 shadow-2xl sm:p-8">
 
       <div className="flex items-center justify-between">
         <h2 className="text-3xl font-black">
@@ -3183,7 +3180,7 @@ function formatDocDate(value: unknown): string {
 
         <button
           onClick={() => setSelectedOtherDocument(null)}
-          className="rounded-xl bg-slate-100 px-4 py-2"
+          className="rounded-xl bg-surface-2 px-4 py-2"
         >
           ✕
         </button>
@@ -3228,9 +3225,9 @@ function formatDocDate(value: unknown): string {
       </div>
 
       {selectedOtherDocument.note && (
-        <div className="mt-5 rounded-2xl bg-amber-50 p-4">
-          <p className="text-sm font-bold text-amber-900">📝 Poznámka</p>
-          <p className="mt-1 whitespace-pre-wrap text-sm text-amber-900">
+        <div className="mt-5 rounded-2xl bg-warning-soft p-4">
+          <p className="text-sm font-bold text-amber-400">📝 Poznámka</p>
+          <p className="mt-1 whitespace-pre-wrap text-sm text-amber-400">
             {selectedOtherDocument.note}
           </p>
         </div>
@@ -3238,7 +3235,7 @@ function formatDocDate(value: unknown): string {
 
       {selectedOtherDocument.storage_path && (
         <div className="mt-5">
-          <p className="mb-2 text-sm font-bold text-slate-700">
+          <p className="mb-2 text-sm font-bold text-secondary">
             Originálny dokument
           </p>
 
@@ -3251,11 +3248,11 @@ function formatDocDate(value: unknown): string {
               <img
                 src={otherDocumentPhotoUrl}
                 alt="Originálny dokument"
-                className="max-h-[500px] w-full rounded-2xl border border-slate-200 object-contain"
+                className="max-h-[500px] w-full rounded-2xl border border-subtle object-contain"
               />
             </a>
           ) : (
-            <p className="text-sm text-slate-500">
+            <p className="text-sm text-muted-esblu">
               Načítavam fotografiu...
             </p>
           )}
@@ -3264,14 +3261,14 @@ function formatDocDate(value: unknown): string {
             <button
               type="button"
               onClick={() => downloadOriginal(selectedOtherDocument)}
-              className="rounded-2xl bg-slate-100 px-4 py-3 font-bold text-slate-800"
+              className="rounded-2xl bg-surface-2 px-4 py-3 font-bold text-primary"
             >
               ⬇️ Stiahnuť
             </button>
             <button
               type="button"
               onClick={() => printOriginal(selectedOtherDocument)}
-              className="rounded-2xl bg-slate-100 px-4 py-3 font-bold text-slate-800"
+              className="rounded-2xl bg-surface-2 px-4 py-3 font-bold text-primary"
             >
               🖨️ Tlačiť
             </button>
@@ -3280,17 +3277,17 @@ function formatDocDate(value: unknown): string {
       )}
 
       {selectedOtherDocument.document_type === "insurance" && (
-        <div className="mt-6 rounded-2xl border border-slate-200 p-4">
-          <p className="text-sm font-black text-slate-900">📎 Prílohy</p>
-          <p className="mt-1 text-xs text-slate-500">
+        <div className="mt-6 rounded-2xl border border-subtle p-4">
+          <p className="text-sm font-black text-primary">📎 Prílohy</p>
+          <p className="mt-1 text-xs text-muted-esblu">
             Biela karta, zelená karta, záznam o poistnej udalosti alebo iný
             súvisiaci dokument k tomuto PZP.
           </p>
 
           {attachmentsLoading ? (
-            <p className="mt-3 text-sm text-slate-500">Načítavam prílohy...</p>
+            <p className="mt-3 text-sm text-muted-esblu">Načítavam prílohy...</p>
           ) : attachments.length === 0 ? (
-            <p className="mt-3 text-sm text-slate-500">
+            <p className="mt-3 text-sm text-muted-esblu">
               Zatiaľ tu nie sú žiadne prílohy.
             </p>
           ) : (
@@ -3298,14 +3295,14 @@ function formatDocDate(value: unknown): string {
               {attachments.map((attachment) => (
                 <div
                   key={attachment.id}
-                  className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-4 py-3"
+                  className="flex items-center justify-between gap-3 rounded-xl bg-surface-2 px-4 py-3"
                 >
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-bold text-slate-800">
+                    <p className="truncate text-sm font-bold text-primary">
                       {ATTACHMENT_TYPE_LABELS[attachment.attachment_type] ||
                         "Iný súvisiaci dokument"}
                     </p>
-                    <p className="truncate text-xs text-slate-500">
+                    <p className="truncate text-xs text-muted-esblu">
                       {attachment.original_filename || "bez názvu"}
                     </p>
                   </div>
@@ -3323,7 +3320,7 @@ function formatDocDate(value: unknown): string {
                         type="button"
                         onClick={() => deleteAttachment(attachment)}
                         disabled={deletingAttachmentId === attachment.id}
-                        className="rounded-xl bg-red-50 px-3 py-2 text-xs font-bold text-red-700 disabled:opacity-50"
+                        className="rounded-xl bg-danger-soft px-3 py-2 text-xs font-bold text-red-700 disabled:opacity-50"
                       >
                         {deletingAttachmentId === attachment.id
                           ? "Mažem..."
@@ -3340,7 +3337,7 @@ function formatDocDate(value: unknown): string {
             <select
               value={newAttachmentType}
               onChange={(e) => setNewAttachmentType(e.target.value)}
-              className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm outline-none sm:flex-1"
+              className="rounded-xl border border-subtle bg-surface-1 px-3 py-3 text-sm outline-none sm:flex-1"
             >
               {Object.entries(ATTACHMENT_TYPE_LABELS).map(([value, label]) => (
                 <option key={value} value={value}>
@@ -3350,10 +3347,10 @@ function formatDocDate(value: unknown): string {
             </select>
 
             <label
-              className={`rounded-xl px-4 py-3 text-center text-sm font-bold text-white ${
+              className={`rounded-xl px-4 py-3 text-center text-sm font-bold ${
                 isUploadingAttachment
-                  ? "cursor-not-allowed bg-blue-300"
-                  : "cursor-pointer bg-blue-600"
+                  ? "cursor-not-allowed bg-surface-2 text-muted-esblu"
+                  : "cursor-pointer bg-blue-600 text-white"
               }`}
             >
               {isUploadingAttachment ? "Nahrávam..." : "+ Pridať prílohu"}

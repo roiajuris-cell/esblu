@@ -564,12 +564,12 @@ export default function MachineDetailPage() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-100 p-10">
+    <main className="app-shell-bg min-h-screen p-10">
       <BackLink href="/stroje" label="Stroje" className="mb-4" />
 
       <h1 className="text-4xl font-bold">🚜 {machine.name}</h1>
 
-      <div className="mt-8 rounded-2xl bg-white p-8 shadow">
+      <div className="surface-card mt-8 p-8">
         <div className="grid grid-cols-2 gap-5">
           <p><b>Kategória:</b> {machine.category || "—"}</p>
           <p><b>Výrobca:</b> {machine.manufacturer || "—"}</p>
@@ -581,14 +581,14 @@ export default function MachineDetailPage() {
         </div>
 
         {machine.notes && (
-          <div className="mt-6 rounded-xl bg-slate-50 p-4">
+          <div className="mt-6 rounded-xl bg-surface-2 p-4">
             <b>Poznámky:</b>
             <p className="mt-2">{machine.notes}</p>
           </div>
         )}
       </div>
 
-      <section className="mt-10 rounded-2xl bg-white p-5 shadow sm:p-8">
+      <section className="mt-10 rounded-2xl bg-surface-1 p-5 shadow sm:p-8">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <h2 className="text-2xl font-bold">Servis</h2>
 
@@ -619,17 +619,17 @@ export default function MachineDetailPage() {
         </div>
 
         {legalHold && !showServiceForm && (
-          <p className="mt-3 text-sm text-amber-800">{LEGAL_HOLD_MESSAGE}</p>
+          <p className="mt-3 text-sm text-amber-400">{LEGAL_HOLD_MESSAGE}</p>
         )}
 
         {showServiceForm && (
-          <div className="mt-6 rounded-2xl border bg-slate-50 p-4 sm:p-6">
+          <div className="mt-6 rounded-2xl border border-subtle bg-surface-2 p-4 sm:p-6">
             <h3 className="text-xl font-bold">
               {editingServiceId ? "Upraviť servis" : "Pridať servis"}
             </h3>
 
             <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
-              <label className="min-w-0 text-sm font-medium text-slate-700">
+              <label className="min-w-0 text-sm font-medium text-secondary">
                 Dátum servisu
                 <input
                   type="date"
@@ -638,11 +638,11 @@ export default function MachineDetailPage() {
                     updateService("service_date", event.target.value)
                   }
                   disabled={isServiceSaving}
-                  className="mt-1 w-full min-w-0 rounded-xl border bg-white p-3 text-base font-normal text-slate-900 disabled:bg-slate-200"
+                  className="mt-1 w-full min-w-0 rounded-xl border bg-surface-1 p-3 text-base font-normal text-primary disabled:bg-surface-2"
                 />
               </label>
 
-              <label className="min-w-0 text-sm font-medium text-slate-700">
+              <label className="min-w-0 text-sm font-medium text-secondary">
                 Motohodiny
                 <input
                   type="number"
@@ -654,11 +654,11 @@ export default function MachineDetailPage() {
                     updateService("mileage", event.target.value)
                   }
                   disabled={isServiceSaving}
-                  className="mt-1 w-full min-w-0 rounded-xl border bg-white p-3 text-base font-normal text-slate-900 disabled:bg-slate-200"
+                  className="mt-1 w-full min-w-0 rounded-xl border bg-surface-1 p-3 text-base font-normal text-primary disabled:bg-surface-2"
                 />
               </label>
 
-              <label className="min-w-0 text-sm font-medium text-slate-700">
+              <label className="min-w-0 text-sm font-medium text-secondary">
                 Názov servisu
                 <input
                   value={service.title}
@@ -666,11 +666,11 @@ export default function MachineDetailPage() {
                     updateService("title", event.target.value)
                   }
                   disabled={isServiceSaving}
-                  className="mt-1 w-full min-w-0 rounded-xl border bg-white p-3 text-base font-normal text-slate-900 disabled:bg-slate-200"
+                  className="mt-1 w-full min-w-0 rounded-xl border bg-surface-1 p-3 text-base font-normal text-primary disabled:bg-surface-2"
                 />
               </label>
 
-              <label className="min-w-0 text-sm font-medium text-slate-700">
+              <label className="min-w-0 text-sm font-medium text-secondary">
                 Cena (€)
                 <input
                   type="number"
@@ -682,11 +682,11 @@ export default function MachineDetailPage() {
                     updateService("cost", event.target.value)
                   }
                   disabled={isServiceSaving}
-                  className="mt-1 w-full min-w-0 rounded-xl border bg-white p-3 text-base font-normal text-slate-900 disabled:bg-slate-200"
+                  className="mt-1 w-full min-w-0 rounded-xl border bg-surface-1 p-3 text-base font-normal text-primary disabled:bg-surface-2"
                 />
               </label>
 
-              <label className="min-w-0 text-sm font-medium text-slate-700">
+              <label className="min-w-0 text-sm font-medium text-secondary">
                 Servis / technik
                 <input
                   value={service.technician}
@@ -694,11 +694,11 @@ export default function MachineDetailPage() {
                     updateService("technician", event.target.value)
                   }
                   disabled={isServiceSaving}
-                  className="mt-1 w-full min-w-0 rounded-xl border bg-white p-3 text-base font-normal text-slate-900 disabled:bg-slate-200"
+                  className="mt-1 w-full min-w-0 rounded-xl border bg-surface-1 p-3 text-base font-normal text-primary disabled:bg-surface-2"
                 />
               </label>
 
-              <label className="min-w-0 text-sm font-medium text-slate-700">
+              <label className="min-w-0 text-sm font-medium text-secondary">
                 Ďalší servis
                 <input
                   type="date"
@@ -707,12 +707,12 @@ export default function MachineDetailPage() {
                     updateService("next_service_date", event.target.value)
                   }
                   disabled={isServiceSaving}
-                  className="mt-1 w-full min-w-0 rounded-xl border bg-white p-3 text-base font-normal text-slate-900 disabled:bg-slate-200"
+                  className="mt-1 w-full min-w-0 rounded-xl border bg-surface-1 p-3 text-base font-normal text-primary disabled:bg-surface-2"
                 />
               </label>
             </div>
 
-            <label className="mt-4 block text-sm font-medium text-slate-700">
+            <label className="mt-4 block text-sm font-medium text-secondary">
               Popis
               <textarea
                 value={service.description}
@@ -721,7 +721,7 @@ export default function MachineDetailPage() {
                 }
                 disabled={isServiceSaving}
                 rows={4}
-                className="mt-1 w-full min-w-0 resize-y rounded-xl border bg-white p-3 text-base font-normal text-slate-900 disabled:bg-slate-200"
+                className="mt-1 w-full min-w-0 resize-y rounded-xl border bg-surface-1 p-3 text-base font-normal text-primary disabled:bg-surface-2"
               />
             </label>
 
@@ -743,7 +743,7 @@ export default function MachineDetailPage() {
                 type="button"
                 onClick={cancelServiceEdit}
                 disabled={isServiceSaving}
-                className="w-full rounded-xl bg-slate-300 px-5 py-3 text-slate-900 hover:bg-slate-400 disabled:cursor-not-allowed disabled:bg-gray-200 sm:w-auto"
+                className="w-full rounded-xl bg-surface-2 px-5 py-3 text-primary hover:bg-surface-hover disabled:cursor-not-allowed disabled:bg-surface-1 disabled:text-muted-esblu sm:w-auto"
               >
                 Zrušiť
               </button>
@@ -752,7 +752,7 @@ export default function MachineDetailPage() {
         )}
 
         {services.length === 0 ? (
-          <p className="mt-6 text-slate-500">
+          <p className="mt-6 text-muted-esblu">
             Zatiaľ nebol pridaný žiadny servisný záznam.
           </p>
         ) : (
@@ -760,42 +760,42 @@ export default function MachineDetailPage() {
             {services.map((item) => (
               <article
                 key={item.id}
-                className="min-w-0 rounded-2xl border bg-slate-50 p-4 shadow-sm sm:p-6"
+                className="min-w-0 rounded-2xl border border-subtle bg-surface-2 p-4 shadow-sm sm:p-6"
               >
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div className="min-w-0">
-                    <h3 className="break-words text-xl font-bold text-slate-900 sm:text-2xl">
+                    <h3 className="break-words text-xl font-bold text-primary sm:text-2xl">
                       🔧 {item.title}
                     </h3>
-                    <p className="mt-1 text-sm text-slate-500">
+                    <p className="mt-1 text-sm text-muted-esblu">
                       📅 {item.service_date}
                     </p>
                   </div>
 
                   {item.cost != null && (
-                    <div className="self-start rounded-xl bg-green-100 px-4 py-2 font-bold text-green-700">
+                    <div className="badge-success self-start rounded-xl px-4 py-2 font-bold">
                       {item.cost} €
                     </div>
                   )}
                 </div>
 
                 <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-3">
-                  <div className="rounded-xl bg-white p-4">
-                    <p className="text-sm text-slate-500">Motohodiny</p>
+                  <div className="rounded-xl bg-surface-1 p-4">
+                    <p className="text-sm text-muted-esblu">Motohodiny</p>
                     <p className="break-words text-lg font-bold">
                       {item.mileage != null ? item.mileage : "—"}
                     </p>
                   </div>
 
-                  <div className="rounded-xl bg-white p-4">
-                    <p className="text-sm text-slate-500">Servis / technik</p>
+                  <div className="rounded-xl bg-surface-1 p-4">
+                    <p className="text-sm text-muted-esblu">Servis / technik</p>
                     <p className="break-words text-lg font-bold">
                       {item.technician || "—"}
                     </p>
                   </div>
 
-                  <div className="rounded-xl bg-white p-4">
-                    <p className="text-sm text-slate-500">Ďalší servis</p>
+                  <div className="rounded-xl bg-surface-1 p-4">
+                    <p className="text-sm text-muted-esblu">Ďalší servis</p>
                     <p className="break-words text-lg font-bold">
                       {item.next_service_date || "—"}
                     </p>
@@ -803,7 +803,7 @@ export default function MachineDetailPage() {
                 </div>
 
                 {item.description && (
-                  <p className="mt-5 whitespace-pre-wrap break-words rounded-xl bg-white p-4 text-slate-700">
+                  <p className="mt-5 whitespace-pre-wrap break-words rounded-xl bg-surface-1 p-4 text-secondary">
                     {item.description}
                   </p>
                 )}
@@ -837,7 +837,7 @@ export default function MachineDetailPage() {
         )}
       </section>
 
-      <div className="mt-10 rounded-2xl bg-white p-8 shadow">
+      <div className="surface-card mt-10 p-8">
         <div className="flex items-center justify-between">
           <h2 className="text-2xl font-bold">📷 Galéria</h2>
 
@@ -854,7 +854,7 @@ export default function MachineDetailPage() {
     />
   </label>
 
-  <label className="cursor-pointer rounded-xl bg-white px-5 py-3 text-slate-700 border">
+  <label className="cursor-pointer rounded-xl border border-subtle bg-surface-1 px-5 py-3 text-secondary">
     🖼️ Galéria
     <input
       type="file"
@@ -868,17 +868,17 @@ export default function MachineDetailPage() {
         </div>
 
         {legalHold && (
-          <p className="mt-3 text-sm text-amber-800">{LEGAL_HOLD_MESSAGE}</p>
+          <p className="mt-3 text-sm text-amber-400">{LEGAL_HOLD_MESSAGE}</p>
         )}
 
         {photos.length === 0 ? (
-          <p className="mt-6 text-slate-500">
+          <p className="mt-6 text-muted-esblu">
             Zatiaľ nie sú pridané žiadne fotografie.
           </p>
         ) : (
           <div className="mt-6 grid grid-cols-1 gap-5 md:grid-cols-3">
             {photos.map((photo) => (
-              <div key={photo.id} className="rounded-xl border bg-slate-50 p-3">
+              <div key={photo.id} className="rounded-xl border border-subtle bg-surface-2 p-3">
                 <img
                   src={photoUrl(photo.file_path)}
                   alt="Fotografia stroja"

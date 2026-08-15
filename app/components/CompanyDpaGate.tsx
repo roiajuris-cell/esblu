@@ -179,12 +179,12 @@ export default function CompanyDpaGate({
           className="fixed inset-0 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm"
           style={{ zIndex: Z_INDEX }}
         >
-          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl sm:p-8">
-            <h2 className="text-2xl font-bold text-slate-900">
+          <div className="w-full max-w-lg rounded-2xl bg-surface-1 p-6 shadow-2xl sm:p-8">
+            <h2 className="text-2xl font-bold text-primary">
               Zmluva o spracúvaní osobných údajov (DPA)
             </h2>
 
-            <p className="mt-3 text-sm leading-6 text-slate-600">
+            <p className="mt-3 text-sm leading-6 text-secondary">
               Aby vaša firma mohla v Esblu spracúvať osobné údaje tretích
               osôb (napr. v dokumentoch, fotografiách alebo evidencii),
               musíte ako vlastník firmy najprv prijať aktuálnu Zmluvu o
@@ -207,7 +207,7 @@ export default function CompanyDpaGate({
               </Link>
             </p>
 
-            <label className="mt-6 flex items-start gap-3 rounded-xl border border-slate-200 p-4 text-sm">
+            <label className="mt-6 flex items-start gap-3 rounded-xl border border-subtle p-4 text-sm">
               <input
                 type="checkbox"
                 className="mt-1 h-4 w-4"
@@ -243,7 +243,7 @@ export default function CompanyDpaGate({
               type="button"
               onClick={handleLogout}
               disabled={submitting}
-              className="mt-3 w-full text-center text-sm font-semibold text-slate-500 hover:underline"
+              className="mt-3 w-full text-center text-sm font-semibold text-muted-esblu hover:underline"
             >
               Odhlásiť sa
             </button>
@@ -256,11 +256,11 @@ export default function CompanyDpaGate({
           className="fixed inset-x-0 bottom-0 flex justify-center p-4"
           style={{ zIndex: Z_INDEX }}
         >
-          <div className="w-full max-w-lg rounded-2xl border border-amber-200 bg-amber-50 p-5 shadow-2xl">
-            <p className="text-sm font-semibold text-amber-950">
+          <div className="w-full max-w-lg rounded-2xl border border-amber-200/30 bg-warning-soft p-5 shadow-2xl">
+            <p className="text-sm font-semibold text-amber-300">
               Účet vašej firmy čaká na potvrdenie DPA vlastníkom účtu.
             </p>
-            <p className="mt-2 text-sm leading-6 text-amber-900">
+            <p className="mt-2 text-sm leading-6 text-amber-400">
               Zmluvu o spracúvaní osobných údajov musí v mene firmy
               potvrdiť jej vlastník (owner) — administrátorské ani iné
               oprávnenia v appke na to nestačia. Kým sa tak nestane,
@@ -280,7 +280,7 @@ export default function CompanyDpaGate({
               <Link
                 href="/dpa"
                 target="_blank"
-                className="rounded-xl border border-amber-300 bg-white px-5 py-2.5 text-sm font-semibold text-amber-950 hover:bg-amber-100"
+                className="rounded-xl border border-amber-300/40 bg-surface-1 px-5 py-2.5 text-sm font-semibold text-amber-400 hover:bg-surface-hover"
               >
                 Zobraziť DPA
               </Link>

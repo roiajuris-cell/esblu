@@ -375,10 +375,7 @@ export default function StrojePage() {
   }
 
   return (
-    <main
-  className="min-h-screen bg-cover bg-center bg-fixed p-4 sm:p-6 lg:p-10"
-  style={{ backgroundImage: "url('/images/background-dark.png')" }}
->
+    <main className="app-shell-bg min-h-screen p-4 sm:p-6 lg:p-10">
       <BackLink href="/" label="Hlavné menu" className="mb-4" />
 
       <div className="flex items-center gap-4">
@@ -387,10 +384,10 @@ export default function StrojePage() {
     alt="Stroje"
     className="h-20 w-20 object-contain"
   />
-  <h1 className="text-4xl font-bold text-white drop-shadow-lg">Stroje</h1>
+  <h1 className="text-4xl font-bold text-primary">Stroje</h1>
 </div>
 
-      <p className="mt-4 text-white/80">
+      <p className="mt-4 text-secondary">
         Evidencia firemných strojov a techniky.
       </p>
 
@@ -416,11 +413,11 @@ export default function StrojePage() {
       </button>
 
       {legalHold && (
-        <p className="mt-3 text-sm text-amber-800">{LEGAL_HOLD_MESSAGE}</p>
+        <p className="mt-3 text-sm text-amber-400">{LEGAL_HOLD_MESSAGE}</p>
       )}
 
       {showForm && (
-        <div className="mt-8 rounded-2xl bg-white/45 border border-white/20 backdrop-blur-xl p-6 shadow-lg">
+        <div className="mt-8 rounded-2xl bg-surface-1 border border-subtle backdrop-blur-xl p-6 shadow-lg">
           <h2 className="mb-6 text-2xl font-bold">
             {editingId ? "Upraviť stroj" : "Pridať nový stroj"}
           </h2>
@@ -509,7 +506,7 @@ export default function StrojePage() {
             {editingId && (
               <button
                 onClick={cancelEdit}
-                className="rounded-xl bg-slate-300 px-6 py-3 text-slate-900 hover:bg-slate-400"
+                className="rounded-xl bg-surface-2 px-6 py-3 text-primary hover:bg-surface-hover"
               >
                 Zrušiť úpravu
               </button>
@@ -519,13 +516,13 @@ export default function StrojePage() {
       )}
 
       <div className="mt-10">
-        <h2 className="mb-4 text-2xl font-bold text-white drop-shadow-lg">
+        <h2 className="mb-4 text-2xl font-bold text-primary">
   Uložené stroje
 </h2>
 
         {machines.length === 0 ? (
-          <div className="rounded-2xl border border-white/20 bg-white/45 p-6 shadow-lg backdrop-blur-xl">
-            <p className="font-medium text-white/90 drop-shadow">
+          <div className="rounded-2xl border border-subtle bg-surface-1 p-6 shadow-lg backdrop-blur-xl">
+            <p className="font-medium text-secondary">
   Zatiaľ nie je uložený žiadny stroj.
 </p>
           </div>
@@ -534,7 +531,7 @@ export default function StrojePage() {
             {machines.map((item) => (
               <div
                 key={item.id}
-                className="overflow-hidden rounded-2xl border border-white/20 bg-white/45 backdrop-blur-xl shadow-lg"
+                className="overflow-hidden rounded-2xl border border-subtle bg-surface-1 backdrop-blur-xl shadow-lg"
               >
                 {item.first_photo_url ? (
                   <img
@@ -543,7 +540,7 @@ export default function StrojePage() {
                     className="h-56 w-full object-cover"
                   />
                 ) : (
-                  <div className="flex h-56 w-full items-center justify-center bg-slate-200 text-slate-500">
+                  <div className="flex h-56 w-full items-center justify-center bg-surface-2 text-muted-esblu">
                     Bez fotografie
                   </div>
                 )}
@@ -553,29 +550,29 @@ export default function StrojePage() {
                     {item.name || "Bez názvu"}
                   </h3>
 
-                  <p className="mt-2 text-slate-600">
+                  <p className="mt-2 text-secondary">
                     Kategória: {item.category || "—"}
                   </p>
-                  <p className="text-slate-600">
+                  <p className="text-secondary">
                     Výrobca: {item.manufacturer || "—"}
                   </p>
-                  <p className="text-slate-600">
+                  <p className="text-secondary">
                     Model: {item.model || "—"}
                   </p>
-                  <p className="text-slate-600">
+                  <p className="text-secondary">
                     Sériové číslo: {item.serial_number || "—"}
                   </p>
-                  <p className="text-slate-600">
+                  <p className="text-secondary">
                     Rok výroby: {item.year || "—"}
                   </p>
-                  <p className="text-slate-600">
+                  <p className="text-secondary">
                     Stav: {item.status || "—"}
                   </p>
 
                   <div className="mt-5 flex gap-3">
                     <Link
                       href={`/stroje/${item.id}`}
-                      className="rounded-xl bg-slate-900 px-4 py-2 text-white hover:bg-slate-800"
+                      className="btn-secondary px-4 py-2"
                     >
                       Detail
                     </Link>

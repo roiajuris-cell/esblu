@@ -3,10 +3,11 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import Image from "next/image"
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { getCompanyProfile, getMyActiveMembership } from "@/lib/company";
+import ModuleCard, { type ModuleAccent } from "./ModuleCard";
+
 function getGreeting() {
   const hour = new Date().getHours();
 
@@ -17,7 +18,6 @@ function getGreeting() {
   return "Dobrú noc 🌜";
 }
 
-
 export default function Dashboard() {
   const router = useRouter();
 
@@ -27,6 +27,11 @@ export default function Dashboard() {
   const [companyName, setCompanyName] = useState("ESBLU");
   const [companyLogoUrl, setCompanyLogoUrl] = useState("");
   const [search, setSearch] = useState("");
+  // KOREKCIA (dashboard v2): mobil už nemá permanentný sidebar ani priamy
+  // odkaz na Nastavenia namiesto menu — hamburger teraz otvára skutočné
+  // výsuvné menu s rovnakou navigáciou ako desktop sidebar. Čisto UI stav,
+  // nič dátové/business.
+  const [menuOpen, setMenuOpen] = useState(false);
   const greeting = getGreeting();
   useEffect(() => {
     checkUser();
@@ -231,248 +236,323 @@ export default function Dashboard() {
       ]
     : [];
 
-  const modules = [
-  {
-    title: "AI Inbox",
-    subtitle: "Inteligentné spracovanie dokumentov",
-    href: "/ai-evidencia",
-    image: "/images/ai-evidencia.png",
-  },
-  {
-    title: "Vozidlá",
-    subtitle: `${vehicles.length} uložených vozidiel`,
-    href: "/vozidla",
-    image: "/images/van.png",
-  },
-  {
-    title: "Stroje",
-      subtitle: `${machines.length} uložených strojov`,
+  const modules: {
+    title: string;
+    subtitle: string;
+    stat?: string;
+    href: string;
+    image: string;
+    accent: ModuleAccent;
+  }[] = [
+    {
+      title: "AI Inbox",
+      subtitle: "Inteligentné spracovanie dokumentov",
+      href: "/ai-evidencia",
+      image: "/images/ai-evidencia.png",
+      accent: "cyan",
+    },
+    {
+      title: "Vozidlá",
+      subtitle: "uložených vozidiel",
+      stat: String(vehicles.length),
+      href: "/vozidla",
+      image: "/images/van.png",
+      accent: "blue",
+    },
+    {
+      title: "Stroje",
+      subtitle: "uložených strojov",
+      stat: String(machines.length),
       href: "/stroje",
       image: "/images/excavator.png",
+      accent: "orange",
     },
     {
       title: "Sklad",
-      subtitle: `${items.length} skladových položiek`,
+      subtitle: "skladových položiek",
+      stat: String(items.length),
       href: "/sklad",
       image: "/images/warehouse.png",
+      accent: "teal",
     },
     {
       title: "Nastavenia",
       subtitle: "Nastavenia aplikácie",
       href: "/nastavenia",
       image: "/images/settings.png",
+      accent: "blue",
     },
   ];
 
+  // Spoločný zoznam navigačných položiek pre desktop sidebar AJ mobilné
+  // výsuvné menu (jeden zdroj pravdy, žiadna duplicita odkazov/ciest).
+  const navItems = [
+    { href: "/ai-evidencia", label: "AI Inbox", image: "/images/ai-evidencia.png" },
+    { href: "/vozidla", label: "Vozidlá", image: "/images/van.png" },
+    { href: "/stroje", label: "Stroje", image: "/images/excavator.png" },
+    { href: "/sklad", label: "Sklad", image: "/images/warehouse.png" },
+    { href: "/nastavenia", label: "Nastavenia", image: "/images/settings.png" },
+  ];
+
   return (
-    <main className="relative min-h-screen overflow-hidden bg-slate-100 text-slate-900">
-      <div className="absolute inset-0 bg-[linear-gradient(120deg,rgba(255,255,255,0.65),rgba(239,246,255,0.45))]" />
-      <div
-   className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-  style={{
-    backgroundImage: "url('/images/background-dark.png')",
-  }}
-/>
-
+    <main className="app-shell-bg relative min-h-screen">
       <div className="relative flex min-h-screen flex-col lg:flex-row">
-        <aside className="hidden lg:flex m-4 w-80 flex-col rounded-3xl bg-white/90 px-10 py-7 shadow-xl backdrop-blur">
-          <div className="flex items-center gap-3">
-            <div className="grid h-12 w-12 place-items-center rounded-2xl bg-blue-600 shadow">
-              <div className="h-7 w-7 rotate-45 rounded-md border-4 border-white" />
-            </div>
+        {/* Desktop sidebar — KOREKCIA (dashboard v2): užší, plochý a tmavší
+            (bez glass/blur efektu), aby nedominoval obrazovke a nepôsobil
+            ako klasický enterprise admin panel. */}
+        <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-subtle bg-page-bg-elevated px-5 py-6 lg:flex">
+          <div className="flex items-center gap-2.5">
+            {companyLogoUrl ? (
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-subtle bg-surface-1">
+                <img
+                  src={companyLogoUrl}
+                  alt={`Logo ${companyName}`}
+                  className="h-full w-full object-contain"
+                />
+              </div>
+            ) : (
+              <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-accent-cyan to-accent-blue shadow-lg">
+                <div className="h-4 w-4 rotate-45 rounded-md border-[3px] border-[#051221]" />
+              </div>
+            )}
 
-            <h1 className="text-4xl font-black tracking-tight text-white drop-shadow-lg">
-              {companyName}
-            </h1>
+            <div className="min-w-0">
+              <h1 className="truncate text-base font-black tracking-tight text-primary">
+                {companyName}
+              </h1>
+              <p className="truncate text-[11px] font-medium text-muted-esblu">
+                Firma pod kontrolou
+              </p>
+            </div>
           </div>
 
-          <nav className="mt-12 space-y-3">
-            <SideLink active href="/" label="Menu" icon={<MenuIcon />} />
-            <SideLink href="/vozidla" label="Vozidlá" image="/images/van.png" />
-            <SideLink href="/stroje" label="Stroje" image="/images/excavator.png" />
-            <SideLink href="/sklad" label="Sklad" image="/images/warehouse.png" />
-            <SideLink href="/nastavenia" label="Nastavenia" image="/images/settings.png" />
+          <nav className="mt-8 flex-1 space-y-1">
+            <SideLink active href="/" label="Prehľad" icon={<MenuIcon />} />
+            {navItems.map((item) => (
+              <SideLink key={item.href} href={item.href} label={item.label} image={item.image} />
+            ))}
           </nav>
 
           <button
             onClick={logout}
-            className="mt-auto flex items-center gap-3 rounded-2xl px-4 py-3 text-left text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
+            className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-secondary transition hover:bg-surface-hover hover:text-primary"
           >
             <LogoutIcon />
             Odhlásiť sa
           </button>
         </aside>
 
-        <section className="w-full flex-1 px-4 pb-24 pt-6 lg:px-10 lg:py-16">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-sm font-semibold text-white/80 drop-shadow lg:text-base">
-  <div className="flex items-center gap-3">
-  {companyLogoUrl ? (
-    <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/30 bg-white shadow">
-      <img
-        src={companyLogoUrl}
-        alt={`Logo ${companyName}`}
-        className="h-full w-full object-contain"
-      />
-    </div>
-  ) : (
-    <span className="text-2xl">👤</span>
-  )}
-
-  <p className="text-sm font-semibold text-white/80 drop-shadow-lg lg:text-base">
-    {companyName}
-  </p>
-</div>
-</p>
-
-<h2 className="mt-1 text-3xl font-black tracking-tight text-white drop-shadow-lg lg:text-5xl">
-  {greeting}
-</h2>
-            </div>
-            <Link
-  href="/nastavenia"
-  aria-label="Otvoriť nastavenia"
-  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/85 text-2xl font-black text-slate-800 shadow-lg backdrop-blur-sm transition hover:scale-105"
->
-  ☰
-</Link>
-
-          
-          </div>
-
-          <div className="mt-10 rounded-3xl bg-white/90 p-6 shadow-lg backdrop-blur">
-            <div className="flex items-center gap-4">
-              <SearchIcon />
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Hľadať vozidlo, stroj alebo skladovú položku..."
-                className="w-full bg-transparent text-lg outline-none placeholder:text-slate-400"
-              />
-            </div>
-
-            {query && (
-              <div className="mt-5 space-y-3">
-                {searchResults.length === 0 ? (
-                  <p className="rounded-2xl bg-slate-50 p-4 text-slate-500">
-                    Nič sa nenašlo.
-                  </p>
-                ) : (
-                  searchResults.map((result, index) => (
-                    <Link
-                      key={index}
-                      href={result.href}
-                      className="block rounded-2xl border border-slate-100 bg-slate-50 p-4 transition hover:bg-white hover:shadow"
-                    >
-                      <p className="text-sm font-bold uppercase tracking-wide text-blue-600">
-                        {result.type}
-                      </p>
-                      <p className="mt-1 text-lg font-black text-slate-900">
-                        {result.title}
-                      </p>
-                      <p className="text-sm text-slate-500">{result.subtitle}</p>
-                    </Link>
-                  ))
-                )}
+        {/* Mobilné výsuvné menu — KOREKCIA (dashboard v2): žiadny
+            permanentný sidebar na mobile, iba hamburger, ktorý otvorí
+            skutočné menu s rovnakou navigáciou ako desktop sidebar. */}
+        {menuOpen && (
+          <div className="fixed inset-0 z-40 lg:hidden">
+            <button
+              type="button"
+              aria-label="Zavrieť menu"
+              onClick={() => setMenuOpen(false)}
+              className="absolute inset-0 bg-slate-950/70 backdrop-blur-sm"
+            />
+            <div className="absolute inset-y-0 right-0 flex w-[78%] max-w-xs flex-col border-l border-subtle bg-page-bg-elevated p-5">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-bold text-primary">Menu</span>
+                <button
+                  type="button"
+                  aria-label="Zavrieť menu"
+                  onClick={() => setMenuOpen(false)}
+                  className="flex h-9 w-9 items-center justify-center rounded-full bg-surface-2 text-secondary"
+                >
+                  ✕
+                </button>
               </div>
-            )}
-          </div>
 
-            <div className="mt-4 grid grid-cols-2 gap-2 sm:gap-3 lg:mt-14 lg:grid-cols-2 lg:gap-8 xl:grid-cols-4">
-            {modules
-  .filter((module) => module.title !== "Nastavenia")
-  .map((module) => (
-              <Link
-                key={module.href}
-                href={module.href}
-                className={`group min-w-0 rounded-2xl bg-white/45 border border-white/20 p-2 text-center shadow-lg backdrop-blur-lg transition duration-300 hover:scale-105 lg:flex lg:h-80 lg:flex-col lg:p-4 ${
-  module.title === "Nastavenia" ? "col-span-2 h-32" : "h-44"
-}`}
+              <nav className="mt-6 flex-1 space-y-1.5">
+                <SideLink
+                  active
+                  href="/"
+                  label="Prehľad"
+                  icon={<MenuIcon />}
+                  onNavigate={() => setMenuOpen(false)}
+                />
+                {navItems.map((item) => (
+                  <SideLink
+                    key={item.href}
+                    href={item.href}
+                    label={item.label}
+                    image={item.image}
+                    onNavigate={() => setMenuOpen(false)}
+                  />
+                ))}
+              </nav>
+
+              <button
+                onClick={logout}
+                className="btn-secondary flex items-center justify-center gap-2 py-3 text-sm"
               >
-                <div className="mx-auto flex h-24 items-center justify-center transition group-hover:scale-105 lg:h-36 lg:flex-none">
-  <Image
-  src={module.image}
-  width={220}
-  height={150}
-  alt={module.title}
-  className={
-    module.title === "AI Inbox"
-      ? "h-32 w-40 scale-125 object-contain lg:w-44 lg:scale-110"
-      : module.title === "Stroje"
-      ? "h-32 w-40 scale-125 object-contain lg:w-44 lg:scale-110"
-      : module.title === "Sklad"
-      ? "h-32 w-40 scale-125 object-contain lg:w-44 lg:scale-110"
-      : "h-24 w-32 object-contain sm:h-28 sm:w-40 lg:h-36 lg:w-48"
-  }
-/>
-</div>
-                <h3 className="mt-2 text-base font-bold text-slate-900 lg:mt-3 lg:text-2xl lg:leading-tight">
-                  {module.title}
-                </h3>
+                <LogoutIcon />
+                Odhlásiť sa
+              </button>
+            </div>
+          </div>
+        )}
 
-                <p className="mt-1 min-h-8 text-sm leading-snug text-slate-800 lg:mt-2 lg:min-h-10">
-                  {module.subtitle}
-                </p>
+        <section className="w-full flex-1 px-4 pb-10 pt-5 sm:px-6 lg:px-10 lg:py-12">
+          {/* Mobilný horný pruh — brand + hamburger (nahrádza predchádzajúci
+              priamy odkaz na Nastavenia). */}
+          <div className="flex items-center justify-between gap-4 lg:hidden">
+            <div className="flex min-w-0 items-center gap-2.5">
+              {companyLogoUrl ? (
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-subtle bg-surface-1">
+                  <img
+                    src={companyLogoUrl}
+                    alt={`Logo ${companyName}`}
+                    className="h-full w-full object-contain"
+                  />
+                </div>
+              ) : (
+                <span className="text-xl">👤</span>
+              )}
 
-                <p className="mt-6 font-semibold text-blue-600 opacity-0 transition group-hover:opacity-100 lg:mt-auto lg:pt-4">
-                  Otvoriť →
-                </p>
-              </Link>
-            ))}
+              <p className="truncate text-sm font-semibold text-secondary">
+                {companyName}
+              </p>
+            </div>
+
+            <button
+              type="button"
+              aria-label="Otvoriť menu"
+              onClick={() => setMenuOpen(true)}
+              className="surface-card surface-card-hover flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-secondary transition"
+            >
+              <HamburgerIcon />
+            </button>
           </div>
 
-          <div className="mt-10 rounded-3xl bg-white/45 border border-white/20 p-8 shadow-xl backdrop-blur-xl">
-            <div className="flex items-center justify-between">
+          <h2 className="mt-5 text-3xl font-black tracking-tight text-primary lg:mt-0 lg:text-[2.75rem]">
+            {greeting}
+          </h2>
+
+          {/* Search — KOREKCIA v3: jednoduchá tmavá pilulka priamo na pozadí
+              namiesto ďalšej "surface-card" krabice, menej rámov na
+              obrazovke. */}
+          <div className="mt-6 flex items-center gap-3 rounded-2xl border border-subtle bg-surface-1/60 px-4 py-3.5 lg:mt-9">
+            <SearchIcon />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Hľadať vozidlo, stroj alebo skladovú položku..."
+              className="w-full min-w-0 bg-transparent text-base text-primary outline-none placeholder:text-muted-esblu"
+            />
+          </div>
+
+          {query && (
+            <div className="mt-3 space-y-2.5">
+              {searchResults.length === 0 ? (
+                <p className="rounded-2xl border border-subtle bg-surface-1/60 p-4 text-sm text-secondary">
+                  Nič sa nenašlo.
+                </p>
+              ) : (
+                searchResults.map((result, index) => (
+                  <Link
+                    key={index}
+                    href={result.href}
+                    className="surface-card-hover block rounded-2xl border border-subtle bg-surface-1/60 p-4 transition"
+                  >
+                    <p className="text-xs font-bold uppercase tracking-wide text-accent-cyan">
+                      {result.type}
+                    </p>
+                    <p className="mt-1 text-base font-bold text-primary">
+                      {result.title}
+                    </p>
+                    <p className="text-sm text-secondary">{result.subtitle}</p>
+                  </Link>
+                ))
+              )}
+            </div>
+          )}
+
+          <div className="mt-9 grid grid-cols-2 gap-3.5 lg:mt-12 lg:grid-cols-4 lg:gap-5">
+            {modules
+              .filter((module) => module.title !== "Nastavenia")
+              .map((module) => (
+                <ModuleCard
+                  key={module.href}
+                  href={module.href}
+                  title={module.title}
+                  subtitle={module.subtitle}
+                  stat={module.stat}
+                  image={module.image}
+                  accent={module.accent}
+                />
+              ))}
+          </div>
+
+          {/* STK/EK panel — KOREKCIA v3: tmavý status panel s malými
+              riadkami (ikona + text + drobný badge vpravo), farba je iba
+              akcent na ikone/badge, nie výplň celej položky. */}
+          <div className="surface-card mt-6 p-5 sm:p-6 lg:mt-8 lg:p-8">
+            <div className="flex items-center justify-between gap-4">
               <div>
-                <h3 className="text-3xl font-black text-slate-950">
+                <h3 className="text-lg font-bold text-primary sm:text-xl">
                   Upozornenia STK / EK
                 </h3>
-                <p className="mt-2 text-slate-700">
+                <p className="mt-1 text-xs text-muted-esblu">
                   Automatická kontrola platnosti technických a emisných kontrol.
                 </p>
               </div>
 
-              <div
-                className={`flex h-14 w-14 items-center justify-center rounded-2xl text-2xl font-black ${
-                  alerts.length > 0
-                    ? "bg-red-100 text-red-700"
-                    : "bg-green-100 text-green-700"
+              <span
+                className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${
+                  alerts.length > 0 ? "badge-danger" : "badge-success"
                 }`}
               >
                 {alerts.length}
-              </div>
+              </span>
             </div>
 
             {alerts.length === 0 ? (
-              <div className="mt-6 rounded-2xl bg-green-50 p-5 text-green-800">
+              <p className="mt-5 text-sm text-secondary">
                 Momentálne nemáte žiadne upozornenia na STK ani EK.
-              </div>
+              </p>
             ) : (
-              <div className="mt-6 grid gap-4">
-                {alerts.map((alert, index) => (
-                  <div
-                    key={index}
-                    className={`rounded-2xl p-5 font-semibold ${
-                      alert.level === "red"
-                        ? "bg-red-100 text-red-800"
-                        : "bg-orange-100 text-orange-800"
-                    }`}
-                  >
-                    {alert.level === "red" ? "●" : "●"} {alert.text}
-                  </div>
-                ))}
+              <div className="mt-4 divide-y divide-[color:var(--color-border-subtle)]">
+                {alerts.map((alert, index) => {
+                  const isOverdue = alert.level === "red";
+                  const [label, rest] = alert.text.split(": ");
+
+                  return (
+                    <div key={index} className="flex items-center gap-3 py-3">
+                      <span
+                        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+                          isOverdue
+                            ? "bg-red-400/12 text-red-400"
+                            : "bg-amber-400/12 text-amber-400"
+                        }`}
+                        aria-hidden="true"
+                      >
+                        !
+                      </span>
+
+                      <p className="min-w-0 flex-1 truncate text-sm font-medium text-primary">
+                        {rest || alert.text}
+                      </p>
+
+                      <span
+                        className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold ${
+                          isOverdue
+                            ? "bg-red-400/12 text-red-400"
+                            : "bg-amber-400/12 text-amber-400"
+                        }`}
+                      >
+                        {label}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
         </section>
-        
-         <button
-  onClick={logout}
-  className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-white/90 px-4 py-4 text-base font-bold text-red-600 shadow-lg backdrop-blur lg:hidden"
->
-  🚪 Odhlásiť sa
-</button>
       </div>
     </main>
   );
@@ -484,31 +564,38 @@ function SideLink({
   image,
   icon,
   active = false,
+  onNavigate,
 }: {
   href: string;
   label: string;
   image?: string;
   icon?: ReactNode;
   active?: boolean;
+  onNavigate?: () => void;
 }) {
   return (
     <Link
       href={href}
-      className={`flex items-center gap-4 rounded-2xl px-4 py-3 text-lg font-semibold transition ${
+      onClick={onNavigate}
+      className={`flex items-center gap-3 rounded-lg border-l-2 py-2.5 pr-3 text-sm font-semibold transition ${
         active
-          ? "bg-blue-50 text-blue-600 shadow-sm"
-          : "text-slate-700 hover:bg-slate-100"
+          ? "border-accent-cyan pl-[10px] text-accent-cyan"
+          : "border-transparent pl-[10px] text-secondary hover:border-border-strong hover:text-primary"
       }`}
     >
-      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white shadow-sm">
+      <div
+        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
+          active ? "bg-accent-cyan/12" : "bg-surface-2"
+        }`}
+      >
         {icon ??
           (image ? (
-            <Image
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
               src={image}
-              alt={label}
-              width={34}
-              height={34}
-              className="h-8 w-8 object-contain"
+              alt=""
+              aria-hidden="true"
+              className="h-6 w-6 object-contain"
             />
           ) : null)}
       </div>
@@ -520,7 +607,7 @@ function SideLink({
 
 function IconBase({
   children,
-  size = 26,
+  size = 22,
 }: {
   children: ReactNode;
   size?: number;
@@ -534,7 +621,7 @@ function IconBase({
 
 function MenuIcon() {
   return (
-    <IconBase size={32}>
+    <IconBase size={20}>
       <rect x="3" y="3" width="7" height="7" rx="1" />
       <rect x="14" y="3" width="7" height="7" rx="1" />
       <rect x="3" y="14" width="7" height="7" rx="1" />
@@ -543,51 +630,19 @@ function MenuIcon() {
   );
 }
 
-function CarIcon() {
+function HamburgerIcon() {
   return (
-    <IconBase>
-      <path d="M5 17h14" />
-      <path d="M6 17v-5l2-5h8l2 5v5" />
-      <circle cx="8" cy="17" r="2" />
-      <circle cx="16" cy="17" r="2" />
-    </IconBase>
-  );
-}
-
-function MachineIcon() {
-  return (
-    <IconBase>
-      <path d="M4 17h13" />
-      <path d="M8 17V7l4-2 3 5" />
-      <path d="M15 10l4 3-2 4" />
-      <circle cx="6" cy="17" r="2" />
-      <circle cx="14" cy="17" r="2" />
-    </IconBase>
-  );
-}
-
-function WarehouseIcon() {
-  return (
-    <IconBase>
-      <path d="M3 10l9-6 9 6" />
-      <path d="M5 10v10h14V10" />
-      <path d="M9 20v-6h6v6" />
-    </IconBase>
-  );
-}
-
-function SettingsIcon() {
-  return (
-    <IconBase>
-      <circle cx="12" cy="12" r="3" />
-      <path d="M19.4 15a8 8 0 0 0 .1-6l-2.1-.5-1-2-2 .7a8 8 0 0 0-5 0l-2-.7-1 2-2.1.5a8 8 0 0 0 .1 6l2.1.5 1 2 2-.7a8 8 0 0 0 5 0l2 .7 1-2Z" />
+    <IconBase size={20}>
+      <path d="M4 6h16" />
+      <path d="M4 12h16" />
+      <path d="M4 18h16" />
     </IconBase>
   );
 }
 
 function LogoutIcon() {
   return (
-    <IconBase>
+    <IconBase size={20}>
       <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
       <path d="M16 17l5-5-5-5" />
       <path d="M21 12H9" />
@@ -597,108 +652,9 @@ function LogoutIcon() {
 
 function SearchIcon() {
   return (
-    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-secondary">
       <circle cx="11" cy="11" r="7" />
       <path d="M21 21l-4.3-4.3" />
-    </svg>
-  );
-}
-
-function VanImage() {
-  return (
-    <svg viewBox="0 0 260 170" className="h-40 w-56">
-      <ellipse cx="130" cy="142" rx="92" ry="13" fill="#dbe4ef" />
-      <rect x="42" y="68" width="145" height="52" rx="8" fill="#f8fafc" stroke="#94a3b8" strokeWidth="3" />
-      <path d="M78 68h77l28 28v24H78z" fill="#eef2f7" />
-      <path d="M158 68l27 28h-27z" fill="#cbd5e1" />
-      <rect x="88" y="77" width="42" height="24" rx="3" fill="#cbd5e1" />
-      <rect x="137" y="77" width="28" height="24" rx="3" fill="#cbd5e1" />
-      <rect x="48" y="105" width="140" height="14" rx="4" fill="#e2e8f0" />
-      <rect x="52" y="118" width="136" height="6" rx="3" fill="#64748b" />
-      <circle cx="78" cy="126" r="15" fill="#1f2937" />
-      <circle cx="158" cy="126" r="15" fill="#1f2937" />
-      <circle cx="78" cy="126" r="6" fill="#cbd5e1" />
-      <circle cx="158" cy="126" r="6" fill="#cbd5e1" />
-    </svg>
-  );
-}
-
-function ExcavatorImage() {
-  return (
-    <svg viewBox="0 0 260 170" className="h-40 w-56">
-      <ellipse cx="132" cy="143" rx="92" ry="13" fill="#dbe4ef" />
-      <rect x="73" y="109" width="125" height="18" rx="9" fill="#334155" />
-      <circle cx="95" cy="118" r="5" fill="#94a3b8" />
-      <circle cx="126" cy="118" r="5" fill="#94a3b8" />
-      <circle cx="158" cy="118" r="5" fill="#94a3b8" />
-      <rect x="88" y="78" width="78" height="32" rx="7" fill="#f59e0b" stroke="#92400e" strokeWidth="2" />
-      <rect x="137" y="54" width="40" height="38" rx="6" fill="#475569" />
-      <rect x="145" y="61" width="20" height="18" rx="3" fill="#cbd5e1" />
-      <path d="M100 80 L70 47" stroke="#f59e0b" strokeWidth="11" strokeLinecap="round" />
-      <path d="M70 47 L45 82" stroke="#f59e0b" strokeWidth="11" strokeLinecap="round" />
-      <path d="M45 82 L65 96" stroke="#334155" strokeWidth="9" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function WarehouseImage() {
-  return (
-    <svg viewBox="0 0 260 170" className="h-40 w-56">
-      <ellipse cx="130" cy="143" rx="92" ry="13" fill="#dbe4ef" />
-      <rect x="58" y="43" width="116" height="86" rx="5" fill="#334155" />
-      <rect x="69" y="55" width="32" height="25" rx="3" fill="#cbd5e1" />
-      <rect x="112" y="55" width="32" height="25" rx="3" fill="#cbd5e1" />
-      <rect x="69" y="91" width="32" height="25" rx="3" fill="#cbd5e1" />
-      <rect x="112" y="91" width="32" height="25" rx="3" fill="#cbd5e1" />
-      <rect x="153" y="90" width="48" height="38" rx="4" fill="#d97706" />
-      <rect x="162" y="63" width="42" height="32" rx="4" fill="#f59e0b" />
-    </svg>
-  );
-}
-
-function SettingsImage() {
-  return (
-    <svg viewBox="0 0 260 170" className="h-40 w-56">
-      <ellipse cx="130" cy="143" rx="82" ry="13" fill="#dbe4ef" />
-      <circle cx="130" cy="82" r="42" fill="#475569" />
-      <circle cx="130" cy="82" r="18" fill="#f8fafc" />
-      <rect x="123" y="12" width="14" height="28" rx="4" fill="#475569" />
-      <rect x="123" y="124" width="14" height="28" rx="4" fill="#475569" />
-      <rect x="60" y="75" width="28" height="14" rx="4" fill="#475569" />
-      <rect x="172" y="75" width="28" height="14" rx="4" fill="#475569" />
-    </svg>
-  );
-}
-
-function ConstructionBackground() {
-  return (
-    <svg viewBox="0 0 600 300" className="h-full w-full">
-      <path d="M40 270h500" stroke="#64748b" strokeWidth="4" />
-      <rect x="110" y="150" width="180" height="120" fill="#94a3b8" />
-      <path d="M80 120h250" stroke="#64748b" strokeWidth="5" />
-      <path d="M160 120v150" stroke="#64748b" strokeWidth="5" />
-      <path d="M160 120l-40 150" stroke="#64748b" strokeWidth="3" />
-      <path d="M160 120l45 150" stroke="#64748b" strokeWidth="3" />
-      <rect x="320" y="90" width="170" height="12" fill="#64748b" />
-    </svg>
-  );
-}
-
-function FiberBackground() {
-  return (
-    <svg viewBox="0 0 800 900" className="h-full w-full">
-      {Array.from({ length: 26 }).map((_, i) => (
-        <path
-          key={i}
-          d={`M780 ${60 + i * 28} C 520 ${160 + i * 8}, 480 ${
-            430 + i * 4
-          }, 120 ${850 - i * 10}`}
-          fill="none"
-          stroke="#3b82f6"
-          strokeWidth="2"
-          opacity="0.18"
-        />
-      ))}
     </svg>
   );
 }

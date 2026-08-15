@@ -601,13 +601,7 @@ export default function NastaveniaPage() {
   }
 
   return (
-    <main
-      className="min-h-screen bg-cover bg-center bg-fixed p-4 sm:p-6 lg:p-10"
-      style={{
-        backgroundImage:
-          "url('/images/background-dark.png')",
-      }}
-    >
+    <main className="app-shell-bg min-h-screen p-4 sm:p-6 lg:p-10">
       <BackLink href="/" label="Hlavné menu" className="mb-4" />
 
       <div className="flex items-center gap-4">
@@ -617,15 +611,15 @@ export default function NastaveniaPage() {
           className="h-20 w-20 object-contain"
         />
 
-        <h1 className="text-4xl font-bold text-white drop-shadow-lg">
+        <h1 className="text-4xl font-bold text-primary">
           Nastavenia
         </h1>
       </div>
 
       <div className="mt-8 max-w-2xl space-y-6">
         {isOwnerOrAdmin(myRole) && (
-        <section className="rounded-3xl border border-white/20 bg-white/45 p-8 shadow-lg backdrop-blur-xl">
-          <h2 className="text-2xl font-bold text-slate-900">
+        <section className="rounded-3xl border border-subtle bg-surface-1 p-8 shadow-lg backdrop-blur-xl">
+          <h2 className="text-2xl font-bold text-primary">
             Firma
           </h2>
 
@@ -651,7 +645,7 @@ export default function NastaveniaPage() {
             </label>
 
             {logoUrl ? (
-              <div className="mb-4 flex min-h-40 items-center justify-center rounded-2xl border border-white/40 bg-white/80 p-4">
+              <div className="mb-4 flex min-h-40 items-center justify-center rounded-2xl border border-subtle bg-surface-2 p-4">
                 <img
                   src={logoUrl}
                   alt="Firemné logo"
@@ -659,12 +653,12 @@ export default function NastaveniaPage() {
                 />
               </div>
             ) : (
-              <div className="mb-4 flex min-h-40 items-center justify-center rounded-2xl border border-dashed border-slate-400 bg-white/50 p-4 text-center text-slate-600">
+              <div className="mb-4 flex min-h-40 items-center justify-center rounded-2xl border border-dashed border-slate-400 bg-surface-1 p-4 text-center text-secondary">
                 Zatiaľ nie je uložené žiadne firemné logo.
               </div>
             )}
 
-            <label className="inline-flex cursor-pointer rounded-xl bg-slate-900 px-6 py-3 font-semibold text-white hover:bg-slate-800">
+            <label className="btn-secondary inline-flex cursor-pointer px-6 py-3 font-semibold">
               {logoLoading
                 ? "Spracovávam logo..."
                 : logoPath
@@ -691,7 +685,7 @@ export default function NastaveniaPage() {
               </button>
             )}
 
-            <p className="mt-3 text-sm text-slate-700">
+            <p className="mt-3 text-sm text-secondary">
               Logo sa automaticky zmenší a uloží vo formáte
               WebP. Maximálna povolená veľkosť je 2 MB.
             </p>
@@ -709,12 +703,12 @@ export default function NastaveniaPage() {
         )}
 
         {myRole && (
-          <section className="rounded-3xl border border-white/20 bg-white/45 p-8 shadow-lg backdrop-blur-xl">
-            <h2 className="text-2xl font-bold text-slate-900">
+          <section className="rounded-3xl border border-subtle bg-surface-1 p-8 shadow-lg backdrop-blur-xl">
+            <h2 className="text-2xl font-bold text-primary">
               Používatelia
             </h2>
 
-            <p className="mt-2 text-sm text-slate-700">
+            <p className="mt-2 text-sm text-secondary">
               Vaše členstvo:{" "}
               <span className="font-semibold">
                 {MEMBER_ROLE_LABELS[myRole] || myRole}
@@ -722,23 +716,23 @@ export default function NastaveniaPage() {
             </p>
 
             {usersLoading ? (
-              <p className="mt-4 text-sm text-slate-600">Načítavam...</p>
+              <p className="mt-4 text-sm text-secondary">Načítavam...</p>
             ) : (
               <>
                 {members.length > 0 && (
                   <div className="mt-6">
-                    <h3 className="font-semibold text-slate-900">Členovia</h3>
+                    <h3 className="font-semibold text-primary">Členovia</h3>
 
                     <ul className="mt-3 space-y-2">
                       {members.map((member) => (
                         <li
                           key={member.member_id}
-                          className="flex items-center justify-between rounded-xl bg-white/80 px-4 py-3"
+                          className="flex items-center justify-between rounded-xl bg-surface-2 px-4 py-3"
                         >
-                          <span className="text-sm text-slate-800">
+                          <span className="text-sm text-primary">
                             {member.email}
                           </span>
-                          <span className="text-xs font-semibold text-slate-600">
+                          <span className="text-xs font-semibold text-secondary">
                             {MEMBER_ROLE_LABELS[member.role] || member.role}
                           </span>
                         </li>
@@ -751,7 +745,7 @@ export default function NastaveniaPage() {
                   <>
                     {invites.length > 0 && (
                       <div className="mt-6">
-                        <h3 className="font-semibold text-slate-900">
+                        <h3 className="font-semibold text-primary">
                           Pozvánky
                         </h3>
 
@@ -759,18 +753,18 @@ export default function NastaveniaPage() {
                           {invites.map((invite) => (
                             <li
                               key={invite.invite_id}
-                              className="flex items-center justify-between rounded-xl bg-white/80 px-4 py-3"
+                              className="flex items-center justify-between rounded-xl bg-surface-2 px-4 py-3"
                             >
-                              <span className="text-sm text-slate-800">
+                              <span className="text-sm text-primary">
                                 {invite.email}{" "}
-                                <span className="text-xs text-slate-500">
+                                <span className="text-xs text-muted-esblu">
                                   (
                                   {MEMBER_ROLE_LABELS[invite.role] ||
                                     invite.role}
                                   )
                                 </span>
                               </span>
-                              <span className="text-xs font-semibold text-slate-600">
+                              <span className="text-xs font-semibold text-secondary">
                                 {INVITE_STATUS_LABELS[invite.status] ||
                                   invite.status}
                               </span>
@@ -780,8 +774,8 @@ export default function NastaveniaPage() {
                       </div>
                     )}
 
-                    <div className="mt-6 rounded-2xl border border-dashed border-slate-300 p-5">
-                      <h3 className="font-semibold text-slate-900">
+                    <div className="mt-6 rounded-2xl border border-dashed border-subtle p-5">
+                      <h3 className="font-semibold text-primary">
                         Pozvať používateľa
                       </h3>
 
@@ -798,7 +792,7 @@ export default function NastaveniaPage() {
                         />
 
                         <div className="flex flex-col gap-2 sm:flex-row">
-                          <label className="flex flex-1 items-center gap-2 rounded-xl border p-3 text-sm">
+                          <label className="flex flex-1 items-center gap-2 rounded-xl border border-subtle p-3 text-sm">
                             <input
                               type="radio"
                               name="inviteRole"
@@ -809,7 +803,7 @@ export default function NastaveniaPage() {
                             Plný prístup
                           </label>
 
-                          <label className="flex flex-1 items-center gap-2 rounded-xl border p-3 text-sm">
+                          <label className="flex flex-1 items-center gap-2 rounded-xl border border-subtle p-3 text-sm">
                             <input
                               type="radio"
                               name="inviteRole"
@@ -840,17 +834,17 @@ export default function NastaveniaPage() {
                       </button>
 
                       {lastInviteLink && (
-                        <div className="mt-4 rounded-xl bg-slate-100 p-4">
-                          <p className="text-sm font-semibold text-slate-800">
+                        <div className="mt-4 rounded-xl bg-surface-2 p-4">
+                          <p className="text-sm font-semibold text-primary">
                             Pozvánka bola vytvorená
                           </p>
-                          <p className="mt-2 break-all text-xs text-slate-600">
+                          <p className="mt-2 break-all text-xs text-secondary">
                             {lastInviteLink}
                           </p>
                           <button
                             type="button"
                             onClick={copyInviteLink}
-                            className="mt-3 rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-white"
+                            className="mt-3 rounded-xl border border-subtle px-4 py-2 text-sm font-semibold text-secondary hover:bg-surface-1"
                           >
                             {linkCopied ? "Skopírované ✓" : "Kopírovať odkaz"}
                           </button>
@@ -864,12 +858,12 @@ export default function NastaveniaPage() {
           </section>
         )}
 
-        <section className="rounded-3xl border border-white/20 bg-white/45 p-8 shadow-lg backdrop-blur-xl">
-          <h2 className="text-2xl font-bold text-slate-900">
+        <section className="rounded-3xl border border-subtle bg-surface-1 p-8 shadow-lg backdrop-blur-xl">
+          <h2 className="text-2xl font-bold text-primary">
             Zmena hesla
           </h2>
 
-          <p className="mt-2 text-sm text-slate-700">
+          <p className="mt-2 text-sm text-secondary">
             Nové heslo musí mať minimálne 8 znakov.
           </p>
 
@@ -915,7 +909,7 @@ export default function NastaveniaPage() {
             type="button"
             onClick={changePassword}
             disabled={passwordLoading}
-            className="mt-8 rounded-xl bg-slate-900 px-6 py-3 text-white hover:bg-slate-800 disabled:bg-gray-400"
+            className="btn-secondary mt-8 px-6 py-3 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {passwordLoading
               ? "Mením heslo..."
@@ -923,12 +917,12 @@ export default function NastaveniaPage() {
           </button>
         </section>
 
-        <section className="rounded-3xl border border-white/20 bg-white/45 p-8 shadow-lg backdrop-blur-xl">
-          <h2 className="text-2xl font-bold text-slate-900">
+        <section className="rounded-3xl border border-subtle bg-surface-1 p-8 shadow-lg backdrop-blur-xl">
+          <h2 className="text-2xl font-bold text-primary">
             Spätná väzba
           </h2>
 
-          <p className="mt-2 leading-7 text-slate-700">
+          <p className="mt-2 leading-7 text-secondary">
             Našli ste chybu, niečo vám chýba alebo máte návrh na zlepšenie?
             Napíšte nám. Vaša spätná väzba pomáha zlepšovať testovaciu verziu
             Esblu.
@@ -941,17 +935,17 @@ export default function NastaveniaPage() {
             Poslať spätnú väzbu
           </a>
 
-          <p className="mt-3 text-sm leading-6 text-slate-600">
+          <p className="mt-3 text-sm leading-6 text-secondary">
             Do správy nevkladajte heslá ani citlivé osobné údaje.
           </p>
         </section>
 
-        <section className="rounded-3xl border border-white/20 bg-white/45 p-8 shadow-lg backdrop-blur-xl">
-          <h2 className="text-2xl font-bold text-slate-900">
+        <section className="rounded-3xl border border-subtle bg-surface-1 p-8 shadow-lg backdrop-blur-xl">
+          <h2 className="text-2xl font-bold text-primary">
             Právne informácie
           </h2>
 
-          <p className="mt-2 text-sm text-slate-700">
+          <p className="mt-2 text-sm text-secondary">
             Verejné informácie o pravidlách používania služby a spracúvaní
             osobných údajov.
           </p>
@@ -962,74 +956,74 @@ export default function NastaveniaPage() {
           >
             <Link
               href="/ochrana-osobnych-udajov"
-              className="rounded-xl border border-slate-300 bg-white/80 px-5 py-3 font-semibold text-blue-700 transition hover:bg-white"
+              className="rounded-xl border border-subtle bg-surface-2 px-5 py-3 font-semibold text-blue-700 transition hover:bg-surface-1"
             >
               Zásady ochrany osobných údajov
             </Link>
             <Link
               href="/podmienky-pouzivania"
-              className="rounded-xl border border-slate-300 bg-white/80 px-5 py-3 font-semibold text-blue-700 transition hover:bg-white"
+              className="rounded-xl border border-subtle bg-surface-2 px-5 py-3 font-semibold text-blue-700 transition hover:bg-surface-1"
             >
               Podmienky používania Esblu
             </Link>
             <Link
               href="/cookies"
-              className="rounded-xl border border-slate-300 bg-white/80 px-5 py-3 font-semibold text-blue-700 transition hover:bg-white"
+              className="rounded-xl border border-subtle bg-surface-2 px-5 py-3 font-semibold text-blue-700 transition hover:bg-surface-1"
             >
               Cookies
             </Link>
             <Link
               href="/dpa"
-              className="rounded-xl border border-slate-300 bg-white/80 px-5 py-3 font-semibold text-blue-700 transition hover:bg-white"
+              className="rounded-xl border border-subtle bg-surface-2 px-5 py-3 font-semibold text-blue-700 transition hover:bg-surface-1"
             >
               Zmluva o spracúvaní osobných údajov (DPA)
             </Link>
             <Link
               href="/subprocessors"
-              className="rounded-xl border border-slate-300 bg-white/80 px-5 py-3 font-semibold text-blue-700 transition hover:bg-white"
+              className="rounded-xl border border-subtle bg-surface-2 px-5 py-3 font-semibold text-blue-700 transition hover:bg-surface-1"
             >
               Zoznam sprostredkovateľov
             </Link>
             <Link
               href="/kontakt"
-              className="rounded-xl border border-slate-300 bg-white/80 px-5 py-3 font-semibold text-blue-700 transition hover:bg-white"
+              className="rounded-xl border border-subtle bg-surface-2 px-5 py-3 font-semibold text-blue-700 transition hover:bg-surface-1"
             >
               Kontakt
             </Link>
           </nav>
         </section>
 
-        <section className="rounded-3xl border border-white/20 bg-white/45 p-8 shadow-lg backdrop-blur-xl">
-          <h2 className="text-2xl font-bold text-slate-900">
+        <section className="rounded-3xl border border-subtle bg-surface-1 p-8 shadow-lg backdrop-blur-xl">
+          <h2 className="text-2xl font-bold text-primary">
             Súkromie a dáta
           </h2>
 
-          <p className="mt-2 text-sm text-slate-700">
+          <p className="mt-2 text-sm text-secondary">
             Prehľad toho, ktoré verzie právnych dokumentov ste potvrdili, a
             možnosť požiadať o uplatnenie svojich práv k osobným údajom.
           </p>
 
           <div className="mt-6">
-            <h3 className="font-semibold text-slate-900">
+            <h3 className="font-semibold text-primary">
               Vaše potvrdené dokumenty
             </h3>
 
             {acceptancesLoading ? (
-              <p className="mt-3 text-sm text-slate-600">Načítavam...</p>
+              <p className="mt-3 text-sm text-secondary">Načítavam...</p>
             ) : acceptances.length > 0 ? (
               <ul className="mt-3 space-y-2">
                 {acceptances.map((row) => (
                   <li
                     key={`${row.document_type}-${row.version}`}
-                    className="flex flex-col gap-1 rounded-xl bg-white/80 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between"
+                    className="flex flex-col gap-1 rounded-xl bg-surface-2 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between"
                   >
-                    <span className="font-semibold text-slate-800">
+                    <span className="font-semibold text-primary">
                       {DOC_TYPE_LABELS[row.document_type] || row.document_type}{" "}
-                      <span className="font-normal text-slate-500">
+                      <span className="font-normal text-muted-esblu">
                         (verzia {row.version})
                       </span>
                     </span>
-                    <span className="text-xs text-slate-500">
+                    <span className="text-xs text-muted-esblu">
                       potvrdené{" "}
                       {new Date(row.accepted_at).toLocaleString("sk-SK")}
                     </span>
@@ -1037,13 +1031,13 @@ export default function NastaveniaPage() {
                 ))}
               </ul>
             ) : (
-              <p className="mt-3 text-sm text-slate-600">
+              <p className="mt-3 text-sm text-secondary">
                 Zatiaľ nemáme záznam o potvrdení žiadneho dokumentu (alebo
                 ešte nebola nasadená databázová funkcia na ich evidenciu).
               </p>
             )}
 
-            <p className="mt-3 text-xs text-slate-500">
+            <p className="mt-3 text-xs text-muted-esblu">
               Aktuálne platné verzie: Podmienky používania v
               {legalConfig.termsVersion}, Zásady ochrany osobných údajov v
               {legalConfig.privacyPolicyVersion}.
@@ -1053,24 +1047,24 @@ export default function NastaveniaPage() {
           <div className="mt-8 grid gap-3 sm:grid-cols-2">
             <a
               href={exportRequestMailto}
-              className="rounded-xl border border-slate-300 bg-white/80 px-5 py-3 text-center font-semibold text-blue-700 transition hover:bg-white"
+              className="rounded-xl border border-subtle bg-surface-2 px-5 py-3 text-center font-semibold text-blue-700 transition hover:bg-surface-1"
             >
               Požiadať o export mojich údajov
             </a>
             <a
               href={correctionRequestMailto}
-              className="rounded-xl border border-slate-300 bg-white/80 px-5 py-3 text-center font-semibold text-blue-700 transition hover:bg-white"
+              className="rounded-xl border border-subtle bg-surface-2 px-5 py-3 text-center font-semibold text-blue-700 transition hover:bg-surface-1"
             >
               Požiadať o opravu mojich údajov
             </a>
           </div>
 
-          <div className="mt-8 rounded-2xl border border-dashed border-slate-300 p-5">
-            <h3 className="font-semibold text-slate-900">Vymazanie účtu</h3>
+          <div className="mt-8 rounded-2xl border border-dashed border-subtle p-5">
+            <h3 className="font-semibold text-primary">Vymazanie účtu</h3>
 
             {myRole === "owner" ? (
               <>
-                <p className="mt-2 text-sm text-slate-700">
+                <p className="mt-2 text-sm text-secondary">
                   Ako majiteľ firmy spravujete firemný účet, ku ktorému majú
                   prístup aj ďalší členovia (admin/zamestnanci). Vymazanie
                   firemného účtu je samostatný, nezvratný proces, ktorý
@@ -1086,7 +1080,7 @@ export default function NastaveniaPage() {
               </>
             ) : (
               <>
-                <p className="mt-2 text-sm text-slate-700">
+                <p className="mt-2 text-sm text-secondary">
                   Môžete požiadať o vymazanie svojej osobnej identity a
                   členstva vo firme. Firemné dáta (vozidlá, stroje, sklad,
                   dokumenty), ktoré patria firme, sa tým NEVYMAŽÚ — sú
@@ -1101,7 +1095,7 @@ export default function NastaveniaPage() {
               </>
             )}
 
-            <p className="mt-3 text-xs text-slate-500">
+            <p className="mt-3 text-xs text-muted-esblu">
               Žiadosti aktuálne spracúvame manuálne po overení totožnosti.
               Odpovieme na e-mail, z ktorého žiadosť odošlete.
             </p>

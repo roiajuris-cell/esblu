@@ -417,10 +417,7 @@ setItems(itemsWithPhotos);
   }
 
   return (
-    <main
-  className="min-h-screen bg-cover bg-center bg-fixed p-4 sm:p-6 lg:p-10"
-  style={{ backgroundImage: "url('/images/background-dark.png')" }}
->
+    <main className="app-shell-bg min-h-screen p-4 sm:p-6 lg:p-10">
       <BackLink href="/" label="Hlavné menu" className="mb-4" />
 
       <div className="flex items-center gap-4">
@@ -429,12 +426,12 @@ setItems(itemsWithPhotos);
     alt="Sklad"
     className="h-20 w-20 object-contain"
   />
-  <h1 className="text-4xl font-bold text-white drop-shadow-lg">
+  <h1 className="text-4xl font-bold text-primary">
   Sklad
 </h1>
 </div>
 
-      <p className="mt-4 text-white/80">
+      <p className="mt-4 text-secondary">
         Evidencia náradia, materiálu a skladových zásob.
       </p>
 
@@ -460,11 +457,11 @@ setItems(itemsWithPhotos);
       </button>
 
       {legalHold && (
-        <p className="mt-3 text-sm text-amber-800">{LEGAL_HOLD_MESSAGE}</p>
+        <p className="mt-3 text-sm text-amber-400">{LEGAL_HOLD_MESSAGE}</p>
       )}
 
       {showForm && (
-        <div className="mt-8 rounded-2xl border border-white/20 bg-white/45 p-6 shadow-lg backdrop-blur-xl">
+        <div className="mt-8 rounded-2xl border border-subtle bg-surface-1 p-6 shadow-lg backdrop-blur-xl">
           <h2 className="mb-6 text-2xl font-bold">
             {editingId ? "Upraviť položku" : "Pridať položku"}
           </h2>
@@ -534,7 +531,7 @@ setItems(itemsWithPhotos);
     />
   </label>
 
-  <label className="cursor-pointer rounded-xl border bg-white px-4 py-3 text-center font-semibold text-blue-700 shadow hover:bg-slate-100">
+  <label className="cursor-pointer rounded-xl border border-subtle bg-surface-1 px-4 py-3 text-center font-semibold text-blue-700 shadow hover:bg-surface-2">
     🖼️ Galéria
     <input
       type="file"
@@ -570,20 +567,20 @@ setItems(itemsWithPhotos);
       )}
 
         <div className="mt-10">
-  <h2 className="mb-4 text-2xl font-bold text-white drop-shadow-lg">
+  <h2 className="mb-4 text-2xl font-bold text-primary">
     Uložené položky
   </h2>
 
         {items.length === 0 ? (
-         <div className="rounded-2xl border border-white/20 bg-white/45 p-6 shadow-lg backdrop-blur-xl"> 
-           <p className="font-medium text-white/90 drop-shadow"> Zatiaľ nie je uložená žiadna položka.</p>
+         <div className="rounded-2xl border border-subtle bg-surface-1 p-6 shadow-lg backdrop-blur-xl"> 
+           <p className="font-medium text-secondary"> Zatiaľ nie je uložená žiadna položka.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
             {items.map((row) => (
               <div
                 key={row.id}
-                className="rounded-2xl border bg-white p-6 shadow-sm"
+                className="rounded-2xl border border-subtle bg-surface-1 p-6 shadow-sm"
               >{row.first_photo_url ? (
   <img
     src={row.first_photo_url}
@@ -591,8 +588,8 @@ setItems(itemsWithPhotos);
     className="mb-4 h-56 w-full rounded-xl object-cover"
   />
 ) : (
-  <div className="mb-4 flex h-56 w-full items-center justify-center rounded-xl border-2 border-dashed border-slate-300 bg-slate-100">
-    <div className="text-center text-slate-500">
+  <div className="mb-4 flex h-56 w-full items-center justify-center rounded-xl border-2 border-dashed border-subtle bg-surface-2">
+    <div className="text-center text-muted-esblu">
       <div className="text-6xl">📦</div>
       <p className="mt-2 text-sm font-medium">
         Bez fotografie
@@ -606,13 +603,13 @@ setItems(itemsWithPhotos);
                       {row.name || "Bez názvu"}
                     </h3>
 
-                    <p className="mt-2 text-slate-600">
+                    <p className="mt-2 text-secondary">
                       Kategória: {row.category || "—"}
                     </p>
                   </div>
 
                   {isLowStock(row) && (
-                    <div className="rounded-xl bg-orange-100 px-4 py-2 font-bold text-orange-700">
+                    <div className="badge-warning rounded-xl px-4 py-2 font-bold">
                       Nízky stav
                     </div>
                   )}
@@ -628,7 +625,7 @@ setItems(itemsWithPhotos);
                 <div className="mt-5 flex gap-3">
                   <Link
                     href={`/sklad/${row.id}`}
-                    className="rounded-xl bg-slate-900 px-4 py-2 text-white"
+                    className="btn-secondary px-4 py-2"
                   >
                     Detail
                   </Link>

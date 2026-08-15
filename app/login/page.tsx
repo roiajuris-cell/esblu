@@ -195,13 +195,13 @@ async function resetPassword() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-100 p-6">
-      <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow">
-        <h1 className="text-3xl font-bold text-slate-900">
+    <main className="app-shell-bg flex min-h-screen items-center justify-center p-6">
+      <div className="w-full max-w-md rounded-2xl bg-surface-1 p-8 shadow">
+        <h1 className="text-3xl font-bold text-primary">
           {mode === "login" ? "Prihlásenie" : "Registrácia firmy"}
         </h1>
 
-        <p className="mt-2 text-slate-500">
+        <p className="mt-2 text-muted-esblu">
           {mode === "login"
             ? "Prihlás sa do aplikácie Esblu."
             : "Vytvor nový účet pre svoju firmu."}
@@ -247,7 +247,7 @@ async function resetPassword() {
 
         {mode === "register" && (
           <div className="mt-4 space-y-3">
-            <label className="flex items-start gap-3 text-sm leading-6 text-slate-700">
+            <label className="flex items-start gap-3 text-sm leading-6 text-secondary">
               <input
                 type="checkbox"
                 className="mt-1 h-4 w-4"
@@ -268,7 +268,7 @@ async function resetPassword() {
               </span>
             </label>
 
-            <label className="flex items-start gap-3 text-sm leading-6 text-slate-700">
+            <label className="flex items-start gap-3 text-sm leading-6 text-secondary">
               <input
                 type="checkbox"
                 className="mt-1 h-4 w-4"
@@ -324,7 +324,7 @@ async function resetPassword() {
           type="button"
           onClick={switchMode}
           disabled={loading}
-          className="mt-3 w-full rounded-xl border border-slate-300 px-6 py-3 font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-gray-400"
+          className="mt-3 w-full rounded-xl border border-subtle px-6 py-3 font-semibold text-secondary hover:bg-surface-2 disabled:cursor-not-allowed disabled:text-gray-400"
         >
           {mode === "login"
             ? "Nemáš účet? Registrovať firmu"
@@ -333,7 +333,7 @@ async function resetPassword() {
 
         <nav
           aria-label="Právne a kontaktné informácie"
-          className="mt-6 flex flex-wrap justify-center gap-x-4 gap-y-2 border-t border-slate-200 pt-5 text-center text-xs font-medium text-slate-600"
+          className="mt-6 flex flex-wrap justify-center gap-x-4 gap-y-2 border-t border-subtle pt-5 text-center text-xs font-medium text-secondary"
         >
           <Link href="/ochrana-osobnych-udajov" className="hover:text-blue-700 hover:underline">
             Ochrana osobných údajov

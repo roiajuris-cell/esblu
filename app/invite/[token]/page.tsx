@@ -208,7 +208,7 @@ export default function InviteAcceptPage() {
   if (state === "loading") {
     return (
       <Centered>
-        <p className="text-slate-600">Načítavam pozvánku...</p>
+        <p className="text-secondary">Načítavam pozvánku...</p>
       </Centered>
     );
   }
@@ -216,10 +216,10 @@ export default function InviteAcceptPage() {
   if (state === "invalid") {
     return (
       <Centered>
-        <h1 className="text-2xl font-bold text-slate-900">
+        <h1 className="text-2xl font-bold text-primary">
           Pozvánka nie je platná
         </h1>
-        <p className="mt-3 text-slate-600">
+        <p className="mt-3 text-secondary">
           Tento odkaz na pozvánku je neplatný, bol už použitý, alebo jeho
           platnosť vypršala. Požiadajte majiteľa firmy o novú pozvánku.
         </p>
@@ -236,10 +236,10 @@ export default function InviteAcceptPage() {
   if (state === "accepted") {
     return (
       <Centered>
-        <h1 className="text-2xl font-bold text-slate-900">
+        <h1 className="text-2xl font-bold text-primary">
           Pozvánka bola prijatá
         </h1>
-        <p className="mt-3 text-slate-600">
+        <p className="mt-3 text-secondary">
           Presmerúvam ťa do aplikácie...
         </p>
       </Centered>
@@ -254,11 +254,11 @@ export default function InviteAcceptPage() {
 
   return (
     <Centered>
-      <h1 className="text-2xl font-bold text-slate-900">
+      <h1 className="text-2xl font-bold text-primary">
         Pozvánka do firmy
       </h1>
 
-      <p className="mt-3 text-slate-600">
+      <p className="mt-3 text-secondary">
         Boli ste pozvaní s prístupom typu{" "}
         <span className="font-semibold">{roleLabel}</span>. Táto pozvánka je
         určená pre e-mail v tvare{" "}
@@ -266,14 +266,14 @@ export default function InviteAcceptPage() {
       </p>
 
       {formError && (
-        <p className="mt-4 rounded-xl bg-red-50 p-3 text-sm font-medium text-red-700">
+        <p className="mt-4 rounded-xl bg-danger-soft p-3 text-sm font-medium text-red-700">
           {formError}
         </p>
       )}
 
       {sessionEmail ? (
         <div className="mt-6">
-          <p className="text-sm text-slate-600">
+          <p className="text-sm text-secondary">
             Si prihlásený ako{" "}
             <span className="font-semibold">{sessionEmail}</span>.
           </p>
@@ -293,19 +293,19 @@ export default function InviteAcceptPage() {
             type="button"
             onClick={handleSignOutAndSwitch}
             disabled={state === "accepting"}
-            className="mt-3 w-full rounded-xl border border-slate-300 px-6 py-3 font-semibold text-slate-700 hover:bg-slate-50"
+            className="mt-3 w-full rounded-xl border border-subtle px-6 py-3 font-semibold text-secondary hover:bg-surface-2"
           >
             Odhlásiť sa a prihlásiť iným účtom
           </button>
         </div>
       ) : awaitingEmailConfirmation ? (
-        <p className="mt-6 rounded-xl bg-blue-50 p-3 text-sm text-blue-800">
+        <p className="mt-6 rounded-xl bg-info-soft p-3 text-sm text-blue-800">
           Skontroluj svoj e-mail a potvrď registráciu. Následne sa vráť na
           tento odkaz a prihlás sa.
         </p>
       ) : (
         <div className="mt-6">
-          <div className="flex rounded-xl border border-slate-200 p-1">
+          <div className="flex rounded-xl border border-subtle p-1">
             <button
               type="button"
               onClick={() => {
@@ -315,7 +315,7 @@ export default function InviteAcceptPage() {
               className={`flex-1 rounded-lg px-4 py-2 text-sm font-semibold ${
                 mode === "register"
                   ? "bg-blue-600 text-white"
-                  : "text-slate-600"
+                  : "text-secondary"
               }`}
             >
               Vytvoriť účet
@@ -327,7 +327,7 @@ export default function InviteAcceptPage() {
                 setFormError("");
               }}
               className={`flex-1 rounded-lg px-4 py-2 text-sm font-semibold ${
-                mode === "login" ? "bg-blue-600 text-white" : "text-slate-600"
+                mode === "login" ? "bg-blue-600 text-white" : "text-secondary"
               }`}
             >
               Už mám účet
@@ -390,8 +390,8 @@ export default function InviteAcceptPage() {
 
 function Centered({ children }: { children: React.ReactNode }) {
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-100 p-6">
-      <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow">
+    <main className="app-shell-bg flex min-h-screen items-center justify-center p-6">
+      <div className="w-full max-w-md rounded-2xl bg-surface-1 p-8 shadow">
         {children}
       </div>
     </main>

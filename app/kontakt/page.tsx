@@ -40,7 +40,7 @@ export default function ContactPage() {
         </p>
       </LegalSection>
 
-      <p className="rounded-2xl bg-slate-100 p-5 text-sm text-slate-600">
+      <p className="rounded-2xl bg-surface-2 p-5 text-sm text-secondary">
         Pri žiadosti o podporu opíšte problém čo najpresnejšie. Do e-mailu
         neposielajte heslo ani iné prihlasovacie údaje.
       </p>

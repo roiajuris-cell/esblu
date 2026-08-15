@@ -23,12 +23,12 @@ export default function PlanLimitNotice({
   return (
     <aside
       role="status"
-      className={`rounded-2xl border border-amber-300 bg-amber-50/95 p-4 text-amber-950 shadow-sm sm:p-5 ${className}`.trim()}
+      className={`badge-warning rounded-2xl border border-amber-400/25 p-4 shadow-sm sm:p-5 ${className}`.trim()}
     >
       <div className="flex items-start gap-3">
         <span
           aria-hidden="true"
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-200 text-lg"
+          className="badge-warning flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-lg font-black"
         >
           !
         </span>
@@ -42,7 +42,7 @@ export default function PlanLimitNotice({
               Využitie: {usage} / {limit}
             </p>
           )}
-          <p className="mt-2 text-sm leading-6 sm:text-base">
+          <p className="mt-2 text-sm leading-6 text-secondary sm:text-base">
             {PLAN_LIMIT_MESSAGE}
           </p>
         </div>

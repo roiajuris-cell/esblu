@@ -36,7 +36,7 @@ export default function SubprocessorsPage() {
         <div className="overflow-x-auto">
           <table className="w-full min-w-[720px] border-collapse text-sm">
             <thead>
-              <tr className="border-b border-slate-300 text-left">
+              <tr className="border-b border-subtle text-left">
                 <th className="py-2 pr-4 font-semibold">Dodávateľ</th>
                 <th className="py-2 pr-4 font-semibold">Účel</th>
                 <th className="py-2 pr-4 font-semibold">Kategórie údajov</th>
@@ -45,7 +45,7 @@ export default function SubprocessorsPage() {
               </tr>
             </thead>
             <tbody>
-              <tr className="border-b border-slate-200 align-top">
+              <tr className="border-b border-subtle align-top">
                 <td className="py-2 pr-4 font-semibold">Supabase</td>
                 <td className="py-2 pr-4">
                   Databáza, autentifikácia, úložisko súborov (fotografie,
@@ -68,7 +68,7 @@ export default function SubprocessorsPage() {
                   </a>
                 </td>
               </tr>
-              <tr className="border-b border-slate-200 align-top">
+              <tr className="border-b border-subtle align-top">
                 <td className="py-2 pr-4 font-semibold">OpenAI</td>
                 <td className="py-2 pr-4">
                   AI rozpoznávanie údajov z nahraných dokumentov a fotografií
@@ -92,7 +92,7 @@ export default function SubprocessorsPage() {
                   </a>
                 </td>
               </tr>
-              <tr className="border-b border-slate-200 align-top">
+              <tr className="border-b border-subtle align-top">
                 <td className="py-2 pr-4 font-semibold">Vercel</td>
                 <td className="py-2 pr-4">Hosting a prevádzka aplikácie</td>
                 <td className="py-2 pr-4">

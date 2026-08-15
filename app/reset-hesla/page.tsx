@@ -79,18 +79,13 @@ export default function ResetHeslaPage() {
   }
 
   return (
-    <main
-      className="flex min-h-screen items-center justify-center bg-cover bg-center p-6"
-      style={{
-        backgroundImage: "url('/images/background-dark.png')",
-      }}
-    >
-      <div className="w-full max-w-md rounded-3xl border border-white/20 bg-white/90 p-8 shadow-xl backdrop-blur-xl">
-        <h1 className="text-3xl font-bold text-slate-900">
+    <main className="app-shell-bg flex min-h-screen items-center justify-center p-6">
+      <div className="surface-card w-full max-w-md p-8 shadow-xl">
+        <h1 className="text-3xl font-bold text-primary">
           Nové heslo
         </h1>
 
-        <p className="mt-2 text-slate-600">
+        <p className="mt-2 text-secondary">
           Zadaj nové heslo pre svoj účet Esblu.
         </p>
 
@@ -99,7 +94,7 @@ export default function ResetHeslaPage() {
             type="password"
             autoComplete="new-password"
             placeholder="Nové heslo"
-            className="w-full rounded-xl border p-3"
+            className="input-dark w-full p-3"
             value={newPassword}
             onChange={(event) =>
               setNewPassword(event.target.value)
@@ -111,7 +106,7 @@ export default function ResetHeslaPage() {
             type="password"
             autoComplete="new-password"
             placeholder="Potvrdenie nového hesla"
-            className="w-full rounded-xl border p-3"
+            className="input-dark w-full p-3"
             value={confirmNewPassword}
             onChange={(event) =>
               setConfirmNewPassword(event.target.value)
@@ -124,13 +119,13 @@ export default function ResetHeslaPage() {
           type="button"
           onClick={updatePassword}
           disabled={loading || !recoveryReady}
-          className="mt-6 w-full rounded-xl bg-blue-600 px-6 py-3 font-semibold text-white hover:bg-blue-700 disabled:bg-gray-400"
+          className="btn-primary mt-6 w-full px-6 py-3"
         >
           {loading ? "Mením heslo..." : "Nastaviť nové heslo"}
         </button>
 
         {!recoveryReady && (
-          <p className="mt-4 text-center text-sm text-slate-500">
+          <p className="mt-4 text-center text-sm text-muted-esblu">
             Čakám na overenie odkazu na obnovu hesla...
           </p>
         )}

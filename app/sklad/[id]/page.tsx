@@ -35,18 +35,18 @@ export default function InventoryItemDetailPage() {
     Number(item.quantity || 0) <= Number(item.min_quantity);
 
   return (
-    <main className="min-h-screen bg-slate-100 p-10">
+    <main className="app-shell-bg min-h-screen p-10">
       <BackLink href="/sklad" label="Sklad" className="mb-4" />
 
       <h1 className="text-4xl font-bold">📦 {item.name}</h1>
 
       {lowStock && (
-        <div className="mt-6 rounded-xl bg-orange-100 p-4 font-bold text-orange-800">
+        <div className="badge-warning mt-6 rounded-xl p-4 font-bold">
           ⚠️ Nízky stav zásob
         </div>
       )}
 
-      <div className="mt-8 rounded-2xl bg-white p-8 shadow">
+      <div className="surface-card mt-8 p-8">
         <div className="grid grid-cols-2 gap-5">
           <p><b>Kategória:</b> {item.category || "—"}</p>
           <p><b>Množstvo:</b> {item.quantity ?? 0} {item.unit || ""}</p>
@@ -55,7 +55,7 @@ export default function InventoryItemDetailPage() {
         </div>
 
         {item.notes && (
-          <div className="mt-6 rounded-xl bg-slate-50 p-4">
+          <div className="mt-6 rounded-xl bg-surface-2 p-4">
             <b>Poznámky:</b>
             <p className="mt-2">{item.notes}</p>
           </div>
