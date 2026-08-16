@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
@@ -40,6 +40,43 @@ export default function LoginPage() {
   const [resetLoading, setResetLoading] = useState(false);
   const [agreedTerms, setAgreedTerms] = useState(false);
   const [agreedPrivacy, setAgreedPrivacy] = useState(false);
+
+  const [accountDeletedNotice, setAccountDeletedNotice] = useState(false);
+
+  // Jednorazová správa po úspešnom samoobslužnom zrušení účtu
+  // (app/nastavenia → lib/account-deletion.ts). Číta sa priamo z
+  // window.location.search (nie useSearchParams()) zámerne — vyhýba sa
+  // tak Suspense-boundary požiadavke Next.js pre useSearchParams() pri
+  // statickom prerenderi tejto stránky. Query parameter sa po zobrazení
+  // hneď odstráni z URL (replaceState), takže obnovenie stránky správu
+  // znova nezobrazí.
+  useEffect(() => {
+    // setState beží zámerne v mikrotaskovom callbacku (nie synchrónne
+    // priamo v tele efektu) — rovnaký princíp ako async checkUser() v
+    // app/nastavenia, len bez skutočného async volania navyše.
+    async function applyAccountDeletedNoticeFromUrl() {
+      if (typeof window === "undefined") {
+        return;
+      }
+
+      const params = new URLSearchParams(window.location.search);
+
+      if (params.get("ucet-zruseny") !== "1") {
+        return;
+      }
+
+      await Promise.resolve();
+
+      setAccountDeletedNotice(true);
+      params.delete("ucet-zruseny");
+
+      const newSearch = params.toString();
+      const newUrl = `${window.location.pathname}${newSearch ? `?${newSearch}` : ""}`;
+      window.history.replaceState(null, "", newUrl);
+    }
+
+    applyAccountDeletedNoticeFromUrl();
+  }, []);
 
   function validateEmail(value: string) {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
@@ -206,6 +243,12 @@ async function resetPassword() {
             ? "Prihlás sa do aplikácie Esblu."
             : "Vytvor nový účet pre svoju firmu."}
         </p>
+
+        {accountDeletedNotice && (
+          <p className="mt-4 rounded-xl border border-subtle bg-surface-2 px-4 py-3 text-sm text-secondary">
+            Účet bol zrušený.
+          </p>
+        )}
 
         <div className="mt-6 space-y-4">
           <input

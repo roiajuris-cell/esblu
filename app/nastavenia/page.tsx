@@ -20,6 +20,12 @@ import {
   type MyLegalAcceptanceRow,
 } from "@/lib/legal-acceptance";
 import { legalConfig } from "@/lib/legal-config";
+import {
+  ACCOUNT_DELETION_CONFIRM_PHRASE,
+  deleteMyAccount,
+  fetchAccountDeletionPreflight,
+  type AccountDeletionPreflight,
+} from "@/lib/account-deletion";
 
 const MEMBER_ROLE_LABELS: Record<string, string> = {
   owner: "Majiteľ",
@@ -84,28 +90,6 @@ Správna hodnota:
 Ďakujem.`
 );
 
-const employeeAccountDeletionMailto = buildPrivacyRequestMailto(
-  "Žiadosť o vymazanie môjho účtu — Esblu",
-  `Dobrý deň,
-
-žiadam o vymazanie svojho osobného účtu (identity) v Esblu (e-mail účtu: ).
-
-Rozumiem, že týmto sa vymaže moja prihlasovacia identita a členstvo vo firme, NIE firemné dáta (vozidlá, stroje, sklad, dokumenty), ktoré zostávajú majetkom firmy.
-
-Ďakujem.`
-);
-
-const ownerCompanyTerminationMailto = buildPrivacyRequestMailto(
-  "Žiadosť o ukončenie firemného účtu — Esblu",
-  `Dobrý deň,
-
-ako majiteľ firmy žiadam o ukončenie firemného účtu v Esblu (e-mail účtu: ) vrátane vymazania firemných dát (vozidlá, stroje, sklad, dokumenty, AI evidencia) a zrušenia prístupu všetkých členov firmy.
-
-Rozumiem, že táto operácia je nezvratná a týka sa VŠETKÝCH členov firmy, nie iba môjho vlastného účtu.
-
-Ďakujem.`
-);
-
 export default function NastaveniaPage() {
   const [userId, setUserId] = useState("");
   const [companyName, setCompanyName] = useState("");
@@ -134,6 +118,15 @@ export default function NastaveniaPage() {
 
   const [acceptances, setAcceptances] = useState<MyLegalAcceptanceRow[]>([]);
   const [acceptancesLoading, setAcceptancesLoading] = useState(false);
+
+  const [showDeleteAccountModal, setShowDeleteAccountModal] = useState(false);
+  const [deletePreflight, setDeletePreflight] =
+    useState<AccountDeletionPreflight | null>(null);
+  const [deletePreflightLoading, setDeletePreflightLoading] = useState(false);
+  const [deletePreflightError, setDeletePreflightError] = useState("");
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [deleteSubmitting, setDeleteSubmitting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
 
   useEffect(() => {
     checkUser();
@@ -600,6 +593,70 @@ export default function NastaveniaPage() {
     alert("Heslo bolo úspešne zmenené.");
   }
 
+  async function openDeleteAccountModal() {
+    setShowDeleteAccountModal(true);
+    setDeleteConfirmText("");
+    setDeleteError("");
+    setDeletePreflightError("");
+    setDeletePreflight(null);
+    setDeletePreflightLoading(true);
+
+    try {
+      const preflight = await fetchAccountDeletionPreflight();
+      setDeletePreflight(preflight);
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Prípravu na zrušenie účtu sa nepodarilo načítať.";
+      setDeletePreflightError(message);
+    } finally {
+      setDeletePreflightLoading(false);
+    }
+  }
+
+  function closeDeleteAccountModal() {
+    if (deleteSubmitting) {
+      return;
+    }
+
+    setShowDeleteAccountModal(false);
+    setDeleteConfirmText("");
+    setDeleteError("");
+  }
+
+  async function confirmDeleteAccount() {
+    if (!deletePreflight) {
+      return;
+    }
+
+    if (
+      deletePreflight.role === "owner" &&
+      deleteConfirmText !== ACCOUNT_DELETION_CONFIRM_PHRASE
+    ) {
+      return;
+    }
+
+    setDeleteSubmitting(true);
+    setDeleteError("");
+
+    try {
+      await deleteMyAccount(
+        deletePreflight.role === "owner" ? deleteConfirmText : undefined
+      );
+
+      await supabase.auth.signOut();
+
+      window.location.href = "/login?ucet-zruseny=1";
+    } catch (error) {
+      setDeleteSubmitting(false);
+
+      const message =
+        error instanceof Error ? error.message : "Zrušenie účtu zlyhalo.";
+      setDeleteError(message);
+    }
+  }
+
   return (
     <main className="app-shell-bg min-h-screen p-4 sm:p-6 lg:p-10">
       <BackLink href="/" label="Hlavné menu" className="mb-4" />
@@ -1059,49 +1116,190 @@ export default function NastaveniaPage() {
             </a>
           </div>
 
-          <div className="mt-8 rounded-2xl border border-dashed border-subtle p-5">
-            <h3 className="font-semibold text-primary">Vymazanie účtu</h3>
+        </section>
+
+        {myRole && (
+          <section className="rounded-2xl border border-subtle/60 bg-surface-1/60 p-6">
+            <h2 className="text-sm font-semibold text-secondary">
+              Zrušiť účet
+            </h2>
 
             {myRole === "owner" ? (
-              <>
-                <p className="mt-2 text-sm text-secondary">
-                  Ako majiteľ firmy spravujete firemný účet, ku ktorému majú
-                  prístup aj ďalší členovia (admin/zamestnanci). Vymazanie
-                  firemného účtu je samostatný, nezvratný proces, ktorý
-                  ukončí prístup všetkých členov a vymaže firemné dáta —
-                  nejde o bežné vymazanie osobného účtu.
-                </p>
-                <a
-                  href={ownerCompanyTerminationMailto}
-                  className="mt-4 inline-flex rounded-xl bg-red-600 px-5 py-3 text-center font-semibold text-white transition hover:bg-red-700"
-                >
-                  Požiadať o ukončenie firemného účtu
-                </a>
-              </>
+              <p className="mt-2 text-sm text-muted-esblu">
+                Ako majiteľ firmy môžete natrvalo zrušiť celý firemný účet.
+                Ide o nezvratnú akciu — vymaže sa firma aj všetky jej dáta a
+                ostatní členovia stratia prístup.
+              </p>
             ) : (
-              <>
-                <p className="mt-2 text-sm text-secondary">
-                  Môžete požiadať o vymazanie svojej osobnej identity a
-                  členstva vo firme. Firemné dáta (vozidlá, stroje, sklad,
-                  dokumenty), ktoré patria firme, sa tým NEVYMAŽÚ — sú
-                  majetkom firmy, nie vášho osobného účtu.
-                </p>
-                <a
-                  href={employeeAccountDeletionMailto}
-                  className="mt-4 inline-flex rounded-xl bg-red-600 px-5 py-3 text-center font-semibold text-white transition hover:bg-red-700"
-                >
-                  Požiadať o vymazanie môjho účtu
-                </a>
-              </>
+              <p className="mt-2 text-sm text-muted-esblu">
+                Môžete natrvalo zrušiť svoj osobný účet. Firemné dáta
+                (vozidlá, stroje, sklad, dokumenty) zostávajú firme — vymaže
+                sa iba vaša identita a členstvo.
+              </p>
             )}
 
-            <p className="mt-3 text-xs text-muted-esblu">
-              Žiadosti aktuálne spracúvame manuálne po overení totožnosti.
-              Odpovieme na e-mail, z ktorého žiadosť odošlete.
-            </p>
-          </div>
-        </section>
+            <button
+              type="button"
+              onClick={openDeleteAccountModal}
+              className="mt-4 rounded-xl border border-red-900/50 px-5 py-2.5 text-sm font-semibold text-red-400/90 transition hover:border-red-700 hover:bg-red-950/30 hover:text-red-300"
+            >
+              Zrušiť účet
+            </button>
+          </section>
+        )}
       </div>
+
+      {showDeleteAccountModal && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-3 sm:items-center sm:p-4">
+          <div className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-3xl bg-surface-1 p-5 shadow-2xl sm:p-8">
+            <div className="flex items-center justify-between">
+              <h2 className="text-2xl font-bold text-primary">
+                {deletePreflight?.role === "owner"
+                  ? "Naozaj chcete zrušiť účet?"
+                  : "Zrušiť účet?"}
+              </h2>
+
+              <button
+                type="button"
+                onClick={closeDeleteAccountModal}
+                disabled={deleteSubmitting}
+                className="rounded-xl bg-surface-2 px-4 py-2 disabled:opacity-50"
+              >
+                ✕
+              </button>
+            </div>
+
+            {deletePreflightLoading ? (
+              <p className="mt-6 text-sm text-secondary">
+                Načítavam...
+              </p>
+            ) : deletePreflightError ? (
+              <p className="mt-6 text-sm font-medium text-red-400">
+                {deletePreflightError}
+              </p>
+            ) : deletePreflight?.role === "owner" ? (
+              <div className="mt-6 space-y-4">
+                <p className="text-sm leading-6 text-secondary">
+                  Táto akcia je <strong>nevratná</strong>. Zrušením vášho
+                  owner účtu sa natrvalo zruší celá firma. Odstráni sa:
+                </p>
+
+                <ul className="list-disc space-y-1 pl-5 text-sm text-secondary">
+                  <li>firma,</li>
+                  <li>AI evidencia a dokumenty,</li>
+                  <li>vozidlá a servisné záznamy,</li>
+                  <li>stroje a servisné záznamy,</li>
+                  <li>sklad,</li>
+                  <li>uložené fotografie a súbory,</li>
+                  <li>pozvánky (invitations),</li>
+                  <li>členstvá adminov a zamestnancov.</li>
+                </ul>
+
+                <p className="text-sm leading-6 text-secondary">
+                  {deletePreflight.otherActiveMembersCount > 0 ? (
+                    <>
+                      <strong>
+                        {deletePreflight.otherActiveMembersCount}{" "}
+                        {deletePreflight.otherActiveMembersCount === 1
+                          ? "ďalší člen firmy stratí"
+                          : "ďalších členov firmy stratí"}
+                      </strong>{" "}
+                      prístup k tejto firme. Ich prihlasovacie účty sa
+                      nezmažú — zaniká iba ich členstvo v tejto firme.
+                    </>
+                  ) : (
+                    "Firma aktuálne nemá žiadnych ďalších členov."
+                  )}
+                </p>
+
+                <div>
+                  <label className="mb-2 block text-sm font-semibold text-primary">
+                    Pre potvrdenie napíšte presne: {ACCOUNT_DELETION_CONFIRM_PHRASE}
+                  </label>
+
+                  <input
+                    type="text"
+                    className="w-full rounded-xl border p-3"
+                    value={deleteConfirmText}
+                    onChange={(event) =>
+                      setDeleteConfirmText(event.target.value)
+                    }
+                    disabled={deleteSubmitting}
+                    autoComplete="off"
+                  />
+                </div>
+
+                {deleteError && (
+                  <p className="text-sm font-medium text-red-400">
+                    {deleteError}
+                  </p>
+                )}
+
+                <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+                  <button
+                    type="button"
+                    onClick={closeDeleteAccountModal}
+                    disabled={deleteSubmitting}
+                    className="btn-secondary px-6 py-3 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Zrušiť
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={confirmDeleteAccount}
+                    disabled={
+                      deleteSubmitting ||
+                      deleteConfirmText !== ACCOUNT_DELETION_CONFIRM_PHRASE
+                    }
+                    className="rounded-xl bg-red-600 px-6 py-3 font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-gray-500 disabled:opacity-60"
+                  >
+                    {deleteSubmitting
+                      ? "Ruším účet..."
+                      : "Natrvalo zrušiť účet"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-6 space-y-4">
+                <p className="text-sm leading-6 text-secondary">
+                  Táto akcia je <strong>nevratná</strong>. Zruší sa vaša
+                  osobná identita a členstvo v tejto firme. Firemné dokumenty
+                  a dáta (vozidlá, stroje, sklad, AI evidencia), ktoré ste
+                  pre firmu vytvorili, jej <strong>zostávajú</strong> — nič
+                  z firemných dát sa nezmaže.
+                </p>
+
+                {deleteError && (
+                  <p className="text-sm font-medium text-red-400">
+                    {deleteError}
+                  </p>
+                )}
+
+                <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+                  <button
+                    type="button"
+                    onClick={closeDeleteAccountModal}
+                    disabled={deleteSubmitting}
+                    className="btn-secondary px-6 py-3 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Zrušiť
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={confirmDeleteAccount}
+                    disabled={deleteSubmitting}
+                    className="rounded-xl bg-red-600 px-6 py-3 font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {deleteSubmitting ? "Ruším účet..." : "Áno, zrušiť účet"}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </main>
   );
 }
