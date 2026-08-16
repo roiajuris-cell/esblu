@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 };
 
 const linkClass =
-  "font-semibold text-blue-700 underline decoration-blue-300 underline-offset-4";
+  "font-semibold text-accent-cyan underline decoration-accent-cyan/40 underline-offset-4 hover:decoration-accent-cyan";
 
 export default function SubprocessorsPage() {
   return (

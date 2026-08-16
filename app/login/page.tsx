@@ -341,7 +341,7 @@ async function resetPassword() {
     loading ||
     (mode === "register" && (!agreedTerms || !agreedPrivacy))
   }
-  className="mt-6 w-full rounded-xl bg-blue-600 px-6 py-3 font-semibold text-white hover:bg-blue-700 disabled:bg-gray-400"
+  className="btn-primary mt-6 w-full px-6 py-3 text-center"
 >
   {loading
     ? "Pracujem..."
