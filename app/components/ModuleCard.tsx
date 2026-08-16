@@ -50,6 +50,16 @@ const ACCENT_STYLES: Record<
  * charakter modulu nesie ikona + veľké farebné číslo. Hierarchia
  * title > číslo/stav > sekundárny text je zvýraznená: menší/tlmenejší
  * label, väčšie a tučnejšie číslo, drobný muted subtitle.
+ *
+ * KOREKCIA v4 (čisto vizuálna, podľa mobilného screenshotu): ikona bola
+ * malá a naľavo hore, s veľkým voľným priestorom napravo. Layout je teraz
+ * horná "hlavička" (krátky title + VÝRAZNE väčšia ikona zarovnaná vpravo)
+ * a pod ňou zvyšný obsah (veľké číslo/subtitle, resp. subtitle + CTA) na
+ * celú šírku karty. Vďaka tomu je ikona nápadne väčšia bez toho, aby
+ * zovierala číslo/subtitle do úzkeho stĺpca na malých mobilných šírkach
+ * (2-column grid) — číslo aj popis zostávajú čitateľné naľavo cez celú
+ * šírku karty, presne ako v pôvodnom layoute, iba pod hlavičkou namiesto
+ * pod ikonou. Href/props/dáta nezmenené.
  */
 export default function ModuleCard({
   href,
@@ -82,38 +92,46 @@ export default function ModuleCard({
         className={`absolute inset-x-0 top-0 h-[2px] ${styles.bar} opacity-80`}
       />
 
-      <div
-        className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl sm:h-16 sm:w-16 ${styles.icon} ${styles.iconGlow}`}
-      >
-        {icon ??
-          (image ? (
-            <Image
-              src={image}
-              width={40}
-              height={40}
-              alt=""
-              aria-hidden="true"
-              className="h-9 w-9 object-contain sm:h-10 sm:w-10"
-            />
-          ) : null)}
+      <div className="flex items-center justify-between gap-2.5">
+        <div className="min-w-0 flex-1">
+          {stat ? (
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-esblu">
+              {title}
+            </p>
+          ) : (
+            <h3 className="text-base font-bold text-primary sm:text-lg">
+              {title}
+            </h3>
+          )}
+        </div>
+
+        <div
+          className={`flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl sm:h-20 sm:w-20 ${styles.icon} ${styles.iconGlow}`}
+        >
+          {icon ??
+            (image ? (
+              <Image
+                src={image}
+                width={56}
+                height={56}
+                alt=""
+                aria-hidden="true"
+                className="h-11 w-11 object-contain sm:h-14 sm:w-14"
+              />
+            ) : null)}
+        </div>
       </div>
 
       {stat ? (
         <>
-          <p className="mt-2 text-[11px] font-semibold uppercase tracking-wide text-muted-esblu">
-            {title}
-          </p>
-          <p className={`mt-0.5 text-3xl font-black leading-none tracking-tight sm:text-4xl ${styles.stat}`}>
+          <p className={`mt-3 text-3xl font-black leading-none tracking-tight sm:text-4xl ${styles.stat}`}>
             {stat}
           </p>
           <p className="mt-1 text-xs leading-snug text-muted-esblu">{subtitle}</p>
         </>
       ) : (
         <>
-          <h3 className="mt-2 text-base font-bold text-primary sm:text-lg">
-            {title}
-          </h3>
-          <p className="mt-0.5 text-xs leading-snug text-muted-esblu">{subtitle}</p>
+          <p className="mt-2 text-xs leading-snug text-muted-esblu">{subtitle}</p>
           <span className="mt-2 inline-flex items-center gap-1 text-sm font-semibold text-accent-cyan opacity-0 transition group-hover:opacity-100">
             Otvoriť
             <span aria-hidden="true">→</span>
