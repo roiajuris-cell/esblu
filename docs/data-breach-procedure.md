@@ -3,7 +3,16 @@
 **Projekt:** Esblu / AssetPilot
 **Prevádzkovateľ:** Jaroslav Juriš, fyzická osoba, Slovenská republika
 **Verzia:** 1.0
-**Dátum:** 2026-08-15
+**Dátum:** 2026-08-15 (aktualizované 2026-08-16 — pozri revíznu poznámku nižšie)
+
+---
+
+## Revízia 2026-08-16
+
+- Doplnená nová sekcia 2a — popis reálnych detekčných kanálov incidentu a právne zdôvodnenie, prečo absencia dedikovaného monitoring/alerting SaaS nástroja (napr. Sentry) nie je sama osebe launch blocker: GDPR čl. 32 vyžaduje primerané opatrenia zodpovedajúce riziku, nie konkrétnu technológiu. Toto je zdokumentované vedomé rozhodnutie, priebežne prehodnocovateľné pri raste rozsahu spracovania.
+- Doplnená nová sekcia 9 — konkrétny procesný postup pri incidente na strane subprocessora (Supabase/Vercel/OpenAI), predtým bol k dispozícii iba kontaktný zoznam.
+- Doplnené potvrdené regióny infraštruktúry (Supabase `eu-central-1`, Vercel Functions `fra1`) do sekcie 9.
+- Žiadny nový monitoring nástroj ani automatizovaný detekčný mechanizmus nebol touto revíziou implementovaný — ide výhradne o zosúladenie dokumentácie s reálnym stavom a s novým právnym posúdením.
 
 ---
 
@@ -31,6 +40,19 @@ Podľa čl. 4 bod 12 GDPR je porušením ochrany osobných údajov akékoľvek p
 - **Neúmyselné odoslanie citlivých dát tretej strane** – napr. nesprávne adresovaný e-mail s prílohou obsahujúcou osobné údaje.
 
 Incident nemusí byť výsledkom útoku – **rovnako sem patrí aj vlastná chyba v konfigurácii alebo kóde**, ktorá viedla k vyššie uvedeným následkom.
+
+---
+
+## 2a. Ako sa incident v praxi zachytáva (detekčné kanály)
+
+Esblu k dnešnému dňu nemá nasadený dedikovaný monitoring/alerting SaaS nástroj (napr. Sentry) – toto je **vedomé, zdokumentované rozhodnutie, nie prehliadnutá medzera**. GDPR čl. 32 vyžaduje "primerané" technické a organizačné opatrenia zodpovedajúce rizikám konkrétneho spracúvania, nie konkrétnu technológiu; pri súčasnom rozsahu (jednoosobový zakladateľ, bezplatná testovacia fáza, obmedzený počet firiem) sa nasledovné kanály považujú za primerané:
+
+- **Nahlásenie od zákazníka/používateľa** (napr. cez info@/privacy@esblu.com) – najpravdepodobnejší reálny kanál zistenia.
+- **Vlastné zistenie zakladateľa** pri bežnej práci na appke (napr. pri code review, teste, manuálnej kontrole Supabase dashboardu).
+- **Notifikácia od subprocessora** (Supabase/Vercel/OpenAI) – pozri sekciu 9 nižšie.
+- **Chybové logy** vo Vercel function logoch (ephemeral, ale viditeľné počas bežnej prevádzky/nasadení) — potvrdené, že `console.error` v produkcii nezobrazuje surový obsah dokumentu/obrázka (`gdpr-security-summary.md`, bod 4), iba chybové správy/kódy.
+
+**Toto posúdenie treba priebežne prehodnocovať** – ak by sa rozsah spracúvania alebo počet aktívnych firiem/zákazníkov výrazne zväčšil, primeranosť čisto reaktívnych kanálov sa môže zmeniť a zavedenie aktívneho monitoringu by sa mohlo stať odôvodneným krokom. Toto nie je automatický predpoklad ani touto revíziou zavádzaný záväzok — iba transparentné konštatovanie, kedy by sa malo znovu posúdiť.
 
 ---
 
@@ -138,10 +160,31 @@ V závislosti od povahy incidentu môžu byť dotknutými osobami:
 
 ## 8. Kontaktné údaje relevantné pre incident
 
-- Interný kontakt (zakladateľ/prevádzkovateľ): info@esblu.com / privacy@esblu.com
+- Interný kontakt (zakladateľ/prevádzkovateľ): info@esblu.com / privacy@esblu.com — obe schránky sú hostované cez **Namecheap Private Email** (potvrdené 2026-08-16); `privacy@esblu.com` je explicitný alias na tú istú schránku ako `info@esblu.com`.
 - Úrad na ochranu osobných údajov SR: https://dataprotection.gov.sk
-- Supabase support (v prípade podozrenia na incident na strane infraštruktúry): cez Supabase dashboard/support kanál
-- OpenAI support (v prípade podozrenia na incident týkajúci sa API kľúča/spracovania): cez OpenAI platform dashboard
+- Supabase support (v prípade podozrenia na incident na strane infraštruktúry): cez Supabase dashboard/support kanál. Projekt beží v regióne **eu-central-1 (Frankfurt, EÚ)** (potvrdené 2026-08-16).
+- Vercel support (v prípade podozrenia na incident na strane hostingu): cez Vercel dashboard/support kanál. Functions bežia v regióne **fra1 (Frankfurt, EÚ)** (potvrdené 2026-08-16).
+- OpenAI support (v prípade podozrenia na incident týkajúci sa API kľúča/spracovania): cez OpenAI platform dashboard. Na účte je potvrdené nastavenie **"Data sharing: Disabled"** (potvrdené 2026-08-16).
+- Namecheap support (v prípade podozrenia na incident týkajúci sa `info@`/`privacy@esblu.com` schránky): cez Namecheap dashboard/support kanál.
+
+---
+
+## 9. Postup pri incidente na strane subprocessora (Supabase / Vercel / OpenAI / Namecheap)
+
+Esblu je pri incidentoch na strane svojich spracovateľov (subprocessors) závislé od toho, čo mu ako zákazníkovi oznámia – nemá priamy technický prístup do ich interných systémov.
+
+**Očakávaný zdroj informácie o incidente na strane subprocessora:**
+
+- **Priame oznámenie od subprocessora** – Supabase, Vercel aj OpenAI majú vo svojich DPA záväzok informovať zákazníka o porušení ochrany osobných údajov, ktoré sa týka jeho dát (bežná povinnosť procesora voči prevádzkovateľovi podľa čl. 28) – spravidla zaslané na kontaktný e-mail účtu alebo cez dashboard. Namecheap nemá voči Esblu DPA vzťah v zmysle spracovania osobných údajov appky (schránka `info@`/`privacy@esblu.com` je mimo appky, prijíma iba prichádzajúcu poštu), ale rovnaký princíp platí analogicky – incident na strane Namecheapu, ktorý by ohrozil tieto schránky, spadá do rovnakého postupu nižšie.
+- **Verejný status/security oznam** (status page, security advisory, changelog) – najmä pri rozsiahlejších incidentoch.
+- **Nepriame zistenie** (napr. médiá, komunita) – najmenej spoľahlivý, ale nie vylúčený kanál.
+
+**Krok za krokom, keď Esblu zistí (akýmkoľvek z vyššie uvedených kanálov) možný incident na strane subprocessora:**
+
+1. **Over rozsah dotknutia Esblu** – prečítaj oznámenie/advisory, zisti, či sa týka regiónu/produktu, ktorý Esblu reálne používa (Supabase `eu-central-1`/Auth/Storage; Vercel `fra1` Functions; OpenAI API s nastavením `data sharing: disabled`; Namecheap Private Email pre `info@`/`privacy@esblu.com`).
+2. **Zaobchádzaj s tým ako s vlastným incidentom od bodu 4 vyššie** (veď incident log, over rozsah, posúď riziko podľa bodu 5) – Esblu je stále prevádzkovateľom voči vlastným používateľom/firmám a jeho 72-hodinová lehota voči ÚOOÚ SR plynie od momentu, keď sa Esblu o incidente dozvedelo, nie od momentu, keď incident na strane subprocessora skutočne nastal.
+3. **Ak subprocessor neposkytne dostatok informácií** na posúdenie rizika v primeranom čase, kontaktuj jeho support/security kanál priamo (pozri sekciu 8) a zdokumentuj časovú os pokusov o získanie informácií – to je relevantné pre prípadné odôvodnenie omeškania oznámenia podľa čl. 33 ods. 1.
+4. **Ak incident vyžaduje oznámenie ÚOOÚ SR a/alebo dotknutým osobám**, Esblu postupuje rovnako ako pri vlastnom incidente (body 6–8 vyššie) – skutočnosť, že príčina je na strane tretej strany, nezbavuje Esblu ako prevádzkovateľa jeho vlastnej oznamovacej povinnosti.
 
 ---
 

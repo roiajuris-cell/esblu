@@ -46,15 +46,22 @@ export const legalConfig = {
   // *Version pole a effectiveDate — verzia sa následne premieta do
   // legal_documents (DB) a do user_legal_acceptances (kto akú verziu
   // akceptoval, pozri supabase/migrations/…_add_legal_acceptance.sql).
-  effectiveDate: "2026-08-15",
-  // Ochrana osobných údajov ide vo verzii 1.1 — oproti pôvodnej verzii 1.0
-  // (21. júla 2026) opravuje nepresný zoznam dodávateľov v sekcii E (pôvodná
-  // verzia nesprávne uvádzala Resend a Namecheap Private Email, hoci appka
-  // v skutočnosti žiadny vlastný e-mail neodosiela — všetka e-mailová
-  // komunikácia ide cez Supabase Auth) a dopĺňa odkazy na nové /cookies,
-  // /dpa a /subprocessors stránky. Podmienky používania obsahovo nezmenené
-  // → ostávajú na verzii 1.0.
-  privacyPolicyVersion: "1.1",
+  effectiveDate: "2026-08-16",
+  // Ochrana osobných údajov ide vo verzii 1.2 — história: 1.0 (21. júla
+  // 2026) → 1.1 (15. augusta 2026, oprava nepresného zoznamu dodávateľov
+  // v sekcii E) → 1.2 (16. augusta 2026). 1.2 dopĺňa v sekcii E potvrdenú
+  // realitu, že kontaktné schránky info@esblu.com a privacy@esblu.com
+  // (privacy@ je alias tej istej schránky) sú hostované u Namecheap
+  // (Private Email), ktorý v tomto rozsahu spracúva obsah prichádzajúcej
+  // e-mailovej komunikácie. Namecheap NIE JE odosielacia infraštruktúra
+  // appky (tá zostáva výhradne Supabase Auth, nezmenené) — ide o samostatný,
+  // novo doplnený a overený fakt. Pozri aj aktualizovanú verejnú stránku
+  // /subprocessors (Namecheap pridaný do tabuľky dodávateľov) a
+  // docs/gdpr-subprocessors.md. Podmienky používania a DPA obsahovo
+  // nezmenené touto revíziou (DPA text dodávateľov menovite neuvádza,
+  // generický odkaz na /subprocessors pokrýva aj Namecheap bez potreby
+  // novej DPA verzie) → ostávajú na pôvodných verziách.
+  privacyPolicyVersion: "1.2",
   termsVersion: "1.0",
   // Cookie Policy je v tejto fáze NOVÝ dokument (predtým nepublikovaný) —
   // verzia 1.0 od dátumu prvého publikovania, ktorý sa doplní pri reálnom

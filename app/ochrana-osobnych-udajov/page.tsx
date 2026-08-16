@@ -23,7 +23,7 @@ export default function PrivacyPolicyPage() {
   return (
     <PublicLegalLayout
       title="Zásady ochrany osobných údajov"
-      updatedAt={`15. augusta 2026 (verzia ${legalConfig.privacyPolicyVersion})`}
+      updatedAt={`16. augusta 2026 (verzia ${legalConfig.privacyPolicyVersion})`}
     >
       <LegalMarkdown markdown={markdown} />
     </PublicLegalLayout>

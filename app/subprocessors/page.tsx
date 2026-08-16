@@ -18,7 +18,7 @@ export default function SubprocessorsPage() {
   return (
     <PublicLegalLayout
       title="Zoznam sprostredkovateľov (subprocessors)"
-      updatedAt="15. augusta 2026"
+      updatedAt="16. augusta 2026"
     >
       <p>
         Tento zoznam uvádza externých dodávateľov (sprostredkovateľov a
@@ -110,23 +110,65 @@ export default function SubprocessorsPage() {
                   </a>
                 </td>
               </tr>
+              <tr className="border-b border-subtle align-top">
+                <td className="py-2 pr-4 font-semibold">
+                  Namecheap (Private Email)
+                </td>
+                <td className="py-2 pr-4">
+                  Hosting firemnej e-mailovej komunikácie (schránky
+                  info@esblu.com a privacy@esblu.com — privacy@esblu.com je
+                  alias smerujúci do tej istej schránky) a prijímanie
+                  e-mailových správ od používateľov, vrátane žiadostí
+                  týkajúcich sa osobných údajov
+                </td>
+                <td className="py-2 pr-4">
+                  E-mailová adresa odosielateľa, obsah správy a prípadné
+                  prílohy
+                </td>
+                <td className="py-2 pr-4">
+                  USA (servery Namecheapu sú primárne v USA) — presná
+                  lokalita konkrétnej schránky nepotvrdená. Namecheap DPA
+                  obsahuje štandardné zmluvné doložky (SCC vrátane UK
+                  Addendum) ako mechanizmus medzinárodného prenosu.
+                </td>
+                <td className="py-2">
+                  <a
+                    href="https://www.namecheap.com/legal/universal/data-processing-addendum/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={linkClass}
+                  >
+                    namecheap.com/legal/.../data-processing-addendum
+                  </a>
+                </td>
+              </tr>
             </tbody>
           </table>
         </div>
       </LegalSection>
 
-      <LegalSection title="E-mailová komunikácia — upozornenie na nezrovnalosť">
+      <LegalSection title="E-mailová komunikácia — história a aktuálny stav">
         <p>
           Predchádzajúca verzia Zásad ochrany osobných údajov (verzia 1.0)
-          uvádzala medzi dodávateľmi aj Resend a Namecheap Private Email.
-          Podrobná kontrola aplikácie nepotvrdila žiadne aktívne prepojenie
-          na tieto služby v zdrojovom kóde — e-mailová komunikácia týkajúca
-          sa účtu (potvrdenie registrácie, obnova hesla) v skutočnosti ide
-          výhradne cez vstavaný e-mailový systém Supabase Auth. Táto stránka
-          uvádza iba dodávateľov, ktorých použitie je overiteľné v kóde
-          aplikácie. Ak sa Resend a/alebo Namecheap Private Email reálne
-          používajú mimo tejto aplikácie (napr. manuálna komunikácia
-          prevádzkovateľa), bude tento zoznam podľa toho doplnený.
+          uvádzala medzi dodávateľmi aj Resend a Namecheap Private Email s
+          opisom „odosielanie vybraných e-mailov&ldquo;. Podrobná kontrola
+          aplikácie toto overila voči realite:
+        </p>
+        <p>
+          <strong>Resend</strong> nie je aplikáciou nikde použitý — Esblu
+          neprevádzkuje vlastnú odosielaciu e-mailovú infraštruktúru,
+          transakčné e-maily súvisiace s účtom (potvrdenie registrácie,
+          obnova hesla) odosiela výhradne vstavaný e-mailový systém Supabase
+          Auth. Resend preto v tabuľke vyššie nie je uvedený.
+        </p>
+        <p>
+          <strong>Namecheap Private Email</strong> sa reálne používa, ale
+          inak, než pôvodný text opisoval: nejde o odosielaciu
+          infraštruktúru aplikácie, ale o hosting schránok info@esblu.com a
+          privacy@esblu.com, na ktoré nás môžete priamo kontaktovať (napr.
+          so žiadosťou týkajúcou sa osobných údajov). Namecheap preto teraz
+          figuruje v tabuľke vyššie s presným, overeným popisom svojej
+          úlohy.
         </p>
       </LegalSection>
 
