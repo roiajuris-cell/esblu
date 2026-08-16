@@ -45,6 +45,7 @@ async function collectOwnerStorageTargets(
     aiEvidenceRes,
     machinePhotosRes,
     inventoryPhotosRes,
+    vehiclePhotosRes,
     settingsRes,
   ] = await Promise.all([
     admin
@@ -71,6 +72,11 @@ async function collectOwnerStorageTargets(
       .eq("company_id", companyId)
       .not("file_path", "is", null),
     admin
+      .from("vehicle_photos")
+      .select("storage_path")
+      .eq("company_id", companyId)
+      .not("storage_path", "is", null),
+    admin
       .from("settings")
       .select("logo_path")
       .eq("user_id", ownerUserId)
@@ -83,6 +89,7 @@ async function collectOwnerStorageTargets(
     ["ai_evidence", aiEvidenceRes],
     ["machine_photos", machinePhotosRes],
     ["inventory_photos", inventoryPhotosRes],
+    ["vehicle_photos", vehiclePhotosRes],
     ["settings", settingsRes],
   ] as const) {
     if (res.error) {
@@ -119,6 +126,12 @@ async function collectOwnerStorageTargets(
   for (const row of inventoryPhotosRes.data ?? []) {
     if (row.file_path) {
       targets.push({ bucket: "inventory-photos", path: row.file_path });
+    }
+  }
+
+  for (const row of vehiclePhotosRes.data ?? []) {
+    if (row.storage_path) {
+      targets.push({ bucket: "vehicle-photos", path: row.storage_path });
     }
   }
 

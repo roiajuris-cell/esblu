@@ -75,7 +75,7 @@ export default function ModuleCard({
   return (
     <Link
       href={href}
-      className={`surface-card surface-card-hover group relative flex min-w-0 flex-col overflow-hidden p-4 transition sm:p-5 ${styles.ring} ${className}`}
+      className={`surface-card surface-card-hover group relative flex min-w-0 flex-col overflow-hidden p-3.5 transition sm:p-4 ${styles.ring} ${className}`}
     >
       <span
         aria-hidden="true"
@@ -83,38 +83,38 @@ export default function ModuleCard({
       />
 
       <div
-        className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl sm:h-14 sm:w-14 ${styles.icon} ${styles.iconGlow}`}
+        className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl sm:h-16 sm:w-16 ${styles.icon} ${styles.iconGlow}`}
       >
         {icon ??
           (image ? (
             <Image
               src={image}
-              width={30}
-              height={30}
+              width={40}
+              height={40}
               alt=""
               aria-hidden="true"
-              className="h-7 w-7 object-contain sm:h-8 sm:w-8"
+              className="h-9 w-9 object-contain sm:h-10 sm:w-10"
             />
           ) : null)}
       </div>
 
       {stat ? (
         <>
-          <p className="mt-3 text-[11px] font-semibold uppercase tracking-wide text-muted-esblu">
+          <p className="mt-2 text-[11px] font-semibold uppercase tracking-wide text-muted-esblu">
             {title}
           </p>
-          <p className={`mt-0.5 text-4xl font-black leading-none tracking-tight sm:text-[2.75rem] ${styles.stat}`}>
+          <p className={`mt-0.5 text-3xl font-black leading-none tracking-tight sm:text-4xl ${styles.stat}`}>
             {stat}
           </p>
-          <p className="mt-1.5 text-xs leading-snug text-muted-esblu">{subtitle}</p>
+          <p className="mt-1 text-xs leading-snug text-muted-esblu">{subtitle}</p>
         </>
       ) : (
         <>
-          <h3 className="mt-3 text-base font-bold text-primary sm:text-lg">
+          <h3 className="mt-2 text-base font-bold text-primary sm:text-lg">
             {title}
           </h3>
-          <p className="mt-1 text-xs leading-snug text-muted-esblu">{subtitle}</p>
-          <span className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-accent-cyan opacity-0 transition group-hover:opacity-100">
+          <p className="mt-0.5 text-xs leading-snug text-muted-esblu">{subtitle}</p>
+          <span className="mt-2 inline-flex items-center gap-1 text-sm font-semibold text-accent-cyan opacity-0 transition group-hover:opacity-100">
             Otvoriť
             <span aria-hidden="true">→</span>
           </span>

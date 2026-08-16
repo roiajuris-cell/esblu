@@ -470,7 +470,7 @@ export async function exportAiEvidenceToExcel(
   });
 
   summarySheet.mergeCells("A1:C1");
-  summarySheet.getCell("A1").value = "Súhrn AI Inbox";
+  summarySheet.getCell("A1").value = "Súhrn Inbox";
   styleHeaderRow(summarySheet, 1);
   summarySheet.getCell("A3").value = "Počet exportovaných dokumentov";
   summarySheet.getCell("B3").value = records.length;

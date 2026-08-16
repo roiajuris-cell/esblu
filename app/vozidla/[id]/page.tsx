@@ -6,10 +6,70 @@ import { supabase } from "@/lib/supabase";
 import BackLink from "@/app/components/BackLink";
 import {
   getMyActiveMembership,
+  isOwnerOrAdmin,
   type CompanyMemberRole,
 } from "@/lib/company";
 import { useCompanyDpaLegalHold } from "@/app/components/CompanyDpaGate";
 import { LEGAL_HOLD_MESSAGE } from "@/lib/company-dpa";
+
+async function compressVehiclePhoto(file: File): Promise<File> {
+  const imageUrl = URL.createObjectURL(file);
+
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const img = new Image();
+
+      img.onload = () => resolve(img);
+      img.onerror = () =>
+        reject(new Error("Fotografiu sa nepodarilo načítať."));
+
+      img.src = imageUrl;
+    });
+
+    const maxDimension = 1600;
+    const scale = Math.min(
+      1,
+      maxDimension / Math.max(image.width, image.height)
+    );
+    const width = Math.round(image.width * scale);
+    const height = Math.round(image.height * scale);
+
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+
+    const context = canvas.getContext("2d");
+
+    if (!context) {
+      throw new Error("Nepodarilo sa pripraviť kompresiu fotografie.");
+    }
+
+    context.drawImage(image, 0, 0, width, height);
+
+    const blob = await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob(
+        (result) => {
+          if (result) {
+            resolve(result);
+          } else {
+            reject(new Error("Fotografiu sa nepodarilo skomprimovať."));
+          }
+        },
+        "image/webp",
+        0.78
+      );
+    });
+
+    const baseName = file.name.replace(/\.[^/.]+$/, "") || "vozidlo";
+
+    return new File([blob], `${baseName}.webp`, {
+      type: "image/webp",
+      lastModified: Date.now(),
+    });
+  } finally {
+    URL.revokeObjectURL(imageUrl);
+  }
+}
 
 export default function VehicleDetailPage() {
   const { id } = useParams();
@@ -21,6 +81,12 @@ export default function VehicleDetailPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [editingServiceId, setEditingServiceId] = useState<string | null>(null);
   const [role, setRole] = useState<CompanyMemberRole | null>(null);
+  const [userId, setUserId] = useState("");
+  const [companyId, setCompanyId] = useState("");
+  const [photos, setPhotos] = useState<any[]>([]);
+  const [isUploadingPhotos, setIsUploadingPhotos] = useState(false);
+  const [deletingPhotoId, setDeletingPhotoId] = useState<string | null>(null);
+  const [lightboxPhoto, setLightboxPhoto] = useState<any>(null);
 
   const emptyService = {
     service_date: "",
@@ -42,8 +108,171 @@ export default function VehicleDetailPage() {
   }, []);
 
   async function loadMembership() {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    setUserId(session?.user?.id || "");
+
     const membership = await getMyActiveMembership();
     setRole(membership?.role ?? null);
+    setCompanyId(membership?.company_id ?? "");
+
+    if (membership?.company_id) {
+      loadPhotos(membership.company_id);
+    }
+  }
+
+  async function loadPhotos(currentCompanyId: string = companyId) {
+    if (!currentCompanyId) return;
+
+    const { data, error } = await supabase
+      .from("vehicle_photos")
+      .select("*")
+      .eq("vehicle_id", vehicleId)
+      .eq("company_id", currentCompanyId)
+      .order("created_at", { ascending: false });
+
+    if (!error) setPhotos(data || []);
+  }
+
+  function photoUrl(path: string) {
+    const { data } = supabase.storage.from("vehicle-photos").getPublicUrl(path);
+    return data.publicUrl;
+  }
+
+  async function uploadVehiclePhotos(
+    event: React.ChangeEvent<HTMLInputElement>
+  ) {
+    const files = Array.from(event.target.files || []);
+    event.target.value = "";
+
+    if (files.length === 0 || !userId) return;
+
+    if (legalHold) {
+      alert(LEGAL_HOLD_MESSAGE);
+      return;
+    }
+
+    setIsUploadingPhotos(true);
+
+    const uploadedPaths: string[] = [];
+    let failedCount = 0;
+
+    try {
+      for (const originalFile of files) {
+        try {
+          const compressedFile = await compressVehiclePhoto(originalFile);
+          const filePath = `${userId}/${vehicleId}/${Date.now()}-${crypto.randomUUID()}-${compressedFile.name}`;
+
+          const { error: uploadError } = await supabase.storage
+            .from("vehicle-photos")
+            .upload(filePath, compressedFile, {
+              cacheControl: "3600",
+              upsert: false,
+              contentType: compressedFile.type,
+            });
+
+          if (uploadError) throw uploadError;
+
+          uploadedPaths.push(filePath);
+
+          const { error: dbError } = await supabase
+            .from("vehicle_photos")
+            .insert({
+              user_id: userId,
+              vehicle_id: vehicleId,
+              storage_path: filePath,
+            });
+
+          if (dbError) {
+            await supabase.storage.from("vehicle-photos").remove([filePath]);
+            throw dbError;
+          }
+        } catch (singleUploadError) {
+          failedCount += 1;
+          console.error(
+            "Chyba pri nahrávaní fotografie vozidla:",
+            singleUploadError
+          );
+        }
+      }
+
+      await loadPhotos();
+
+      if (failedCount > 0) {
+        alert(
+          `${failedCount} z ${files.length} fotografií sa nepodarilo nahrať. Skús to znova.`
+        );
+      }
+    } finally {
+      setIsUploadingPhotos(false);
+    }
+  }
+
+  async function deletePhoto(photo: any) {
+    if (deletingPhotoId) return;
+
+    const photoId = String(photo?.id || "");
+    if (!photoId) return;
+
+    const confirmed = confirm("Naozaj chceš vymazať túto fotografiu?");
+    if (!confirmed) return;
+
+    setDeletingPhotoId(photoId);
+
+    try {
+      const membership = await getMyActiveMembership();
+
+      if (!membership) {
+        throw new Error("Nie ste prihlásený. Prihláste sa a skúste to znova.");
+      }
+
+      const { data: deletedPhotos, error: deleteError } = await supabase
+        .from("vehicle_photos")
+        .delete()
+        .eq("id", photoId)
+        .eq("vehicle_id", vehicleId)
+        .eq("company_id", membership.company_id)
+        .select("id, storage_path");
+
+      if (deleteError) throw deleteError;
+
+      if (deletedPhotos?.length !== 1) {
+        throw new Error(
+          "Fotografia sa v databáze nevymazala. Záznam neexistuje alebo na jeho vymazanie nemáte oprávnenie."
+        );
+      }
+
+      setPhotos((current) => current.filter((p) => String(p.id) !== photoId));
+      setLightboxPhoto((current: any) =>
+        current && String(current.id) === photoId ? null : current
+      );
+
+      const deletedPath = deletedPhotos[0].storage_path;
+
+      if (deletedPath) {
+        const { error: storageError } = await supabase.storage
+          .from("vehicle-photos")
+          .remove([deletedPath]);
+
+        if (storageError) {
+          console.error(
+            "Databázový záznam fotografie bol vymazaný, ale Storage cleanup zlyhal:",
+            storageError
+          );
+          alert(
+            "Fotografia bola odstránená z evidencie, ale jej súbor sa nepodarilo odstrániť z úložiska."
+          );
+        }
+      }
+    } catch (deleteError: unknown) {
+      const message =
+        deleteError instanceof Error ? deleteError.message : "Neznáma chyba.";
+      alert("Chyba pri mazaní fotografie: " + message);
+    } finally {
+      setDeletingPhotoId(null);
+    }
   }
 
   async function loadVehicle() {
@@ -389,6 +618,109 @@ export default function VehicleDetailPage() {
           </div>
         )}
       </div>
+
+      <div className="surface-card mt-10 p-8">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <h2 className="text-2xl font-bold">📷 Fotografie vozidla</h2>
+
+          {/* Pridávanie fotografií smie aj employee (rovnaké oprávnenie ako
+              SELECT/INSERT na vehicle_photos) — vymazanie fotografie ostáva
+              iba owner/admin nižšie. Toto sa netýka samotného vozidla
+              (vehicles) — employee ho naďalej nemôže editovať ani mazať. */}
+          <div className="flex gap-3">
+            <label className="cursor-pointer rounded-xl bg-blue-600 px-5 py-3 text-white hover:bg-blue-700">
+              {isUploadingPhotos ? "Nahrávam..." : "📷 Odfotiť"}
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                multiple
+                className="hidden"
+                onChange={uploadVehiclePhotos}
+                disabled={isUploadingPhotos || legalHold}
+              />
+            </label>
+
+            <label className="cursor-pointer rounded-xl border border-subtle bg-surface-1 px-5 py-3 text-secondary">
+              🖼️ Pridať fotografie
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={uploadVehiclePhotos}
+                disabled={isUploadingPhotos || legalHold}
+              />
+            </label>
+          </div>
+        </div>
+
+        {legalHold && (
+          <p className="mt-3 text-sm text-amber-400">{LEGAL_HOLD_MESSAGE}</p>
+        )}
+
+        {photos.length === 0 ? (
+          <p className="mt-6 text-muted-esblu">
+            Zatiaľ nie sú pridané žiadne fotografie vozidla.
+          </p>
+        ) : (
+          <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+            {photos.map((photo) => (
+              <div
+                key={photo.id}
+                className="rounded-xl border border-subtle bg-surface-2 p-2"
+              >
+                <button
+                  type="button"
+                  onClick={() => setLightboxPhoto(photo)}
+                  className="block w-full"
+                >
+                  <img
+                    src={photoUrl(photo.storage_path)}
+                    alt="Fotografia vozidla"
+                    className="h-32 w-full rounded-lg object-cover sm:h-36"
+                  />
+                </button>
+
+                {isOwnerOrAdmin(role) && (
+                  <button
+                    onClick={() => deletePhoto(photo)}
+                    disabled={deletingPhotoId !== null}
+                    className="mt-2 w-full rounded-lg bg-red-600 px-3 py-2 text-xs font-bold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-gray-400"
+                  >
+                    {deletingPhotoId === String(photo.id)
+                      ? "Mažem..."
+                      : "🗑 Vymazať"}
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {lightboxPhoto && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+          onClick={() => setLightboxPhoto(null)}
+        >
+          <div className="relative max-h-[90vh] max-w-4xl">
+            <img
+              src={photoUrl(lightboxPhoto.storage_path)}
+              alt="Fotografia vozidla — zväčšený náhľad"
+              className="max-h-[90vh] max-w-full rounded-2xl object-contain"
+              onClick={(e) => e.stopPropagation()}
+            />
+            <button
+              type="button"
+              onClick={() => setLightboxPhoto(null)}
+              className="absolute -top-4 -right-4 rounded-full bg-surface-1 px-3 py-2 text-lg font-bold text-primary shadow-lg"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

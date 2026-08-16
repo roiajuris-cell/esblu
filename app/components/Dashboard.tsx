@@ -245,7 +245,7 @@ export default function Dashboard() {
     accent: ModuleAccent;
   }[] = [
     {
-      title: "AI Inbox",
+      title: "Inbox",
       subtitle: "Inteligentné spracovanie dokumentov",
       href: "/ai-evidencia",
       image: "/images/ai-evidencia.png",
@@ -287,7 +287,7 @@ export default function Dashboard() {
   // Spoločný zoznam navigačných položiek pre desktop sidebar AJ mobilné
   // výsuvné menu (jeden zdroj pravdy, žiadna duplicita odkazov/ciest).
   const navItems = [
-    { href: "/ai-evidencia", label: "AI Inbox", image: "/images/ai-evidencia.png" },
+    { href: "/ai-evidencia", label: "Inbox", image: "/images/ai-evidencia.png" },
     { href: "/vozidla", label: "Vozidlá", image: "/images/van.png" },
     { href: "/stroje", label: "Stroje", image: "/images/excavator.png" },
     { href: "/sklad", label: "Sklad", image: "/images/warehouse.png" },
@@ -471,7 +471,7 @@ export default function Dashboard() {
             </div>
           )}
 
-          <div className="mt-9 grid grid-cols-2 gap-3.5 lg:mt-12 lg:grid-cols-4 lg:gap-5">
+          <div className="mt-9 grid grid-cols-2 gap-3 lg:mt-12 lg:grid-cols-4 lg:gap-4">
             {modules
               .filter((module) => module.title !== "Nastavenia")
               .map((module) => (

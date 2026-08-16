@@ -1,13 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
+import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import PlanLimitNotice from "@/app/components/PlanLimitNotice";
 import { usePlanUsage } from "@/hooks/use-plan-usage";
-import {
-  PLAN_LIMIT_MESSAGE,
-  isPlanLimitReachedError,
-} from "@/lib/plan-limits";
+import { isPlanLimitReachedError, PLAN_LIMIT_MESSAGE } from "@/lib/plan-limits";
 import { normalizeSpz } from "@/lib/normalize-spz";
 import VehicleCard from "../components/VehicleCard";
 import BackLink from "../components/BackLink";
@@ -19,59 +17,7 @@ import {
 import { useCompanyDpaLegalHold } from "@/app/components/CompanyDpaGate";
 import { LEGAL_HOLD_MESSAGE } from "@/lib/company-dpa";
 
-type RegistrationSide = "front" | "back";
-
-type RegistrationData = {
-  spz: string | null;
-  vin: string | null;
-  znacka: string | null;
-  model: string | null;
-  datumPrvejEvidencie: string | null;
-  rokVyroby: string | null;
-  kategoriaVozidla: string | null;
-  druhVozidla: string | null;
-  palivo: string | null;
-  objemMotora: string | null;
-  vykon: string | null;
-  farba: string | null;
-  prevadzkovaHmotnost: string | null;
-  najvacsiaPripustnaCelkovaHmotnost: string | null;
-  pocetMiest: string | null;
-  cisloTechnickehoPreukazu: string | null;
-};
-
-const vehicleFieldMappings = [
-  { source: "spz", target: "spz", label: "ŠPZ" },
-  { source: "vin", target: "vin", label: "VIN" },
-  { source: "znacka", target: "znacka", label: "Značka" },
-  { source: "model", target: "model", label: "Model" },
-  {
-    source: "datumPrvejEvidencie",
-    target: "datumPrvejEvidencie",
-    label: "Dátum prvej evidencie",
-  },
-  { source: "rokVyroby", target: "rokVyroby", label: "Rok výroby" },
-  { source: "palivo", target: "palivo", label: "Palivo" },
-  {
-    source: "objemMotora",
-    target: "objemMotora",
-    label: "Objem motora",
-  },
-  { source: "vykon", target: "vykon", label: "Výkon" },
-  { source: "farba", target: "farba", label: "Farba" },
-  {
-    source: "prevadzkovaHmotnost",
-    target: "hmotnost",
-    label: "Prevádzková hmotnosť",
-  },
-  { source: "pocetMiest", target: "pocetMiest", label: "Počet miest" },
-] as const;
-
-async function compressRegistrationImage(file: File): Promise<File> {
-  if (!file.type.startsWith("image/")) {
-    throw new Error("Vybraný súbor nie je obrázok.");
-  }
-
+async function compressVehiclePhoto(file: File): Promise<File> {
   const imageUrl = URL.createObjectURL(file);
 
   try {
@@ -81,16 +27,18 @@ async function compressRegistrationImage(file: File): Promise<File> {
       img.onload = () => resolve(img);
       img.onerror = () =>
         reject(new Error("Fotografiu sa nepodarilo načítať."));
+
       img.src = imageUrl;
     });
 
-    const maxDimension = 1800;
+    const maxDimension = 1600;
     const scale = Math.min(
       1,
       maxDimension / Math.max(image.width, image.height)
     );
-    const width = Math.max(1, Math.round(image.width * scale));
-    const height = Math.max(1, Math.round(image.height * scale));
+    const width = Math.round(image.width * scale);
+    const height = Math.round(image.height * scale);
+
     const canvas = document.createElement("canvas");
     canvas.width = width;
     canvas.height = height;
@@ -113,11 +61,11 @@ async function compressRegistrationImage(file: File): Promise<File> {
           }
         },
         "image/webp",
-        0.8
+        0.78
       );
     });
 
-    const baseName = file.name.replace(/\.[^/.]+$/, "") || "technicky-preukaz";
+    const baseName = file.name.replace(/\.[^/.]+$/, "") || "vozidlo";
 
     return new File([blob], `${baseName}.webp`, {
       type: "image/webp",
@@ -132,21 +80,17 @@ export default function VozidlaPage() {
   const [userId, setUserId] = useState("");
   const [companyId, setCompanyId] = useState("");
   const [role, setRole] = useState<CompanyMemberRole | null>(null);
-  const [frontFile, setFrontFile] = useState<File | null>(null);
-  const [frontPreview, setFrontPreview] = useState<string | null>(null);
-  const [backFile, setBackFile] = useState<File | null>(null);
-  const [backPreview, setBackPreview] = useState<string | null>(null);
-  const [isPreparingFront, setIsPreparingFront] = useState(false);
-  const [isPreparingBack, setIsPreparingBack] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [scanError, setScanError] = useState("");
-  const [scanMessage, setScanMessage] = useState("");
-  const [registrationData, setRegistrationData] =
-    useState<RegistrationData | null>(null);
   const [vehicle, setVehicle] = useState<any | null>(null);
   const [vehicles, setVehicles] = useState<any[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [photoTargetVehicleId, setPhotoTargetVehicleId] = useState("");
+  const [isUploadingVehiclePhotos, setIsUploadingVehiclePhotos] =
+    useState(false);
+  const [photoUploadFeedback, setPhotoUploadFeedback] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
   const saveInProgressRef = useRef(false);
   const {
     usage: planUsage,
@@ -167,18 +111,6 @@ export default function VozidlaPage() {
   useEffect(() => {
     checkUser();
   }, []);
-
-  useEffect(() => {
-    return () => {
-      if (frontPreview) URL.revokeObjectURL(frontPreview);
-    };
-  }, [frontPreview]);
-
-  useEffect(() => {
-    return () => {
-      if (backPreview) URL.revokeObjectURL(backPreview);
-    };
-  }, [backPreview]);
 
   async function checkUser() {
     const {
@@ -223,77 +155,90 @@ export default function VozidlaPage() {
     setVehicles(data || []);
   }
 
-  function clearRegistrationResult() {
-    setScanError("");
-    setScanMessage("");
-    setRegistrationData(null);
-  }
-
-  function clearRegistrationImages() {
-    setFrontFile(null);
-    setFrontPreview(null);
-    setBackFile(null);
-    setBackPreview(null);
-    clearRegistrationResult();
-  }
-
-  async function handleRegistrationFileChange(
-    side: RegistrationSide,
+  async function uploadVehiclePhotosFromList(
     event: React.ChangeEvent<HTMLInputElement>
   ) {
-    const file = event.target.files?.[0];
+    const files = Array.from(event.target.files || []);
     event.target.value = "";
 
-    if (!file) return;
+    if (files.length === 0) return;
 
-    if (isNewVehicleBlocked) {
-      setScanError(
-        planUsageLoading
-          ? "Overujem dostupnosť limitu. Skús to znova o chvíľu."
-          : legalHold
-            ? LEGAL_HOLD_MESSAGE
-            : PLAN_LIMIT_MESSAGE
-      );
+    if (!photoTargetVehicleId) {
+      setPhotoUploadFeedback({
+        type: "error",
+        text: "Najprv vyber vozidlo, ku ktorému fotografie patria.",
+      });
       return;
     }
 
-    const setPreparing =
-      side === "front" ? setIsPreparingFront : setIsPreparingBack;
-    setPreparing(true);
-    clearRegistrationResult();
+    if (!userId) {
+      setPhotoUploadFeedback({ type: "error", text: "Nie si prihlásený." });
+      return;
+    }
+
+    if (legalHold) {
+      setPhotoUploadFeedback({ type: "error", text: LEGAL_HOLD_MESSAGE });
+      return;
+    }
+
+    setIsUploadingVehiclePhotos(true);
+    setPhotoUploadFeedback(null);
+
+    let failedCount = 0;
 
     try {
-      const compressedFile = await compressRegistrationImage(file);
-      const previewUrl = URL.createObjectURL(compressedFile);
+      for (const originalFile of files) {
+        try {
+          const compressedFile = await compressVehiclePhoto(originalFile);
+          const filePath = `${userId}/${photoTargetVehicleId}/${Date.now()}-${crypto.randomUUID()}-${compressedFile.name}`;
 
-      if (side === "front") {
-        setFrontFile(compressedFile);
-        setFrontPreview(previewUrl);
-      } else {
-        setBackFile(compressedFile);
-        setBackPreview(previewUrl);
+          const { error: uploadError } = await supabase.storage
+            .from("vehicle-photos")
+            .upload(filePath, compressedFile, {
+              cacheControl: "3600",
+              upsert: false,
+              contentType: compressedFile.type,
+            });
+
+          if (uploadError) throw uploadError;
+
+          const { error: dbError } = await supabase
+            .from("vehicle_photos")
+            .insert({
+              user_id: userId,
+              vehicle_id: photoTargetVehicleId,
+              storage_path: filePath,
+            });
+
+          if (dbError) {
+            await supabase.storage.from("vehicle-photos").remove([filePath]);
+            throw dbError;
+          }
+        } catch (singleUploadError) {
+          failedCount += 1;
+          console.error(
+            "Chyba pri nahrávaní fotografie vozidla:",
+            singleUploadError
+          );
+        }
       }
-    } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "Fotografiu sa nepodarilo spracovať.";
-      setScanError(message);
+
+      const successCount = files.length - failedCount;
+
+      if (failedCount === 0) {
+        setPhotoUploadFeedback({
+          type: "success",
+          text: `${successCount} ${successCount === 1 ? "fotografia bola uložená" : "fotografií bolo uložených"}.`,
+        });
+      } else {
+        setPhotoUploadFeedback({
+          type: "error",
+          text: `${failedCount} z ${files.length} fotografií sa nepodarilo nahrať. Skús to znova.`,
+        });
+      }
     } finally {
-      setPreparing(false);
+      setIsUploadingVehiclePhotos(false);
     }
-  }
-
-  function removeRegistrationImage(side: RegistrationSide) {
-    if (side === "front") {
-      setFrontFile(null);
-      setFrontPreview(null);
-    } else {
-      setBackFile(null);
-      setBackPreview(null);
-    }
-
-    clearRegistrationResult();
   }
 
   function updateVehicle(key: string, value: string) {
@@ -301,121 +246,6 @@ export default function VozidlaPage() {
       ...prev,
       [key]: value,
     }));
-  }
-
-  async function handleAiProcess() {
-    if (isNewVehicleBlocked) {
-      setScanError(
-        planUsageLoading
-          ? "Overujem dostupnosť limitu. Skús to znova o chvíľu."
-          : legalHold
-            ? LEGAL_HOLD_MESSAGE
-            : PLAN_LIMIT_MESSAGE
-      );
-      return;
-    }
-
-    if (!frontFile) {
-      setScanError("Najprv pridaj prednú stranu technického preukazu.");
-      return;
-    }
-
-    setIsProcessing(true);
-    setScanError("");
-    setScanMessage("");
-
-    try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-
-      if (!session) {
-        throw new Error("Na AI načítanie musíš byť prihlásený.");
-      }
-
-      const formData = new FormData();
-      formData.append("front", frontFile);
-
-      if (backFile) {
-        formData.append("back", backFile);
-      }
-
-      const response = await fetch("/api/scan-vehicle-registration", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: formData,
-      });
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || "AI spracovanie zlyhalo.");
-      }
-
-      const extractedData = data.data as RegistrationData;
-      const extracted: RegistrationData = {
-        ...extractedData,
-        spz: normalizeSpz(extractedData.spz),
-      };
-      const currentVehicle = vehicle || {};
-      const conflicts = vehicleFieldMappings.filter(({ source, target }) => {
-        const extractedValue = extracted[source];
-        const currentValue = currentVehicle[target];
-
-        return (
-          extractedValue !== null &&
-          String(currentValue ?? "").trim() !== "" &&
-          String(currentValue).trim().toLocaleLowerCase("sk") !==
-            extractedValue.trim().toLocaleLowerCase("sk")
-        );
-      });
-
-      const overwriteConflicts =
-        conflicts.length === 0 ||
-        window.confirm(
-          `AI našla odlišné hodnoty v poliach: ${conflicts
-            .map(({ label }) => label)
-            .join(", ")}.\n\nChceš tieto existujúce hodnoty prepísať?`
-        );
-
-      setVehicle((current: Record<string, unknown> | null) => {
-        const next: Record<string, unknown> = {
-          stk: "",
-          ek: "",
-          ...(current || {}),
-        };
-
-        vehicleFieldMappings.forEach(({ source, target }) => {
-          const extractedValue = extracted[source];
-
-          if (extractedValue === null) return;
-
-          const hasCurrentValue = String(next[target] ?? "").trim() !== "";
-
-          if (!hasCurrentValue || overwriteConflicts) {
-            next[target] = extractedValue;
-          }
-        });
-
-        return next;
-      });
-
-      setRegistrationData(extracted);
-      setScanMessage(
-        conflicts.length > 0 && !overwriteConflicts
-          ? "AI údaje boli načítané. Existujúce odlišné hodnoty zostali zachované. Pred uložením všetko skontroluj."
-          : "AI údaje boli načítané. Pred uložením vozidla ich dôkladne skontroluj."
-      );
-    } catch (error) {
-      setScanError(
-        error instanceof Error
-          ? error.message
-          : "AI načítanie technického preukazu zlyhalo."
-      );
-    } finally {
-      setIsProcessing(false);
-    }
   }
 
   function vehiclePayload() {
@@ -473,7 +303,6 @@ export default function VozidlaPage() {
         alert("Vozidlo bolo upravené.");
         setEditingId(null);
         setVehicle(null);
-        clearRegistrationImages();
         await loadVehicles();
         return;
       }
@@ -491,7 +320,6 @@ export default function VozidlaPage() {
 
       alert("Vozidlo bolo uložené.");
       setVehicle(null);
-      clearRegistrationImages();
       await Promise.all([loadVehicles(), refreshPlanUsage()]);
     } catch (saveError: unknown) {
       if (isPlanLimitReachedError(saveError, "vehicles")) {
@@ -514,7 +342,6 @@ export default function VozidlaPage() {
 
   function handleEdit(car: any) {
     setEditingId(car.id);
-    clearRegistrationImages();
 
     setVehicle({
       spz: car.spz || "",
@@ -540,6 +367,16 @@ export default function VozidlaPage() {
     const confirmed = confirm("Naozaj chceš vymazať toto vozidlo?");
     if (!confirmed) return;
 
+    // Cesty fotografií vozidla načítame PRED zmazaním vozidla — DB riadky
+    // vehicle_photos sa zmažú automaticky (FK ON DELETE CASCADE), ale
+    // súbory v Storage treba odstrániť samostatne, aby po vozidle
+    // nezostali osirotené fotografie v bucket-e vehicle-photos.
+    const { data: photosToClean } = await supabase
+      .from("vehicle_photos")
+      .select("storage_path")
+      .eq("vehicle_id", id)
+      .eq("company_id", companyId);
+
     const { error } = await supabase
       .from("vehicles")
       .delete()
@@ -551,29 +388,30 @@ export default function VozidlaPage() {
       return;
     }
 
+    const paths = (photosToClean || [])
+      .map((p) => p.storage_path)
+      .filter((p): p is string => Boolean(p));
+
+    if (paths.length > 0) {
+      const { error: storageError } = await supabase.storage
+        .from("vehicle-photos")
+        .remove(paths);
+
+      if (storageError) {
+        console.error(
+          "Vozidlo bolo vymazané, ale fotografie sa nepodarilo odstrániť zo Storage:",
+          storageError
+        );
+      }
+    }
+
     await Promise.all([loadVehicles(), refreshPlanUsage()]);
   }
 
   function cancelEdit() {
     setEditingId(null);
     setVehicle(null);
-    clearRegistrationImages();
   }
-
-  const additionalRegistrationFields = registrationData
-    ? [
-        ["Kategória vozidla", registrationData.kategoriaVozidla],
-        ["Druh vozidla", registrationData.druhVozidla],
-        [
-          "Najväčšia prípustná celková hmotnosť",
-          registrationData.najvacsiaPripustnaCelkovaHmotnost,
-        ],
-        [
-          "Číslo technického preukazu",
-          registrationData.cisloTechnickehoPreukazu,
-        ],
-      ].filter(([, value]) => value)
-    : [];
 
   return (
     <main className="app-shell-bg min-h-screen p-4 sm:p-6 lg:p-10">
@@ -602,192 +440,92 @@ export default function VozidlaPage() {
       )}
 
       {role !== "employee" && (
-      <div className="mt-8 rounded-2xl border border-subtle bg-surface-1 p-6 shadow-lg backdrop-blur-xl">
-        <h2 className="text-2xl font-bold">Načítať technický preukaz</h2>
-        <p className="mt-2 text-sm text-secondary">
-          Fotografie sa použijú iba na AI načítanie a nikam sa trvalo
-          neukladajú. Predná strana je povinná, zadná je voliteľná.
-        </p>
-
-        <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <section className="rounded-2xl bg-surface-2 p-5 shadow-sm">
-            <h3 className="text-lg font-bold">Predná strana</h3>
-            <p className="mt-1 text-sm text-secondary">Povinná fotografia</p>
-
-            <div className="mt-4 flex flex-wrap gap-3">
-              <label className="cursor-pointer rounded-xl bg-blue-600 px-4 py-3 font-medium text-white hover:bg-blue-700">
-                {isPreparingFront ? "Pripravujem..." : "📷 Odfotiť"}
-                <input
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  className="hidden"
-                  disabled={
-                    isProcessing || isPreparingFront || isNewVehicleBlocked
-                  }
-                  onChange={(event) =>
-                    handleRegistrationFileChange("front", event)
-                  }
-                />
-              </label>
-
-              <label className="cursor-pointer rounded-xl border border-subtle bg-surface-1 px-4 py-3 font-medium text-secondary hover:bg-surface-2">
-                🖼️ Vybrať z galérie
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  disabled={
-                    isProcessing || isPreparingFront || isNewVehicleBlocked
-                  }
-                  onChange={(event) =>
-                    handleRegistrationFileChange("front", event)
-                  }
-                />
-              </label>
-            </div>
-
-            {frontPreview ? (
-              <div className="mt-4">
-                <img
-                  src={frontPreview}
-                  alt="Predná strana technického preukazu"
-                  className="h-64 w-full rounded-xl border border-subtle bg-surface-1 object-contain"
-                />
-                <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-                  <p className="text-xs text-muted-esblu">
-                    Novým výberom fotografiu vymeníš.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => removeRegistrationImage("front")}
-                    disabled={isProcessing}
-                    className="rounded-lg bg-red-600 px-3 py-2 text-sm text-white hover:bg-red-700 disabled:bg-gray-400"
-                  >
-                    Odstrániť
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="mt-4 rounded-xl border border-dashed border-subtle p-8 text-center text-sm text-muted-esblu">
-                Predná strana zatiaľ nie je vybraná.
-              </div>
-            )}
-          </section>
-
-          <section className="rounded-2xl bg-surface-2 p-5 shadow-sm">
-            <h3 className="text-lg font-bold">Zadná strana</h3>
-            <p className="mt-1 text-sm text-secondary">Voliteľná fotografia</p>
-
-            <div className="mt-4 flex flex-wrap gap-3">
-              <label className="cursor-pointer rounded-xl bg-blue-600 px-4 py-3 font-medium text-white hover:bg-blue-700">
-                {isPreparingBack ? "Pripravujem..." : "📷 Odfotiť"}
-                <input
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  className="hidden"
-                  disabled={
-                    isProcessing || isPreparingBack || isNewVehicleBlocked
-                  }
-                  onChange={(event) =>
-                    handleRegistrationFileChange("back", event)
-                  }
-                />
-              </label>
-
-              <label className="cursor-pointer rounded-xl border border-subtle bg-surface-1 px-4 py-3 font-medium text-secondary hover:bg-surface-2">
-                🖼️ Vybrať z galérie
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  disabled={
-                    isProcessing || isPreparingBack || isNewVehicleBlocked
-                  }
-                  onChange={(event) =>
-                    handleRegistrationFileChange("back", event)
-                  }
-                />
-              </label>
-            </div>
-
-            {backPreview ? (
-              <div className="mt-4">
-                <img
-                  src={backPreview}
-                  alt="Zadná strana technického preukazu"
-                  className="h-64 w-full rounded-xl border border-subtle bg-surface-1 object-contain"
-                />
-                <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-                  <p className="text-xs text-muted-esblu">
-                    Novým výberom fotografiu vymeníš.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => removeRegistrationImage("back")}
-                    disabled={isProcessing}
-                    className="rounded-lg bg-red-600 px-3 py-2 text-sm text-white hover:bg-red-700 disabled:bg-gray-400"
-                  >
-                    Odstrániť
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="mt-4 rounded-xl border border-dashed border-subtle p-8 text-center text-sm text-muted-esblu">
-                Zadná strana zatiaľ nie je vybraná.
-              </div>
-            )}
-          </section>
-        </div>
-
-        <button
-          type="button"
-          onClick={handleAiProcess}
-          disabled={
-            !frontFile ||
-            isProcessing ||
-            isPreparingFront ||
-            isPreparingBack ||
-            isNewVehicleBlocked
-          }
-          className="mt-6 rounded-xl bg-green-600 px-6 py-3 font-medium text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:bg-gray-400"
-        >
-          {isProcessing
-            ? "Načítavam údaje..."
-            : "🤖 Načítať údaje pomocou AI"}
-        </button>
-
-        {scanError && (
-          <p className="mt-4 rounded-xl bg-danger-soft p-4 text-sm font-medium text-red-700">
-            {scanError}
-          </p>
-        )}
-
-        {scanMessage && (
-          <p className="badge-success mt-4 rounded-xl p-4 text-sm font-medium">
-            {scanMessage}
-          </p>
-        )}
-
-        {additionalRegistrationFields.length > 0 && (
-          <div className="mt-5 rounded-2xl bg-surface-2 p-5">
-            <h3 className="font-bold">Ďalšie načítané údaje</h3>
-            <p className="mt-1 text-xs text-muted-esblu">
-              Tieto údaje zatiaľ nemajú polia v databáze a pri uložení vozidla
-              sa neuložia.
+        <div className="mt-8 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-subtle bg-surface-1 p-6 shadow-lg backdrop-blur-xl">
+          <div>
+            <h2 className="text-xl font-bold">Nové vozidlo pridáte cez Inbox</h2>
+            <p className="mt-1 text-sm text-secondary">
+              Odfotografujte technický preukaz (prednú a zadnú stranu) v
+              module Inbox — AI údaje načíta a po vašom potvrdení vozidlo
+              automaticky založí alebo priradí k existujúcemu.
             </p>
-            <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
-              {additionalRegistrationFields.map(([label, value]) => (
-                <div key={label} className="rounded-xl bg-surface-2 p-3">
-                  <p className="text-xs text-muted-esblu">{label}</p>
-                  <p className="mt-1 font-semibold text-primary">{value}</p>
-                </div>
-              ))}
-            </div>
           </div>
-        )}
-      </div>
+          <Link
+            href="/ai-evidencia"
+            className="shrink-0 rounded-xl bg-blue-600 px-5 py-3 font-medium text-white hover:bg-blue-700"
+          >
+            Otvoriť Inbox →
+          </Link>
+        </div>
+      )}
+
+      {/* Pridávanie fotografií smie aj employee (rovnaké oprávnenie ako
+          SELECT/INSERT na vehicle_photos) — samotné vozidlá (vytváranie/
+          úprava/mazanie v tomto module) ostávajú employeeovi naďalej
+          nedostupné, toto sa ich netýka. */}
+      {role && (
+        <div className="mt-6 rounded-2xl border border-subtle bg-surface-1 p-6 shadow-lg backdrop-blur-xl">
+          <h2 className="text-xl font-bold">📷 Pridať fotografie vozidla</h2>
+          <p className="mt-1 text-sm text-secondary">
+            Vyber vozidlo a nahraj jednu alebo viac fotografií naraz. Fotky
+            uvidíš v galérii na detaile vozidla.
+          </p>
+
+          <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+            <select
+              value={photoTargetVehicleId}
+              onChange={(e) => setPhotoTargetVehicleId(e.target.value)}
+              className="rounded-xl border border-subtle bg-surface-2 px-4 py-3 outline-none sm:flex-1"
+            >
+              <option value="">— vyber vozidlo —</option>
+              {vehicles.map((car) => (
+                <option key={car.id} value={car.id}>
+                  {car.spz || "Bez ŠPZ"}
+                  {car.znacka ? ` — ${car.znacka} ${car.model || ""}` : ""}
+                </option>
+              ))}
+            </select>
+
+            <label
+              className={`rounded-xl px-5 py-3 text-center font-medium ${
+                isUploadingVehiclePhotos || !photoTargetVehicleId || legalHold
+                  ? "cursor-not-allowed bg-surface-2 text-muted-esblu"
+                  : "cursor-pointer bg-blue-600 text-white hover:bg-blue-700"
+              }`}
+            >
+              {isUploadingVehiclePhotos ? "Nahrávam..." : "📷 Odfotiť / nahrať"}
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                disabled={
+                  isUploadingVehiclePhotos ||
+                  !photoTargetVehicleId ||
+                  legalHold
+                }
+                onChange={uploadVehiclePhotosFromList}
+              />
+            </label>
+          </div>
+
+          {vehicles.length === 0 && (
+            <p className="mt-2 text-xs text-muted-esblu">
+              Zatiaľ nemáš uložené žiadne vozidlo.
+            </p>
+          )}
+
+          {photoUploadFeedback && (
+            <p
+              className={`mt-3 rounded-xl p-3 text-sm font-medium ${
+                photoUploadFeedback.type === "success"
+                  ? "badge-success"
+                  : "bg-danger-soft text-red-700"
+              }`}
+            >
+              {photoUploadFeedback.text}
+            </p>
+          )}
+        </div>
       )}
 
       {role !== "employee" && vehicle && (

@@ -40,6 +40,7 @@ type ScanDocumentType =
   | "receipt"
   | "insurance"
   | "service_document"
+  | "vehicle_registration"
   | "other";
 
 const DOCUMENT_TYPE_LABELS: Record<ScanDocumentType, string> = {
@@ -49,6 +50,7 @@ const DOCUMENT_TYPE_LABELS: Record<ScanDocumentType, string> = {
   receipt: "bloček",
   insurance: "PZP / poistná zmluva",
   service_document: "servisný doklad",
+  vehicle_registration: "technický preukaz vozidla",
   other: "dokument na kontrolu",
 };
 
@@ -147,6 +149,15 @@ const REVIEW_ONLY_FIELD_LABELS: Record<OtherDocumentType, [string, string][]> = 
     ["cost", "Cena"],
     ["currency", "Mena"],
     ["nextServiceDate", "Ďalší servis"],
+  ],
+  vehicle_registration: [
+    ["spz", "ŠPZ"],
+    ["vin", "VIN"],
+    ["znacka", "Značka"],
+    ["model", "Model"],
+    ["rokVyroby", "Rok výroby"],
+    ["farba", "Farba"],
+    ["cisloTechnickehoPreukazu", "Číslo technického preukazu"],
   ],
   other: [["summary", "Zhrnutie"]],
 };
@@ -264,6 +275,50 @@ async function resolveVehicleIdBySpz(
     vehicleId: matchedVehicle?.id ?? null,
     canonicalSpz: normalizeSpz(matchedVehicle?.spz) ?? normalizedSpz,
   };
+}
+
+// Duplicitná kontrola pre technický preukaz vozidla (bod 2 zadania) — hľadá
+// existujúce vozidlo firmy podľa VIN (spoľahlivejší, prakticky unikátny
+// identifikátor) a až potom podľa ŠPZ. Nikdy nezlyhá s chybou — pri
+// zlyhaní dopytu vráti null, aby AI-preview flow vždy ponúklo aspoň
+// vytvorenie nového vozidla namiesto tvrdého zlyhania.
+async function findDuplicateVehicle(
+  companyId: string,
+  vin: unknown,
+  spz: unknown
+): Promise<any | null> {
+  const normalizedSpz = normalizeSpz(spz);
+  const trimmedVin =
+    typeof vin === "string" && vin.trim() ? vin.trim().toUpperCase() : "";
+
+  if (!normalizedSpz && !trimmedVin) return null;
+
+  const { data, error } = await supabase
+    .from("vehicles")
+    .select("*")
+    .eq("company_id", companyId);
+
+  if (error || !data) {
+    console.error("Chyba pri hľadaní duplicitného vozidla:", error);
+    return null;
+  }
+
+  const vinMatch = trimmedVin
+    ? data.find(
+        (vehicle) =>
+          typeof vehicle.vin === "string" &&
+          vehicle.vin.trim().toUpperCase() === trimmedVin
+      )
+    : undefined;
+
+  if (vinMatch) return vinMatch;
+
+  if (!normalizedSpz) return null;
+
+  return (
+    data.find((vehicle) => normalizeSpz(vehicle.spz) === normalizedSpz) ??
+    null
+  );
 }
 
 function normalizeMachineLabel(value: unknown): string {
@@ -623,8 +678,34 @@ export default function AiEvidenciaPage() {
   const [deletingAttachmentId, setDeletingAttachmentId] = useState<
     string | null
   >(null);
+  // Technický preukaz vozidla — samostatný flow (bod 2 zadania): predná +
+  // voliteľná zadná strana sa spracujú AI ako JEDEN dokument cez
+  // /api/scan-vehicle-registration (nie generický /api/scan-document).
+  // Vozidlo v module Vozidlá sa vytvorí/aktualizuje AŽ po výslovnom
+  // potvrdení používateľom — rovnaká AI Evidence zásada ako inde v tomto
+  // súbore (žiadne automatické uloženie AI výsledku).
+  const [regFrontFile, setRegFrontFile] = useState<File | null>(null);
+  const [regFrontPreview, setRegFrontPreview] = useState<string | null>(null);
+  const [regBackFile, setRegBackFile] = useState<File | null>(null);
+  const [regBackPreview, setRegBackPreview] = useState<string | null>(null);
+  const [isPreparingRegFront, setIsPreparingRegFront] = useState(false);
+  const [isPreparingRegBack, setIsPreparingRegBack] = useState(false);
+  const [isProcessingRegistration, setIsProcessingRegistration] =
+    useState(false);
+  const [isSavingRegistration, setIsSavingRegistration] = useState(false);
+  const [registrationError, setRegistrationError] = useState("");
+  const [registrationFields, setRegistrationFields] = useState<Record<
+    string,
+    string
+  > | null>(null);
+  // Vozidlo nájdené podľa VIN/ŠPZ pri spracovaní technického preukazu —
+  // ak je nastavené, uloženie AKTUALIZUJE toto vozidlo namiesto vytvorenia
+  // duplicity (bod 2 zadania).
+  const [registrationDuplicateVehicle, setRegistrationDuplicateVehicle] =
+    useState<any | null>(null);
   const saveOtherDocumentInProgressRef = useRef(false);
   const saveInProgressRef = useRef(false);
+  const saveRegistrationInProgressRef = useRef(false);
   const previewObjectUrlRef = useRef<string | null>(null);
   const {
     usage: planUsage,
@@ -633,6 +714,14 @@ export default function AiEvidenciaPage() {
     loading: planUsageLoading,
     refresh: refreshPlanUsage,
   } = usePlanUsage("ai_evidence");
+  // Vytvorenie NOVÉHO vozidla z technického preukazu podlieha rovnakému
+  // plan-limitu ako ručné pridanie vozidla v module Vozidlá — aktualizácia
+  // existujúceho (nájdeného) vozidla limit nekontroluje.
+  const {
+    isLimited: isVehiclePlanLimited,
+    loading: vehiclePlanUsageLoading,
+    refresh: refreshVehiclePlanUsage,
+  } = usePlanUsage("vehicles");
   const { legalHold } = useCompanyDpaLegalHold();
   // Legal-hold blokuje vytváranie NOVÝCH ai_evidence/documents/
   // document_attachments záznamov — presne tabuľky, ktoré chráni
@@ -1217,7 +1306,7 @@ review_status: reviewStatus,
       setSelectedFile(null);
       setFileName("");
       await Promise.all([loadRecords(), refreshPlanUsage()]);
-      alert("Dokument bol uložený do AI Inboxu.");
+      alert("Dokument bol uložený do Inboxu.");
     } catch (saveError: unknown) {
       if (uploadedPhotoPath && !recordInserted) {
         const { error: cleanupError } = await supabase.storage
@@ -1425,7 +1514,7 @@ review_status: reviewStatus,
       setSelectedFile(null);
       setFileName("");
       await loadOtherDocuments();
-      alert("Dokument bol uložený do AI Inboxu.");
+      alert("Dokument bol uložený do Inboxu.");
     } catch (saveError: unknown) {
       if (uploadedPath && !documentInserted) {
         const { error: cleanupError } = await supabase.storage
@@ -1543,6 +1632,442 @@ review_status: reviewStatus,
       );
     } finally {
       setDeletingDocumentId(null);
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // Technický preukaz vozidla (bod 2 zadania) — samostatný flow: predná +
+  // voliteľná zadná strana sa spracujú AI ako JEDEN dokument, používateľ
+  // skontroluje/opraví údaje a AŽ PO výslovnom potvrdení sa buď aktualizuje
+  // nájdené existujúce vozidlo (podľa VIN/ŠPZ), alebo sa vytvorí nové.
+  // AI nikdy nevytvára ani neprepisuje vozidlo bez tohto potvrdenia.
+  // ---------------------------------------------------------------------
+
+  function clearRegistrationResult() {
+    setRegistrationError("");
+    setRegistrationFields(null);
+    setRegistrationDuplicateVehicle(null);
+  }
+
+  function clearRegistrationImages() {
+    setRegFrontFile(null);
+    setRegFrontPreview(null);
+    setRegBackFile(null);
+    setRegBackPreview(null);
+    clearRegistrationResult();
+  }
+
+  async function handleRegistrationFileChange(
+    side: "front" | "back",
+    event: React.ChangeEvent<HTMLInputElement>
+  ) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+
+    if (!file) return;
+
+    const setPreparing =
+      side === "front" ? setIsPreparingRegFront : setIsPreparingRegBack;
+    setPreparing(true);
+    clearRegistrationResult();
+
+    try {
+      const compressedFile = await compressImage(file, 0);
+      const previewUrl = URL.createObjectURL(compressedFile);
+
+      if (side === "front") {
+        setRegFrontFile(compressedFile);
+        setRegFrontPreview(previewUrl);
+      } else {
+        setRegBackFile(compressedFile);
+        setRegBackPreview(previewUrl);
+      }
+    } catch (fileError) {
+      setRegistrationError(
+        fileError instanceof Error
+          ? fileError.message
+          : "Fotografiu sa nepodarilo spracovať."
+      );
+    } finally {
+      setPreparing(false);
+    }
+  }
+
+  function removeRegistrationImage(side: "front" | "back") {
+    if (side === "front") {
+      setRegFrontFile(null);
+      setRegFrontPreview(null);
+    } else {
+      setRegBackFile(null);
+      setRegBackPreview(null);
+    }
+
+    clearRegistrationResult();
+  }
+
+  function updateRegistrationField(key: string, value: string) {
+    setRegistrationFields((prev) => ({ ...(prev || {}), [key]: value }));
+  }
+
+  async function handleProcessRegistration() {
+    if (!regFrontFile) {
+      setRegistrationError(
+        "Najprv pridaj prednú stranu technického preukazu."
+      );
+      return;
+    }
+
+    if (legalHold) {
+      setRegistrationError(LEGAL_HOLD_MESSAGE);
+      return;
+    }
+
+    setIsProcessingRegistration(true);
+    setRegistrationError("");
+
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session) {
+        throw new Error("Na AI načítanie musíš byť prihlásený.");
+      }
+
+      const membership = await getMyActiveMembership();
+
+      if (!membership) {
+        throw new Error("Nie si prihlásený.");
+      }
+
+      const formData = new FormData();
+      formData.append("front", regFrontFile);
+
+      if (regBackFile) {
+        formData.append("back", regBackFile);
+      }
+
+      const response = await fetch("/api/scan-vehicle-registration", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: formData,
+      });
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(
+          data.error || "AI spracovanie technického preukazu zlyhalo."
+        );
+      }
+
+      const extracted = data.data as Record<string, string | null>;
+      const normalizedSpz = normalizeSpz(extracted.spz);
+      const normalizedFields: Record<string, string> = {};
+
+      Object.entries(extracted).forEach(([key, value]) => {
+        normalizedFields[key] = value ?? "";
+      });
+      normalizedFields.spz = normalizedSpz || "";
+
+      setRegistrationFields(normalizedFields);
+
+      const duplicate = await findDuplicateVehicle(
+        membership.company_id,
+        extracted.vin,
+        normalizedSpz
+      );
+      setRegistrationDuplicateVehicle(duplicate);
+    } catch (processingError: unknown) {
+      setRegistrationError(
+        processingError instanceof Error
+          ? processingError.message
+          : "AI načítanie technického preukazu zlyhalo."
+      );
+    } finally {
+      setIsProcessingRegistration(false);
+    }
+  }
+
+  function registrationVehiclePayload(userIdForPayload: string) {
+    const f = registrationFields || {};
+
+    return {
+      user_id: userIdForPayload,
+      spz: normalizeSpz(f.spz),
+      vin: f.vin || null,
+      znacka: f.znacka || null,
+      model: f.model || null,
+      rok_vyroby: f.rokVyroby ? Number(f.rokVyroby) : null,
+      palivo: f.palivo || null,
+      objem: f.objemMotora ? Number(f.objemMotora) : null,
+      vykon: f.vykon || null,
+      farba: f.farba || null,
+      hmotnost: f.prevadzkovaHmotnost
+        ? Number(String(f.prevadzkovaHmotnost).replace(" kg", ""))
+        : null,
+      pocet_miest: f.pocetMiest ? Number(f.pocetMiest) : null,
+      datum_prvej_evidencie: f.datumPrvejEvidencie || null,
+    };
+  }
+
+  async function saveRegistrationDocument() {
+    if (!registrationFields || saveRegistrationInProgressRef.current) return;
+
+    if (legalHold) {
+      setRegistrationError(LEGAL_HOLD_MESSAGE);
+      return;
+    }
+
+    const isNewVehicle = !registrationDuplicateVehicle;
+
+    if (isNewVehicle) {
+      const latestVehicleUsage = await refreshVehiclePlanUsage();
+
+      if (latestVehicleUsage?.isLimited) {
+        setRegistrationError(PLAN_LIMIT_MESSAGE);
+        return;
+      }
+    }
+
+    saveRegistrationInProgressRef.current = true;
+    setIsSavingRegistration(true);
+    setRegistrationError("");
+
+    let uploadedFrontPath: string | null = null;
+    let uploadedBackPath: string | null = null;
+    let documentInserted = false;
+    let vehicleWritten = false;
+    let documentId: string | null = null;
+
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session) {
+        throw new Error("Nie si prihlásený.");
+      }
+
+      const membership = await getMyActiveMembership();
+
+      if (!membership) {
+        throw new Error("Nie si prihlásený.");
+      }
+
+      documentId = crypto.randomUUID();
+
+      const frontUniqueName = `${Date.now()}-${crypto.randomUUID()}.webp`;
+      const frontPath = `${session.user.id}/${documentId}/${frontUniqueName}`;
+
+      const { error: frontUploadError } = await supabase.storage
+        .from("ai-inbox-documents")
+        .upload(frontPath, regFrontFile as File, {
+          contentType: (regFrontFile as File).type || "image/webp",
+          cacheControl: "3600",
+          upsert: false,
+        });
+
+      if (frontUploadError) {
+        throw new Error(
+          `Prednú stranu sa nepodarilo uložiť: ${frontUploadError.message}`
+        );
+      }
+
+      uploadedFrontPath = frontPath;
+
+      let backPath: string | null = null;
+
+      if (regBackFile) {
+        const backUniqueName = `${Date.now()}-${crypto.randomUUID()}.webp`;
+        backPath = `${session.user.id}/${documentId}/${backUniqueName}`;
+
+        const { error: backUploadError } = await supabase.storage
+          .from("ai-inbox-documents")
+          .upload(backPath, regBackFile, {
+            contentType: regBackFile.type || "image/webp",
+            cacheControl: "3600",
+            upsert: false,
+          });
+
+        if (backUploadError) {
+          throw new Error(
+            `Zadnú stranu sa nepodarilo uložiť: ${backUploadError.message}`
+          );
+        }
+
+        uploadedBackPath = backPath;
+      }
+
+      // Vozidlo — AŽ TERAZ, po výslovnom potvrdení používateľom. Ak bolo
+      // nájdené existujúce vozidlo (VIN/ŠPZ), aktualizujeme ho namiesto
+      // vytvorenia duplicity; inak vzniká nové vozidlo.
+      let vehicleId: string;
+
+      if (registrationDuplicateVehicle) {
+        const { data: updated, error: updateError } = await supabase
+          .from("vehicles")
+          .update(registrationVehiclePayload(session.user.id))
+          .eq("id", registrationDuplicateVehicle.id)
+          .eq("company_id", membership.company_id)
+          .select("id")
+          .single();
+
+        if (updateError) throw updateError;
+
+        vehicleId = updated.id;
+      } else {
+        const { data: inserted, error: insertVehicleError } = await supabase
+          .from("vehicles")
+          .insert(registrationVehiclePayload(session.user.id))
+          .select("id")
+          .single();
+
+        if (insertVehicleError) throw insertVehicleError;
+
+        vehicleId = inserted.id;
+      }
+
+      vehicleWritten = true;
+
+      const { error: docInsertError } = await supabase
+        .from("documents")
+        .insert({
+          id: documentId,
+          user_id: session.user.id,
+          storage_bucket: "ai-inbox-documents",
+          storage_path: frontPath,
+          original_filename: regFrontFile?.name || null,
+          mime_type: regFrontFile?.type || null,
+          file_size: regFrontFile?.size ?? null,
+          document_type: "vehicle_registration",
+          status: "confirmed",
+          ai_raw_output: {
+            documentType: "vehicle_registration",
+            fields: registrationFields,
+          },
+          extracted_fields: registrationFields,
+          field_confidence: [],
+          note: null,
+        });
+
+      if (docInsertError) throw docInsertError;
+
+      documentInserted = true;
+
+      if (backPath) {
+        const { error: attachmentError } = await supabase
+          .from("document_attachments")
+          .insert({
+            user_id: session.user.id,
+            document_id: documentId,
+            storage_bucket: "ai-inbox-documents",
+            storage_path: backPath,
+            original_filename: regBackFile?.name || null,
+            mime_type: regBackFile?.type || null,
+            file_size: regBackFile?.size ?? null,
+            attachment_type: "vehicle_registration_back",
+          });
+
+        if (attachmentError) {
+          console.error(
+            "Zadnú stranu sa nepodarilo priradiť k dokumentu:",
+            attachmentError
+          );
+        }
+      }
+
+      const { error: linkError } = await supabase
+        .from("document_links")
+        .insert({
+          user_id: session.user.id,
+          document_id: documentId,
+          vehicle_id: vehicleId,
+          machine_id: null,
+          link_type: "primary",
+          confirmed_by_user: true,
+        });
+
+      if (linkError) {
+        console.error(
+          "Priradenie technického preukazu k vozidlu sa nepodarilo uložiť:",
+          linkError
+        );
+      }
+
+      const { error: logError } = await supabase
+        .from("document_review_log")
+        .insert({
+          document_id: documentId,
+          document_ref: documentId,
+          user_id: session.user.id,
+          action: "created",
+        });
+
+      if (logError) {
+        console.error(
+          "Záznam do document_review_log sa nepodarilo uložiť:",
+          logError
+        );
+      }
+
+      const wasUpdate = Boolean(registrationDuplicateVehicle);
+
+      clearRegistrationImages();
+      await Promise.all([
+        loadOtherDocuments(),
+        loadVehicleAndMachineOptions(),
+        refreshVehiclePlanUsage(),
+      ]);
+
+      alert(
+        wasUpdate
+          ? "Existujúce vozidlo bolo aktualizované podľa technického preukazu."
+          : "Nové vozidlo bolo vytvorené a priradené k technickému preukazu."
+      );
+    } catch (saveError: unknown) {
+      if (uploadedFrontPath && !documentInserted) {
+        const pathsToRemove = uploadedBackPath
+          ? [uploadedFrontPath, uploadedBackPath]
+          : [uploadedFrontPath];
+
+        const { error: cleanupError } = await supabase.storage
+          .from("ai-inbox-documents")
+          .remove(pathsToRemove);
+
+        if (cleanupError) {
+          console.error(
+            "Uloženie zlyhalo a osirotené fotografie sa nepodarilo odstrániť:",
+            cleanupError
+          );
+        }
+      }
+
+      const message =
+        saveError instanceof Error ? saveError.message : "Uloženie zlyhalo.";
+
+      if (isPlanLimitReachedError(saveError, "vehicles")) {
+        setRegistrationError(PLAN_LIMIT_MESSAGE);
+        await refreshVehiclePlanUsage();
+      } else if (vehicleWritten && !documentInserted) {
+        // Vozidlo sa už uložilo, ale fotografie technického preukazu sa
+        // nepodarilo priradiť — nehlásiť tichý úspech, jasne to označiť a
+        // nechať používateľa dokument nahrať znova (vozidlo v module
+        // Vozidlá pritom zostáva bezpečne použiteľné).
+        setRegistrationError(
+          `Vozidlo bolo uložené, ale fotografie technického preukazu sa nepodarilo priradiť: ${message}. Skús dokument nahrať znova.`
+        );
+        await Promise.all([
+          loadVehicleAndMachineOptions(),
+          refreshVehiclePlanUsage(),
+        ]);
+      } else {
+        setRegistrationError(message);
+      }
+    } finally {
+      saveRegistrationInProgressRef.current = false;
+      setIsSavingRegistration(false);
     }
   }
 
@@ -2015,6 +2540,18 @@ useEffect(() => {
   };
 }, []);
 
+useEffect(() => {
+  return () => {
+    if (regFrontPreview) URL.revokeObjectURL(regFrontPreview);
+  };
+}, [regFrontPreview]);
+
+useEffect(() => {
+  return () => {
+    if (regBackPreview) URL.revokeObjectURL(regBackPreview);
+  };
+}, [regBackPreview]);
+
 const currentWeightValidation = result
   ? normalizeAndValidateWeights({
       quantity: result.quantity,
@@ -2096,11 +2633,11 @@ function formatDocDate(value: unknown): string {
         <div className="flex items-center gap-4">
   <img
     src="/images/ai-evidencia.png"
-    alt="AI Inbox"
+    alt="Inbox"
     className="h-16 w-16 object-contain"
   />
   <h1 className="text-4xl font-bold text-primary">
-    AI INBOX
+    INBOX
   </h1>
 </div>
 
@@ -2117,6 +2654,271 @@ function formatDocDate(value: unknown): string {
           <p className="mt-6 rounded-2xl border border-amber-200/30 bg-warning-soft p-4 text-sm font-semibold text-amber-400">
             {LEGAL_HOLD_MESSAGE}
           </p>
+        )}
+
+        {role !== "employee" && (
+          <div className="mt-10 rounded-3xl border border-subtle bg-surface-1 p-6 shadow-lg backdrop-blur-xl">
+            <h2 className="text-2xl font-bold text-primary">
+              🚘 Technický preukaz vozidla
+            </h2>
+            <p className="mt-2 text-sm text-secondary">
+              Odfotografuj prednú a zadnú stranu technického preukazu. AI
+              údaje spracuje ako jeden dokument, po tvojej kontrole a
+              potvrdení sa vozidlo vytvorí alebo aktualizuje v module
+              Vozidlá. Fotografie sa uložia spolu s dokumentom v Inboxe.
+            </p>
+
+            <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
+              <section className="rounded-2xl bg-surface-2 p-5 shadow-sm">
+                <h3 className="text-lg font-bold">Predná strana</h3>
+                <p className="mt-1 text-sm text-secondary">
+                  Povinná fotografia
+                </p>
+
+                <div className="mt-4 flex flex-wrap gap-3">
+                  <label className="cursor-pointer rounded-xl bg-blue-600 px-4 py-3 font-medium text-white hover:bg-blue-700">
+                    {isPreparingRegFront ? "Pripravujem..." : "📷 Odfotiť"}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      className="hidden"
+                      disabled={
+                        isProcessingRegistration ||
+                        isPreparingRegFront ||
+                        legalHold
+                      }
+                      onChange={(event) =>
+                        handleRegistrationFileChange("front", event)
+                      }
+                    />
+                  </label>
+
+                  <label className="cursor-pointer rounded-xl border border-subtle bg-surface-1 px-4 py-3 font-medium text-secondary hover:bg-surface-2">
+                    🖼️ Vybrať z galérie
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      disabled={
+                        isProcessingRegistration ||
+                        isPreparingRegFront ||
+                        legalHold
+                      }
+                      onChange={(event) =>
+                        handleRegistrationFileChange("front", event)
+                      }
+                    />
+                  </label>
+                </div>
+
+                {regFrontPreview ? (
+                  <div className="mt-4">
+                    <img
+                      src={regFrontPreview}
+                      alt="Predná strana technického preukazu"
+                      className="h-64 w-full rounded-xl border border-subtle bg-surface-1 object-contain"
+                    />
+                    <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                      <p className="text-xs text-muted-esblu">
+                        Novým výberom fotografiu vymeníš.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => removeRegistrationImage("front")}
+                        disabled={isProcessingRegistration}
+                        className="rounded-lg bg-red-600 px-3 py-2 text-sm text-white hover:bg-red-700 disabled:bg-gray-400"
+                      >
+                        Odstrániť
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-4 rounded-xl border border-dashed border-subtle p-8 text-center text-sm text-muted-esblu">
+                    Predná strana zatiaľ nie je vybraná.
+                  </div>
+                )}
+              </section>
+
+              <section className="rounded-2xl bg-surface-2 p-5 shadow-sm">
+                <h3 className="text-lg font-bold">Zadná strana</h3>
+                <p className="mt-1 text-sm text-secondary">
+                  Voliteľná fotografia
+                </p>
+
+                <div className="mt-4 flex flex-wrap gap-3">
+                  <label className="cursor-pointer rounded-xl bg-blue-600 px-4 py-3 font-medium text-white hover:bg-blue-700">
+                    {isPreparingRegBack ? "Pripravujem..." : "📷 Odfotiť"}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      className="hidden"
+                      disabled={
+                        isProcessingRegistration ||
+                        isPreparingRegBack ||
+                        legalHold
+                      }
+                      onChange={(event) =>
+                        handleRegistrationFileChange("back", event)
+                      }
+                    />
+                  </label>
+
+                  <label className="cursor-pointer rounded-xl border border-subtle bg-surface-1 px-4 py-3 font-medium text-secondary hover:bg-surface-2">
+                    🖼️ Vybrať z galérie
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      disabled={
+                        isProcessingRegistration ||
+                        isPreparingRegBack ||
+                        legalHold
+                      }
+                      onChange={(event) =>
+                        handleRegistrationFileChange("back", event)
+                      }
+                    />
+                  </label>
+                </div>
+
+                {regBackPreview ? (
+                  <div className="mt-4">
+                    <img
+                      src={regBackPreview}
+                      alt="Zadná strana technického preukazu"
+                      className="h-64 w-full rounded-xl border border-subtle bg-surface-1 object-contain"
+                    />
+                    <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                      <p className="text-xs text-muted-esblu">
+                        Novým výberom fotografiu vymeníš.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => removeRegistrationImage("back")}
+                        disabled={isProcessingRegistration}
+                        className="rounded-lg bg-red-600 px-3 py-2 text-sm text-white hover:bg-red-700 disabled:bg-gray-400"
+                      >
+                        Odstrániť
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-4 rounded-xl border border-dashed border-subtle p-8 text-center text-sm text-muted-esblu">
+                    Zadná strana zatiaľ nie je vybraná.
+                  </div>
+                )}
+              </section>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleProcessRegistration}
+              disabled={
+                !regFrontFile ||
+                isProcessingRegistration ||
+                isPreparingRegFront ||
+                isPreparingRegBack ||
+                legalHold
+              }
+              className="mt-6 rounded-xl bg-green-600 px-6 py-3 font-medium text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:bg-gray-400"
+            >
+              {isProcessingRegistration
+                ? "Načítavam údaje..."
+                : "🤖 Načítať údaje pomocou AI"}
+            </button>
+
+            {registrationError && (
+              <p className="mt-4 rounded-xl bg-danger-soft p-4 text-sm font-medium text-red-700">
+                {registrationError}
+              </p>
+            )}
+
+            {registrationFields && (
+              <div className="mt-6 space-y-4 rounded-2xl border border-subtle bg-surface-2 p-5">
+                {registrationDuplicateVehicle ? (
+                  <p className="rounded-xl bg-warning-soft px-4 py-3 text-sm font-bold text-amber-400">
+                    ⚠️ Nájdené existujúce vozidlo (
+                    {registrationDuplicateVehicle.spz || "bez ŠPZ"}). Uložením
+                    sa AKTUALIZUJÚ jeho údaje — nevytvorí sa duplicita.
+                  </p>
+                ) : (
+                  <p className="badge-success rounded-xl p-3 text-sm font-medium">
+                    Vozidlo s touto ŠPZ/VIN sa nenašlo — uložením sa vytvorí
+                    nové vozidlo.
+                  </p>
+                )}
+
+                <h3 className="text-lg font-bold text-primary">
+                  Skontroluj údaje z technického preukazu
+                </h3>
+
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  {[
+                    ["spz", "ŠPZ"],
+                    ["vin", "VIN"],
+                    ["znacka", "Značka"],
+                    ["model", "Model"],
+                    ["rokVyroby", "Rok výroby"],
+                    ["datumPrvejEvidencie", "Dátum prvej evidencie"],
+                    ["palivo", "Palivo"],
+                    ["objemMotora", "Objem motora"],
+                    ["vykon", "Výkon"],
+                    ["farba", "Farba"],
+                    ["prevadzkovaHmotnost", "Prevádzková hmotnosť"],
+                    ["pocetMiest", "Počet miest"],
+                    ["kategoriaVozidla", "Kategória vozidla"],
+                    ["druhVozidla", "Druh vozidla"],
+                    [
+                      "najvacsiaPripustnaCelkovaHmotnost",
+                      "Najväčšia prípustná celková hmotnosť",
+                    ],
+                    ["cisloTechnickehoPreukazu", "Číslo technického preukazu"],
+                  ].map(([key, label]) => (
+                    <label key={key} className="block">
+                      <span className="text-sm font-medium text-secondary">
+                        {label}
+                      </span>
+                      <input
+                        className="mt-1 w-full rounded-xl border border-subtle bg-surface-1 p-3 outline-none"
+                        value={registrationFields[key] ?? ""}
+                        onChange={(e) =>
+                          updateRegistrationField(key, e.target.value)
+                        }
+                      />
+                    </label>
+                  ))}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={saveRegistrationDocument}
+                  disabled={
+                    isSavingRegistration ||
+                    legalHold ||
+                    (!registrationDuplicateVehicle &&
+                      (vehiclePlanUsageLoading || isVehiclePlanLimited))
+                  }
+                  className="w-full rounded-2xl bg-blue-600 px-5 py-4 text-lg font-black text-white disabled:opacity-60"
+                >
+                  {isSavingRegistration
+                    ? "Ukladám..."
+                    : registrationDuplicateVehicle
+                      ? "💾 Aktualizovať vozidlo"
+                      : "💾 Vytvoriť vozidlo"}
+                </button>
+
+                {!registrationDuplicateVehicle &&
+                  !vehiclePlanUsageLoading &&
+                  isVehiclePlanLimited && (
+                    <p className="rounded-xl bg-danger-soft p-3 text-sm font-medium text-red-700">
+                      {PLAN_LIMIT_MESSAGE}
+                    </p>
+                  )}
+              </div>
+            )}
+          </div>
         )}
 
         <div className="mt-10 rounded-3xl border-2 border-dashed border-blue-300 bg-info-soft p-6 text-center">
@@ -3022,7 +3824,7 @@ function formatDocDate(value: unknown): string {
         Ostatné dokumenty
       </h2>
       <p className="mt-1 text-sm text-secondary">
-        PZP, servisné doklady, ostatné dokumenty a priradené faktúry/bločky uložené cez AI Inbox.
+        PZP, servisné doklady, ostatné dokumenty a priradené faktúry/bločky uložené cez Inbox.
       </p>
 
       {otherDocumentsFlatList.length === 0 ? (
