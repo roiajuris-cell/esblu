@@ -96,7 +96,7 @@ export default function LegalAcceptanceGate({
   }, [pathname]);
 
   async function handleConfirm() {
-    if (!confirmedTerms || !confirmedPrivacy) {
+    if (!canSubmit) {
       return;
     }
 
@@ -136,6 +136,15 @@ export default function LegalAcceptanceGate({
   const privacyDoc = pending.find(
     (doc) => doc.document_type === "privacy_policy"
   );
+
+  // Iba dokumenty, ktoré appka aktuálne reálne vyžaduje (t. j. sú v `pending`
+  // — používateľ ich ešte nepotvrdil v aktuálnej required verzii), musia mať
+  // zaškrtnutý checkbox. Ak napr. Terms 1.0 už boli platne potvrdené skôr,
+  // `termsDoc` je undefined (RPC ich vôbec nevrátila ako pending), checkbox
+  // pre Terms sa nevykreslí a `confirmedTerms` teda nikdy nemôže byť true
+  // kliknutím — vyžadovať ho napriek tomu by tlačidlo natrvalo zablokovalo.
+  const canSubmit =
+    (!termsDoc || confirmedTerms) && (!privacyDoc || confirmedPrivacy);
 
   return (
     <>
@@ -215,7 +224,7 @@ export default function LegalAcceptanceGate({
             <button
               type="button"
               onClick={handleConfirm}
-              disabled={!confirmedTerms || !confirmedPrivacy || submitting}
+              disabled={!canSubmit || submitting}
               className="mt-6 w-full rounded-xl bg-blue-600 px-6 py-3 font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-400"
             >
               {submitting ? "Ukladám..." : "Potvrdiť a pokračovať"}
