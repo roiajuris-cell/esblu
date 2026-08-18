@@ -3,7 +3,19 @@
 **Projekt:** Esblu / AssetPilot
 **Prevádzkovateľ:** Jaroslav Juriš, fyzická osoba, Slovenská republika
 **Verzia:** 1.0
-**Dátum:** 2026-08-15 (aktualizované 2026-08-16 — pozri revíznu poznámku nižšie)
+**Dátum:** 2026-08-15 (aktualizované 2026-08-16 a 2026-08-18 — pozri revízne poznámky nižšie)
+
+---
+
+## Revízia 2026-08-18
+
+Zmluvný rámec DPA pre všetkých štyroch hlavných subprocessorov (Supabase, Vercel, OpenAI, Namecheap Private Email) bol overený zakladateľom priamo na skutočných účtoch — podrobný záznam je v `gdpr-subprocessors.md`, sekcia "Register overenia subprocessorov — 2026-08-18". Sekcia 4 nižšie je aktualizovaná zodpovedajúco.
+
+**Dôležité:** "DPA zmluvne začlenená" znamená, že DPA je súčasťou štandardných zmluvných podmienok poskytovateľa a platí automaticky používaním služby — **nejde** o samostatne vyjednaný/podpísaný DPA dokument medzi Esblu a poskytovateľom. Táto revízia takýto samostatný dokument nezistila ani netvrdí, že existuje.
+
+Nerieši sa ňou samostatná, predtým zaznamenaná diskrepancia — Namecheap Private Email chýba vo VEREJNÝCH dokumentoch (`/subprocessors`, Privacy Policy) — tá zostáva otvorená (pozri sekciu 4 nižšie), keďže si vyžaduje schválenie zmeny verejných právnych textov, čo je mimo rozsahu tejto revízie.
+
+Táto revízia nemení žiadny verejný právny text ani appku.
 
 ---
 
@@ -84,10 +96,11 @@ Toto je hlavný ("master") checklist, ktorý má zakladateľ alebo prizvaný pr�
 |---|---|---|
 | Zoznam subprocessorov identifikovaný z kódu | DONE | `gdpr-subprocessors.md` – Supabase, OpenAI, Vercel potvrdené |
 | Región Supabase projektu (EÚ vs. US) potvrdený | **DONE (2026-08-16)** | Potvrdené: `eu-central-1` (Frankfurt, EÚ) |
-| Supabase DPA/SCC akceptovaná | `LEGAL_DECISION_REQUIRED` | Región je potvrdený EÚ, formálna akceptácia Supabase DPA na účte zostáva neoverená – Supabase nie je DPF certifikovaný, spolieha sa na SCC |
-| OpenAI DPA/SCC a data-use/training opt-out status potvrdený na skutočnom účte | **Čiastočne DONE (2026-08-16)** | Potvrdené: nastavenie účtu "Data sharing: Disabled" (spolu s `store: false` v kóde – dvojitá poistka proti použitiu dát na trénovanie). Formálna akceptácia OpenAI DPA na účte zostáva neoverená. |
-| Vercel DPA akceptovaná, región nasadenia overený | **Región DONE (2026-08-16)** | Potvrdené: Vercel Functions bežia v `fra1` (Frankfurt, EÚ). Formálna akceptácia Vercel DPA zostáva neoverená. |
-| **Resend / Namecheap Private Email diskrepancia** | `LEGAL_DECISION_REQUIRED` — **zmenená povaha problému (2026-08-16)** | Resend časť je vyriešená (potvrdené: v kóde sa nepoužíva, verejný `/subprocessors` ho už neuvádza). Namecheap časť sa **obrátila opačným smerom**: potvrdené, že `info@`/`privacy@esblu.com` SÚ reálne hostované cez Namecheap Private Email (nie iba historický omyl v texte) — ide teda o REÁLNEHO subprocessora prijímajúceho osobné údaje (žiadosti dotknutých osôb, support požiadavky), ktorý dnes v žiadnom verejnom dokumente (`/subprocessors`, Privacy Policy) nie je uvedený vôbec. Toto je nová, doteraz nezaznamenaná medzera opačného typu než pôvodná diskrepancia. Vyžaduje samostatné rozhodnutie a explicitné schválenie zmeny verejných právnych textov/`/subprocessors` stránky – **mimo rozsahu tejto (čisto internej) revízie dokumentácie**. |
+| Supabase DPA zmluvný rámec overený | **OVERENÉ (2026-08-18)** | DPA zmluvne začlenená do štandardných podmienok Supabase — nie samostatne podpísaný dokument (pozri terminologické rozlíšenie v revízii vyššie). Supabase nie je DPF certifikovaný, spolieha sa na SCC + UK addendum. Región `eu-central-1` (Frankfurt, EÚ) opätovne potvrdený. Detail: `gdpr-subprocessors.md`. |
+| OpenAI DPA zmluvný rámec a data-use/training opt-out status potvrdený na skutočnom účte | **OVERENÉ (2026-08-18)** | DPA v rámci OpenAI Services Agreement, zmluvne začlenená. Účet: Sharing = Disabled (všetko), API call logging = Enabled per call; appka navyše posiela `store: false` pri každom volaní. Detail: `gdpr-subprocessors.md`. |
+| Vercel DPA zmluvný rámec akceptovaná, región nasadenia overený | **OVERENÉ (2026-08-18)** | DPA pre plán Pro/Enterprise zmluvne začlenená (Esblu na pláne Pro). Región Functions `fra1` (Frankfurt, EÚ) opätovne potvrdený. Novo potvrdené: AI/model improvement opt-in vypnutý. Detail: `gdpr-subprocessors.md`. |
+| Namecheap Private Email DPA zmluvný rámec overený | **OVERENÉ (2026-08-18)** | DPA začlenená do Namecheap zmluvného rámca — nie samostatne podpísaný dokument. Mechanizmus medzinárodných prenosov zostáva neoverený. Toto je NEZÁVISLÉ od riadku nižšie (chýbanie vo verejných dokumentoch) — tá diskrepancia zostáva otvorená. Detail: `gdpr-subprocessors.md`. |
+| **Namecheap Private Email chýba vo verejných dokumentoch** | `LEGAL_DECISION_REQUIRED` — **stav nezmenený od 2026-08-16, Resend položka odstránená ako zastaraná (2026-08-18)** | Potvrdené, že `info@`/`privacy@esblu.com` SÚ reálne hostované cez Namecheap Private Email — ide o REÁLNEHO subprocessora prijímajúceho osobné údaje, ktorý dnes v žiadnom verejnom dokumente (`/subprocessors`, Privacy Policy) nie je uvedený vôbec. DPA zmluvný rámec Namecheapu bol medzičasom overený (riadok vyššie), ale to NERIEŠI túto diskrepanciu — tá sa týka výhradne chýbania vo verejných textoch, nie zmluvného vzťahu s Namecheapom. Vyžaduje samostatné rozhodnutie a explicitné schválenie zmeny verejných právnych textov/`/subprocessors` stránky – **mimo rozsahu internej dokumentačnej revízie**. (Pôvodne táto položka viedla aj samostatnú Resend diskrepanciu — audit 2026-08-18 potvrdil, že Resend sa v kóde/`package.json`/env premenných Esblu nikde nenachádza a je nepoužívané už od predchádzajúcej revízie 2026-08-16; ako aktuálna/otvorená položka je preto odstránená, plné znenie pôvodného zistenia zostáva zdokumentované v `gdpr-subprocessors.md`.) |
 | Verejný zoznam subprocessorov (v Privacy Policy) zodpovedá internému zoznamu | `LEGAL_DECISION_REQUIRED` | Závisí od vyriešenia predchádzajúceho bodu (doplnenie Namecheap do verejných dokumentov) |
 
 ---
@@ -147,11 +160,11 @@ Toto je hlavný ("master") checklist, ktorý má zakladateľ alebo prizvaný pr�
 
 ---
 
-## Prioritný zoznam pred spustením (odporúčané poradie riešenia, aktualizované 2026-08-16)
+## Prioritný zoznam pred spustením (odporúčané poradie riešenia, aktualizované 2026-08-18)
 
-1. **Doplniť Namecheap Private Email do verejnej Privacy Policy a `/subprocessors`** (Resend časť je vyriešená; Namecheap je teraz potvrdený reálny subprocessor, ktorý v žiadnom verejnom dokumente chýba — vyžaduje samostatné schválenie zmeny verejných textov, mimo rozsahu tejto revízie)
+1. **Doplniť Namecheap Private Email do verejnej Privacy Policy a `/subprocessors`** (Resend časť je vyriešená; Namecheap je potvrdený reálny subprocessor s overeným DPA zmluvným rámcom, ale v žiadnom verejnom dokumente chýba — vyžaduje samostatné schválenie zmeny verejných textov, mimo rozsahu internej revízie)
 2. **Overiť RLS politiky** proti cross-tenant úniku dát (najvyššie bezpečnostné riziko)
-3. **Potvrdiť formálnu akceptáciu Supabase/Vercel/OpenAI DPA na účtoch** (regióny Supabase `eu-central-1` a Vercel `fra1` už potvrdené, OpenAI data-sharing disabled tiež — zostáva formálna DPA akceptácia)
+3. ~~Potvrdiť zmluvný rámec DPA Supabase/Vercel/OpenAI/Namecheap na účtoch~~ — **OVERENÉ (2026-08-18)**, pozri sekciu 4 vyššie a `gdpr-subprocessors.md`
 4. **Doplniť registračné údaje spoločnosti** (IČO, DIČ, adresa) všade, kde sú momentálne TODO
 5. **Posúdiť potrebu DPIA** (vzhľadom na citlivosť dokumentového modulu)
 6. Dokončiť legal acceptance model (IN PROGRESS)
@@ -161,6 +174,8 @@ Toto je hlavný ("master") checklist, ktorý má zakladateľ alebo prizvaný pr�
 10. ~~Implementovať company-level DPA acceptance~~ — **DONE (2026-08-16)**, pozri sekciu 1 vyššie
 
 Vybavené od poslednej verzie checklistu (2026-08-15 → 2026-08-16): company-level DPA acceptance, samoobslužné zrušenie účtu/firmy vrátane Storage cleanup, `vehicle_photos`, potvrdenie regiónov Supabase/Vercel, potvrdenie OpenAI data-sharing nastavenia, potvrdenie Namecheap ako reálneho mailbox hostingu, právne rozhodnutie o redakcii/monitoringu.
+
+Vybavené od poslednej verzie checklistu (2026-08-16 → 2026-08-18): overený zmluvný rámec DPA pre Supabase, Vercel, OpenAI a Namecheap Private Email (podrobne v `gdpr-subprocessors.md`); doplnkovo potvrdené Vercel plán Pro + AI opt-in vypnutý a OpenAI API call logging/Sharing nastavenia. Zostáva otvorená: chýbanie Namecheapu vo verejných dokumentoch (položka 1 vyššie, samostatné rozhodnutie mimo rozsahu tejto revízie).
 
 ---
 
