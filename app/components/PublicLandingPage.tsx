@@ -247,12 +247,12 @@ export default function PublicLandingPage() {
               </p>
 
               <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-                <Link
-                  href="/login"
+                <a
+                  href="mailto:info@esblu.com"
                   className="btn-primary inline-flex min-h-12 items-center justify-center px-6 py-3"
                 >
-                  Vyskúšať zdarma
-                </Link>
+                  Požiadať o beta prístup
+                </a>
                 <Link
                   href="/login"
                   className="btn-secondary inline-flex min-h-12 items-center justify-center px-6 py-3"
@@ -261,8 +261,8 @@ export default function PublicLandingPage() {
                 </Link>
               </div>
               <p className="mt-4 text-sm text-muted-esblu">
-                Bez platobnej karty. Bezplatný plán je obmedzený počtom
-                položiek.
+                Esblu je momentálne v uzavretej beta verzii — nová
+                registrácia je dostupná iba pre schválených testerov.
               </p>
             </div>
 
@@ -539,16 +539,18 @@ export default function PublicLandingPage() {
                 ))}
               </ul>
 
-              <Link
-                href="/login"
+              <a
+                href="mailto:info@esblu.com"
                 className="btn-primary mt-8 flex min-h-12 w-full items-center justify-center px-6 py-3"
               >
-                Začať zdarma
-              </Link>
+                Požiadať o beta prístup
+              </a>
             </div>
 
             <p className="mx-auto mt-7 max-w-2xl text-center leading-7 text-secondary">
-              Platená verzia s vyššími limitmi sa pripravuje. Registrácia do
+              Platená verzia s vyššími limitmi sa pripravuje. Esblu je
+              momentálne v uzavretej beta verzii — noví používatelia sa do
+              nej dostanú po individuálnom schválení, registrácia do
               bezplatnej verzie nezaručuje konkrétnu cenu ani funkcie budúcej
               platenej verzie.
             </p>
@@ -608,16 +610,16 @@ export default function PublicLandingPage() {
               Vyskúšajte, či vám Esblu zjednoduší firemnú evidenciu.
             </h2>
             <p className="mx-auto mt-4 max-w-2xl text-lg leading-8 text-[#051221]/80">
-              Zaregistrujte sa zdarma a otestujte základné funkcie bezplatnej
-              testovacej verzie.
+              Esblu je momentálne v uzavretej beta verzii. Napíšte nám a po
+              schválení vám radi otvoríme prístup zdarma.
             </p>
             <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-              <Link
-                href="/login"
+              <a
+                href="mailto:info@esblu.com"
                 className="inline-flex min-h-12 items-center justify-center rounded-xl bg-page-bg px-6 py-3 font-bold text-primary transition hover:bg-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#051221] focus-visible:ring-offset-2"
               >
-                Vyskúšať zdarma
-              </Link>
+                Požiadať o beta prístup
+              </a>
               <Link
                 href="/login"
                 className="inline-flex min-h-12 items-center justify-center rounded-xl px-6 py-3 font-bold text-[#051221] underline decoration-[#051221]/40 underline-offset-4 transition hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#051221]"

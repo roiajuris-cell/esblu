@@ -4,7 +4,11 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import { ensureMyOwnerCompany } from "@/lib/company";
+import {
+  ensureMyOwnerCompany,
+  getEnsureOwnerCompanyErrorMessage,
+  isBetaAccessRequiredError,
+} from "@/lib/company";
 import { acceptLegalDocumentAtRegistration } from "@/lib/legal-acceptance";
 import { REQUIRED_ACCEPTANCE_DOCUMENTS } from "@/lib/legal-config";
 
@@ -24,11 +28,17 @@ import { REQUIRED_ACCEPTANCE_DOCUMENTS } from "@/lib/legal-config";
 // emailRedirectTo odkaz z registračného flow, teda cestou (route), nie
 // odvodeným stavom dát.
 
-type PageState = "checking" | "no-session" | "bootstrapping" | "error";
+type PageState =
+  | "checking"
+  | "no-session"
+  | "bootstrapping"
+  | "error"
+  | "beta-required";
 
 export default function OnboardingCompanyPage() {
   const router = useRouter();
   const [state, setState] = useState<PageState>("checking");
+  const [betaMessage, setBetaMessage] = useState("");
 
   // Zámerne žiadny synchrónny setState pred prvým `await` — prvý riadok je
   // `await supabase.auth.getSession()` (rovnaký vzor ako loadInvite() v
@@ -79,6 +89,22 @@ export default function OnboardingCompanyPage() {
       router.refresh();
     } catch (error) {
       console.error("Owner company bootstrap zlyhal:", error);
+
+      // Closed Beta defense-in-depth (pozri
+      // supabase/migrations/20260816130000_add_closed_beta_allowlist.sql):
+      // za normálnych okolností by neschválený e-mail nikdy nedostal
+      // session, lebo signUp() by bol zamietnutý už Auth hookom
+      // (esblu_before_user_created_beta_gate) skôr, než by auth.users
+      // vôbec vznikol. Ak sa napriek tomu sem dostal (napr. hook ešte nie
+      // je zapnutý v Supabase Dashboarde), odhlás ho — nesmie zostať
+      // prihlásený v stave "má účet, ale nikdy nebude mať firmu".
+      if (isBetaAccessRequiredError(error)) {
+        setBetaMessage(getEnsureOwnerCompanyErrorMessage(error));
+        await supabase.auth.signOut();
+        setState("beta-required");
+        return;
+      }
+
       setState("error");
     }
   }
@@ -102,6 +128,21 @@ export default function OnboardingCompanyPage() {
             ? "Overujem potvrdenie e-mailu..."
             : "Zakladám firemný účet..."}
         </p>
+      </Centered>
+    );
+  }
+
+  if (state === "beta-required") {
+    return (
+      <Centered>
+        <h1 className="text-2xl font-bold text-primary">Uzavretá beta</h1>
+        <p className="mt-3 text-secondary">{betaMessage}</p>
+        <Link
+          href="/login"
+          className="mt-6 inline-block rounded-xl bg-blue-600 px-6 py-3 font-semibold text-white hover:bg-blue-700"
+        >
+          Prejsť na prihlásenie
+        </Link>
       </Centered>
     );
   }

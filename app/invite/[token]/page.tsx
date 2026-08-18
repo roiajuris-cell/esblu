@@ -147,6 +147,14 @@ export default function InviteAcceptPage() {
       password,
       options: {
         emailRedirectTo: `https://esblu.com/invite/${token}`,
+        // Closed Beta (supabase/migrations/20260816130000_add_closed_beta_
+        // allowlist.sql): raw invite token sa posiela ako user_metadata, aby
+        // ho Auth hook esblu_before_user_created_beta_gate mohol NEZÁVISLE
+        // overiť voči company_invites a obísť beta gate — pozvaný
+        // admin/employee nikdy nepotrebuje byť na beta_allowlist. Samotné
+        // prijatie pozvánky (finalizeAcceptance → acceptCompanyInvite)
+        // zostáva úplne nezmenené.
+        data: { esblu_invite_token: token },
       },
     });
 

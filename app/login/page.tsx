@@ -4,9 +4,21 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import { ensureMyOwnerCompany } from "@/lib/company";
+import { ensureMyOwnerCompany, getEnsureOwnerCompanyErrorMessage } from "@/lib/company";
 import { acceptLegalDocumentAtRegistration } from "@/lib/legal-acceptance";
 import { REQUIRED_ACCEPTANCE_DOCUMENTS } from "@/lib/legal-config";
+
+// Closed Beta (supabase/migrations/20260816130000_add_closed_beta_allowlist.sql):
+// verejná owner registrácia je dočasne obmedzená iba na schválených beta
+// testerov (server-side e-mail allowlist). Primárne vynútenie beží v
+// Supabase Auth hooku "Before User Created"
+// (esblu_before_user_created_beta_gate) — pre neschválený e-mail sa
+// auth.users vôbec nevytvorí a signUp() nižšie vráti chybu priamo s touto
+// slovenskou správou. ensureMyOwnerCompany() dole má rovnaký check ako
+// defense-in-depth (pre prípad, že by Auth hook v Dashboarde ešte nebol
+// zapnutý). Bežné prihlásenie (login()) a existujúci /invite/[token] flow
+// touto zmenou nie sú nijako dotknuté.
+const CLOSED_BETA_ERROR_MARKER = "uzavretej beta verzii";
 
 // DÔLEŽITÉ: táto stránka slúži AJ existujúcim používateľom (owner, admin,
 // employee) na bežné prihlásenie — login() preto NIKDY nesmie volať
@@ -156,7 +168,15 @@ export default function LoginPage() {
 
     if (error) {
       setLoading(false);
-      alert("Registrácia sa nepodarila: " + error.message);
+      // Closed Beta: ak signUp() zamietol Auth hook
+      // (esblu_before_user_created_beta_gate), error.message je už
+      // hotová, zrozumiteľná slovenská správa — zobraz ju priamo bez
+      // technického prefixu.
+      alert(
+        error.message.includes(CLOSED_BETA_ERROR_MARKER)
+          ? error.message
+          : "Registrácia sa nepodarila: " + error.message
+      );
       return;
     }
 
@@ -166,7 +186,22 @@ export default function LoginPage() {
     if (data.session) {
       // Explicitný owner-registration flow — session prišla hneď (email
       // confirmation je vypnuté alebo bolo už predtým potvrdené).
-      await ensureMyOwnerCompany();
+      try {
+        await ensureMyOwnerCompany();
+      } catch (bootstrapError) {
+        // Defense-in-depth beta check v esblu_ensure_my_owner_company
+        // zlyhal (bežne by k tomuto nemalo dôjsť — neschválený signUp() by
+        // mal byť zamietnutý už vyššie priamo Auth hookom). Odhlás
+        // používateľa, aby nezostal prihlásený v stave "má účet, ale nikdy
+        // nebude mať firmu", a nechaj ho na prihlasovacej obrazovke so
+        // zrozumiteľnou správou.
+        console.error("Owner company bootstrap zlyhal:", bootstrapError);
+        await supabase.auth.signOut();
+        setLoading(false);
+        alert(getEnsureOwnerCompanyErrorMessage(bootstrapError));
+        setMode("login");
+        return;
+      }
 
       // Zápis acceptance hneď, keď už máme session — checkboxy boli
       // povinne odškrtnuté vyššie. Ak session príde až po potvrdení
@@ -247,6 +282,18 @@ async function resetPassword() {
         {accountDeletedNotice && (
           <p className="mt-4 rounded-xl border border-subtle bg-surface-2 px-4 py-3 text-sm text-secondary">
             Účet bol zrušený.
+          </p>
+        )}
+
+        {mode === "register" && (
+          <p className="mt-4 rounded-xl bg-info-soft px-4 py-3 text-sm leading-6 text-blue-800">
+            Esblu je momentálne v uzavretej beta verzii. Registrácia novej
+            firmy je dostupná iba pre schválených beta testerov. Ak máte
+            schválený prístup, pokračujte nižšie — inak nás kontaktujte na{" "}
+            <a href="mailto:info@esblu.com" className="font-semibold underline">
+              info@esblu.com
+            </a>
+            .
           </p>
         )}
 

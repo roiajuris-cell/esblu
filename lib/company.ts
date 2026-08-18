@@ -145,13 +145,67 @@ export type InvitePreview = {
 export async function ensureMyOwnerCompany(): Promise<EnsureOwnerCompanyResult | null> {
   const { data, error } = await supabase.rpc("esblu_ensure_my_owner_company");
 
+  // DÔLEŽITÉ (Closed Beta): predtým sa chyba iba logovala a vracal sa null,
+  // čím volajúci nevedel rozlíšiť "žiadna firma sa nezaložila, lebo už
+  // nejakú má" od "žiadna firma sa nezaložila, lebo RPC zlyhalo" (napr.
+  // ESBLU_BETA_ACCESS_REQUIRED — pozri
+  // supabase/migrations/20260816130000_add_closed_beta_allowlist.sql).
+  // Chyba sa preto teraz vyhadzuje, rovnako ako pri ostatných RPC funkciách
+  // v tomto module (acceptCompanyInvite, createCompanyInvite) — volajúci
+  // (app/login/page.tsx, app/onboarding/company/page.tsx) ju musí odchytiť
+  // a zobraziť používateľovi zrozumiteľnú správu cez
+  // getEnsureOwnerCompanyErrorMessage nižšie.
   if (error) {
-    console.error("ensureMyOwnerCompany zlyhalo:", error.message);
-    return null;
+    throw error;
   }
 
   const row = Array.isArray(data) ? data[0] : data;
   return row ?? null;
+}
+
+const ENSURE_OWNER_COMPANY_ERROR_MESSAGES: Record<string, string> = {
+  ESBLU_BETA_ACCESS_REQUIRED:
+    "Esblu je momentálne v uzavretej beta verzii. Registrácia novej firmy je dostupná iba pre schválených beta testerov. Ak máte záujem, napíšte nám na info@esblu.com.",
+  NOT_AUTHENTICATED: "Najprv sa prihláste alebo si vytvorte účet.",
+};
+
+/**
+ * Zrozumiteľná slovenská správa pre chybu z ensureMyOwnerCompany(). Pozn.:
+ * bežný scenár neschváleného beta signup-u sa dnes odchytí už skôr — priamo
+ * v supabase.auth.signUp() vďaka Auth hooku
+ * esblu_before_user_created_beta_gate (auth.users sa vtedy vôbec
+ * nevytvorí). Táto funkcia pokrýva iba defense-in-depth prípad (napr. Auth
+ * hook zatiaľ nie je zapnutý v Supabase Dashboarde, alebo existuje staršie
+ * auth.users bez firmy).
+ */
+export function getEnsureOwnerCompanyErrorMessage(error: unknown): string {
+  const text =
+    error instanceof Error
+      ? error.message
+      : typeof error === "string"
+        ? error
+        : "";
+
+  for (const [code, message] of Object.entries(
+    ENSURE_OWNER_COMPANY_ERROR_MESSAGES
+  )) {
+    if (text.includes(code)) {
+      return message;
+    }
+  }
+
+  return "Firemný účet sa nepodarilo založiť. Skúste to prosím znova.";
+}
+
+export function isBetaAccessRequiredError(error: unknown): boolean {
+  const text =
+    error instanceof Error
+      ? error.message
+      : typeof error === "string"
+        ? error
+        : "";
+
+  return text.includes("ESBLU_BETA_ACCESS_REQUIRED");
 }
 
 export async function listMyCompanyMembers(): Promise<CompanyMemberRow[]> {
