@@ -54,9 +54,17 @@ export default function LoginPage() {
   const [agreedPrivacy, setAgreedPrivacy] = useState(false);
 
   const [accountDeletedNotice, setAccountDeletedNotice] = useState(false);
+  // Nastaví sa pri vynútenom odhlásení po ČIASTOČNE dokončenom zrušení účtu
+  // (app/nastavenia → confirmDeleteAccount(), keď server vráti
+  // `partial: true` — DB/membership časť je nevrátne zmazaná, ale
+  // auth.users účet ostal existovať). Odlišná správa od bežného
+  // accountDeletedNotice, lebo tu treba používateľa nasmerovať na podporu,
+  // nie iba potvrdiť úspech.
+  const [accountDeletionPartialNotice, setAccountDeletionPartialNotice] =
+    useState(false);
 
-  // Jednorazová správa po úspešnom samoobslužnom zrušení účtu
-  // (app/nastavenia → lib/account-deletion.ts). Číta sa priamo z
+  // Jednorazová správa po úspešnom (alebo čiastočnom) samoobslužnom zrušení
+  // účtu (app/nastavenia → lib/account-deletion.ts). Číta sa priamo z
   // window.location.search (nie useSearchParams()) zámerne — vyhýba sa
   // tak Suspense-boundary požiadavke Next.js pre useSearchParams() pri
   // statickom prerenderi tejto stránky. Query parameter sa po zobrazení
@@ -72,15 +80,23 @@ export default function LoginPage() {
       }
 
       const params = new URLSearchParams(window.location.search);
+      const isFullyDeleted = params.get("ucet-zruseny") === "1";
+      const isPartiallyDeleted =
+        params.get("ucet-zruseny-ciastocne") === "1";
 
-      if (params.get("ucet-zruseny") !== "1") {
+      if (!isFullyDeleted && !isPartiallyDeleted) {
         return;
       }
 
       await Promise.resolve();
 
-      setAccountDeletedNotice(true);
-      params.delete("ucet-zruseny");
+      if (isPartiallyDeleted) {
+        setAccountDeletionPartialNotice(true);
+        params.delete("ucet-zruseny-ciastocne");
+      } else {
+        setAccountDeletedNotice(true);
+        params.delete("ucet-zruseny");
+      }
 
       const newSearch = params.toString();
       const newUrl = `${window.location.pathname}${newSearch ? `?${newSearch}` : ""}`;
@@ -282,6 +298,17 @@ async function resetPassword() {
         {accountDeletedNotice && (
           <p className="mt-4 rounded-xl border border-subtle bg-surface-2 px-4 py-3 text-sm text-secondary">
             Účet bol zrušený.
+          </p>
+        )}
+
+        {accountDeletionPartialNotice && (
+          <p className="mt-4 rounded-xl bg-warning-soft px-4 py-3 text-sm leading-6 text-amber-400">
+            Zrušenie účtu sa nepodarilo úplne dokončiť. Odhlásili sme ťa z
+            bezpečnostných dôvodov — kontaktuj prosím podporu na{" "}
+            <a href="mailto:info@esblu.com" className="font-semibold underline">
+              info@esblu.com
+            </a>
+            , overíme a dokončíme zrušenie účtu.
           </p>
         )}
 

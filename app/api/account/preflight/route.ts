@@ -45,10 +45,52 @@ export async function GET(req: Request) {
     }
 
     if (!membership) {
-      return Response.json(
-        { error: "Nemáš aktívne členstvo v žiadnej firme." },
-        { status: 404 }
-      );
+      // Orphan kontrola (bez novej RPC — priamy service-role SELECT):
+      // auth.users existuje, žiadny aktívny company_members riadok. Pred
+      // tým, než appka ponúkne samoobslužné zrušenie účtu, MUSÍ overiť, že
+      // tento človek nie je owner_id žiadnej firmy (dátová anomália — napr.
+      // pozostatok po neúplne dokončenom zrušení účtu) — inak by recovery
+      // flow mohol obísť owner-only "ZRUŠIŤ FIRMU" potvrdzovací flow.
+      const { data: ownedCompany, error: ownedCompanyError } = await admin
+        .from("companies")
+        .select("id")
+        .eq("owner_id", user.id)
+        .limit(1)
+        .maybeSingle();
+
+      if (ownedCompanyError) {
+        console.error(
+          "account/preflight: overenie owner_id zlyhalo:",
+          ownedCompanyError.code,
+          ownedCompanyError.message
+        );
+        return Response.json(
+          { error: "Nepodarilo sa overiť členstvo vo firme." },
+          { status: 500 }
+        );
+      }
+
+      if (ownedCompany) {
+        // Fail-closed: nikdy neponúkni recovery-delete owner_id-vlastníkovi
+        // bez aktívneho membershipu — vyžaduje manuálne vyriešenie.
+        console.error(
+          "account/preflight: owner_id-anomália (companies.owner_id bez aktívneho company_members):",
+          user.id
+        );
+        return Response.json(
+          {
+            error:
+              "Tento účet je vlastníkom firmy, ale nemá aktívne členstvo. Kontaktuj podporu.",
+          },
+          { status: 409 }
+        );
+      }
+
+      return Response.json({
+        role: null,
+        otherActiveMembersCount: 0,
+        orphan: true,
+      });
     }
 
     let otherActiveMembersCount = 0;
@@ -79,6 +121,7 @@ export async function GET(req: Request) {
     return Response.json({
       role: membership.role,
       otherActiveMembersCount,
+      orphan: false,
     });
   } catch (error) {
     console.error(

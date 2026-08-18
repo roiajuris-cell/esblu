@@ -200,6 +200,144 @@ async function removeStorageTargets(
   return removed;
 }
 
+// -----------------------------------------------------------------------------
+// Orphan recovery — BEZ novej SECURITY DEFINER RPC. Rieši stav, kedy
+// auth.users existuje, ale volajúci nemá žiadny aktívny company_members
+// riadok (napr. pozostatok po skôr neúplne dokončenom zrušení účtu — pozri
+// "partial" vetvy nižšie v owner/member flow). company_members samotný sa
+// tu už nedá znovu skontrolovať (volajúci ho poslednýkrát mal, keď sa
+// dostal do tohto stavu), takže jediná ďalšia fail-closed poistka pred
+// akoukoľvek deštruktívnou akciou je: over, že tento človek nie je
+// owner_id ŽIADNEJ firmy (companies.owner_id) — inak by táto vetva mohla
+// obísť owner-only "ZRUŠIŤ FIRMU" potvrdzovací flow. Ak je čokoľvek
+// nejednoznačné, funkcia ZLYHÁ (fail-closed), nikdy nepokračuje.
+//
+// Poradie (odlišné od owner/member flow vyššie — orphan nemá žiadne
+// company-scoped dáta, ktoré treba pred zmazaním ochrániť):
+//   1. over, že nie je owner_id žiadnej firmy (fail-closed, 409 ak je),
+//   2. auth.admin.deleteUser() — PRVÝ a JEDINÝ deštruktívny krok. Ak zlyhá,
+//      NIČ ĎALŠIE sa nemaže — bezpečne opakovateľná chyba (žiadny partial
+//      stav, lebo nič sa ešte nezmenilo),
+//   3. post-verifikácia (getUserById),
+//   4. best-effort dočistenie osirelého public.settings riadku (service-role
+//      DELETE, žiadna nová RPC). user_legal_acceptances a company_members sa
+//      NEMAŽÚ ručne — FK audit potvrdil ON DELETE CASCADE z auth.users pre
+//      obe tabuľky, takže zaniknú automaticky pri kroku 2.
+// -----------------------------------------------------------------------------
+async function handleOrphanDelete(
+  admin: SupabaseClient,
+  userId: string
+): Promise<Response> {
+  const { data: ownedCompany, error: ownedCompanyError } = await admin
+    .from("companies")
+    .select("id")
+    .eq("owner_id", userId)
+    .limit(1)
+    .maybeSingle();
+
+  if (ownedCompanyError) {
+    console.error(
+      "account/delete (orphan): overenie owner_id zlyhalo:",
+      ownedCompanyError.code,
+      ownedCompanyError.message
+    );
+    return Response.json(
+      { error: "Nepodarilo sa overiť členstvo vo firme." },
+      { status: 500 }
+    );
+  }
+
+  if (ownedCompany) {
+    // Fail-closed: owner_id-anomália (owner bez aktívneho membershipu) sa
+    // NIKDY nesmie vyriešiť touto zjednodušenou vetvou — vyžaduje manuálne
+    // vyriešenie/podporu, nie automatické zmazanie.
+    console.error(
+      "account/delete (orphan): owner_id-anomália (companies.owner_id bez aktívneho company_members):",
+      userId
+    );
+    return Response.json(
+      {
+        error:
+          "Tento účet je vlastníkom firmy, ale nemá aktívne členstvo. Kontaktuj podporu.",
+      },
+      { status: 409 }
+    );
+  }
+
+  // Genuine non-owner orphan potvrdený — auth.admin.deleteUser() je prvý a
+  // jediný deštruktívny krok.
+  const { error: deleteAuthError } = await admin.auth.admin.deleteUser(
+    userId
+  );
+
+  if (deleteAuthError) {
+    console.error(
+      "account/delete (orphan): auth.admin.deleteUser zlyhalo:",
+      JSON.stringify({
+        userId,
+        name: deleteAuthError.name,
+        status: deleteAuthError.status,
+        code: deleteAuthError.code,
+        message: deleteAuthError.message,
+      })
+    );
+    // NIE partial — nič sa ešte nezmenilo (membership už predtým
+    // neexistoval, toto bol jediný pokus o zmazanie) — bezpečne
+    // opakovateľná chyba.
+    return Response.json(
+      {
+        error:
+          "Zrušenie účtu zlyhalo. Skús to prosím znova alebo kontaktuj podporu.",
+      },
+      { status: 500 }
+    );
+  }
+
+  const { data: verifyUser } = await admin.auth.admin.getUserById(userId);
+
+  if (verifyUser?.user) {
+    console.error(
+      "account/delete (orphan): post-verifikácia zlyhala — auth.users stále existuje po deleteUser().",
+      JSON.stringify({ userId })
+    );
+    return Response.json(
+      { error: "Zrušenie účtu sa nepodarilo úplne overiť. Kontaktuj podporu." },
+      { status: 500 }
+    );
+  }
+
+  // auth.users je už nenávratne zmazaný. Dočistenie osirelého settings
+  // riadku je "best effort" — jeho prípadné zlyhanie sa loguje pre podporu,
+  // ale klientovi sa napriek tomu vráti success (session sa musí ukončiť
+  // bez ohľadu naň, auth účet skutočne zanikol).
+  const { error: settingsCleanupError, count: settingsRemovedCount } =
+    await admin
+      .from("settings")
+      .delete({ count: "exact" })
+      .eq("user_id", userId);
+
+  if (settingsCleanupError) {
+    console.error(
+      "account/delete (orphan): dočistenie settings zlyhalo (auth.users už zmazaný):",
+      JSON.stringify({
+        userId,
+        code: settingsCleanupError.code,
+        message: settingsCleanupError.message,
+      })
+    );
+  }
+
+  return Response.json({
+    success: true,
+    role: null,
+    orphan: true,
+    storageRemovedCount: 0,
+    dbSummary: {
+      settings: settingsCleanupError ? null : (settingsRemovedCount ?? 0),
+    },
+  });
+}
+
 export async function POST(req: Request) {
   try {
     const { user, error: authError } = await verifyRequestUser(req);
@@ -230,10 +368,7 @@ export async function POST(req: Request) {
     }
 
     if (!membership) {
-      return Response.json(
-        { error: "Nemáš aktívne členstvo v žiadnej firme." },
-        { status: 404 }
-      );
+      return handleOrphanDelete(admin, user.id);
     }
 
     if (membership.role === "owner") {
@@ -289,14 +424,29 @@ export async function POST(req: Request) {
         await admin.auth.admin.deleteUser(user.id);
 
       if (deleteAuthError) {
+        // Granulárne, bezpečné (bez secretov) logovanie — .status/.code sú
+        // štruktúrované info z GoTrue REST API (AuthApiError), nikdy
+        // citlivé. Toto je JEDINÝ spôsob, ako z Vercel logov zistiť presnú
+        // príčinu zlyhania deleteUser() (predtým sa logovala iba .message).
         console.error(
           "account/delete (owner): auth.admin.deleteUser zlyhalo:",
-          deleteAuthError.message
+          JSON.stringify({
+            userId: user.id,
+            name: deleteAuthError.name,
+            status: deleteAuthError.status,
+            code: deleteAuthError.code,
+            message: deleteAuthError.message,
+          })
         );
+        // partial=true: firemné dáta/DB časť je NEVRATNE zmazaná (RPC
+        // uspela), ale auth.users účet ostáva existovať — klient MUSÍ na
+        // tento flag reagovať vynúteným odhlásením (pozri
+        // app/nastavenia/page.tsx confirmDeleteAccount()).
         return Response.json(
           {
             error:
               "Firemné dáta boli zmazané, ale samotný prihlasovací účet sa nepodarilo dokončiť zrušiť. Kontaktuj podporu.",
+            partial: true,
           },
           { status: 500 }
         );
@@ -308,12 +458,14 @@ export async function POST(req: Request) {
 
       if (verifyUser?.user) {
         console.error(
-          "account/delete (owner): post-verifikácia zlyhala — auth.users stále existuje po deleteUser()."
+          "account/delete (owner): post-verifikácia zlyhala — auth.users stále existuje po deleteUser().",
+          JSON.stringify({ userId: user.id })
         );
         return Response.json(
           {
             error:
               "Zrušenie účtu sa nepodarilo úplne overiť. Kontaktuj podporu.",
+            partial: true,
           },
           { status: 500 }
         );
@@ -365,14 +517,31 @@ export async function POST(req: Request) {
     );
 
     if (deleteAuthError) {
+      // Granulárne, bezpečné (bez secretov) logovanie — .status/.code sú
+      // štruktúrované info z GoTrue REST API (AuthApiError), nikdy citlivé.
+      // Toto je JEDINÝ spôsob, ako z Vercel logov zistiť presnú príčinu
+      // zlyhania deleteUser() (predtým sa logovala iba .message).
       console.error(
         "account/delete (member): auth.admin.deleteUser zlyhalo:",
-        deleteAuthError.message
+        JSON.stringify({
+          userId: user.id,
+          role: membership.role,
+          name: deleteAuthError.name,
+          status: deleteAuthError.status,
+          code: deleteAuthError.code,
+          message: deleteAuthError.message,
+        })
       );
+      // partial=true: membership/settings sú NEVRATNE zmazané (RPC uspela),
+      // ale auth.users účet ostáva existovať — klient MUSÍ na tento flag
+      // reagovať vynúteným odhlásením (pozri app/nastavenia/page.tsx
+      // confirmDeleteAccount()), aby nezostala aktívna session pre už
+      // odstránené členstvo.
       return Response.json(
         {
           error:
             "Členstvo bolo zrušené, ale samotný prihlasovací účet sa nepodarilo dokončiť zrušiť. Kontaktuj podporu.",
+          partial: true,
         },
         { status: 500 }
       );
@@ -382,10 +551,14 @@ export async function POST(req: Request) {
 
     if (verifyUser?.user) {
       console.error(
-        "account/delete (member): post-verifikácia zlyhala — auth.users stále existuje po deleteUser()."
+        "account/delete (member): post-verifikácia zlyhala — auth.users stále existuje po deleteUser().",
+        JSON.stringify({ userId: user.id, role: membership.role })
       );
       return Response.json(
-        { error: "Zrušenie účtu sa nepodarilo úplne overiť. Kontaktuj podporu." },
+        {
+          error: "Zrušenie účtu sa nepodarilo úplne overiť. Kontaktuj podporu.",
+          partial: true,
+        },
         { status: 500 }
       );
     }

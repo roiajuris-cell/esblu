@@ -11,9 +11,42 @@ import { supabase } from "@/lib/supabase";
 
 const CONFIRM_PHRASE = "ZRUŠIŤ FIRMU";
 
+// Marker prefix pre chyby, kde server vrátil `partial: true` — DB/membership
+// časť je NEVRATNE zmazaná, ale auth.users účet ostal existovať (pozri
+// app/api/account/delete/route.ts). Volajúci (app/nastavenia) MUSÍ v tomto
+// prípade vynútiť odhlásenie + presmerovanie namiesto ponechania session
+// aktívnej — session by inak zostala platná pre už zrušené/nekonzistentné
+// členstvo. Rovnaký vzor message-prefix routovania ako inde v appke (napr.
+// isBetaAccessRequiredError v lib/company.ts).
+export const ACCOUNT_DELETION_PARTIAL_MARKER =
+  "ESBLU_ACCOUNT_DELETION_PARTIAL:";
+
+export function isPartialAccountDeletionError(error: unknown): boolean {
+  const text =
+    error instanceof Error
+      ? error.message
+      : typeof error === "string"
+        ? error
+        : "";
+
+  return text.startsWith(ACCOUNT_DELETION_PARTIAL_MARKER);
+}
+
+export function stripPartialAccountDeletionMarker(message: string): string {
+  return message.startsWith(ACCOUNT_DELETION_PARTIAL_MARKER)
+    ? message.slice(ACCOUNT_DELETION_PARTIAL_MARKER.length)
+    : message;
+}
+
 export type AccountDeletionPreflight = {
-  role: "owner" | "admin" | "employee";
+  // null = žiadny aktívny company_members riadok. Ak zároveň orphan=true,
+  // ide o bezpečne rozpoznaného "orphan" účet (auth.users existuje, žiadne
+  // členstvo, NIE je owner_id žiadnej firmy) — appka mu smie ponúknuť
+  // rovnaké samoobslužné zrušenie účtu ako admin/employee (pozri
+  // app/api/account/preflight/route.ts, app/api/account/delete/route.ts).
+  role: "owner" | "admin" | "employee" | null;
   otherActiveMembersCount: number;
+  orphan: boolean;
 };
 
 async function getAccessToken(): Promise<string> {
@@ -64,7 +97,17 @@ export async function deleteMyAccount(confirmPhrase?: string): Promise<void> {
   const body = await response.json();
 
   if (!response.ok || !body.success) {
-    throw new Error(body.error || "Zrušenie účtu zlyhalo.");
+    const message = body.error || "Zrušenie účtu zlyhalo.";
+
+    // Server signalizuje čiastočne dokončené (nekonzistentné) zrušenie
+    // účtu cez `partial: true` — pridaj rozpoznateľný prefix, aby ho
+    // volajúci (app/nastavenia) vedel odlíšiť od bežnej (bezpečne
+    // opakovateľnej) chyby a zareagovať vynúteným odhlásením.
+    throw new Error(
+      body.partial === true
+        ? `${ACCOUNT_DELETION_PARTIAL_MARKER}${message}`
+        : message
+    );
   }
 }
 

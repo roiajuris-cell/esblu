@@ -24,6 +24,8 @@ import {
   ACCOUNT_DELETION_CONFIRM_PHRASE,
   deleteMyAccount,
   fetchAccountDeletionPreflight,
+  isPartialAccountDeletionError,
+  stripPartialAccountDeletionMarker,
   type AccountDeletionPreflight,
 } from "@/lib/account-deletion";
 
@@ -120,6 +122,12 @@ export default function NastaveniaPage() {
   const [acceptancesLoading, setAcceptancesLoading] = useState(false);
 
   const [showDeleteAccountModal, setShowDeleteAccountModal] = useState(false);
+  // Nastaví loadCompanyUsers(), keď ownMembership neexistuje AJ preflight
+  // potvrdí orphan:true (auth.users existuje, žiadne aktívne členstvo, nie
+  // je owner_id žiadnej firmy) — riadi viditeľnosť sekcie "Zrušiť účet" pre
+  // takýto účet (myRole je preň null, takže pôvodné {myRole && (...)}
+  // gatovanie by ho inak úplne skrylo).
+  const [isOrphanAccount, setIsOrphanAccount] = useState(false);
   const [deletePreflight, setDeletePreflight] =
     useState<AccountDeletionPreflight | null>(null);
   const [deletePreflightLoading, setDeletePreflightLoading] = useState(false);
@@ -168,6 +176,27 @@ export default function NastaveniaPage() {
       } else {
         setMembers([]);
         setInvites([]);
+      }
+
+      if (role === null) {
+        // Žiadne aktívne membership — zisti (server-side, service-role),
+        // či ide o bezpečne rozpoznaného "orphan" účet (pozri
+        // app/api/account/preflight/route.ts), aby appka vedela ponúknuť
+        // samoobslužné zrušenie účtu aj tu. Zámerne "best effort" — pri
+        // chybe iba ostane isOrphanAccount=false (sekcia sa jednoducho
+        // nezobrazí, nič sa nerozbije).
+        try {
+          const preflight = await fetchAccountDeletionPreflight();
+          setIsOrphanAccount(preflight.orphan === true);
+        } catch (preflightError) {
+          console.error(
+            "Overenie orphan stavu zlyhalo:",
+            preflightError
+          );
+          setIsOrphanAccount(false);
+        }
+      } else {
+        setIsOrphanAccount(false);
       }
     } catch (error) {
       console.error("Načítanie používateľov firmy zlyhalo:", error);
@@ -649,10 +678,25 @@ export default function NastaveniaPage() {
 
       window.location.href = "/login?ucet-zruseny=1";
     } catch (error) {
+      // DÔLEŽITÉ: server označí chybu ako `partial: true` (pozri
+      // app/api/account/delete/route.ts), keď DB/membership časť je už
+      // NEVRATNE zmazaná, ale auth.users účet ostal existovať —
+      // v takom prípade sa NESMIE ponechať aktívna session (používateľ by
+      // sa mohol ďalej pohybovať v appke s membershipom, ktorý už
+      // neexistuje). Vynútime rovnaké odhlásenie + presmerovanie ako pri
+      // úspechu, iba s odlíšeným query flagom pre login stránku.
+      if (isPartialAccountDeletionError(error)) {
+        await supabase.auth.signOut();
+        window.location.href = "/login?ucet-zruseny-ciastocne=1";
+        return;
+      }
+
       setDeleteSubmitting(false);
 
       const message =
-        error instanceof Error ? error.message : "Zrušenie účtu zlyhalo.";
+        error instanceof Error
+          ? stripPartialAccountDeletionMarker(error.message)
+          : "Zrušenie účtu zlyhalo.";
       setDeleteError(message);
     }
   }
@@ -1118,7 +1162,7 @@ export default function NastaveniaPage() {
 
         </section>
 
-        {myRole && (
+        {(myRole || isOrphanAccount) && (
           <section className="rounded-2xl border border-subtle/60 bg-surface-1/60 p-6">
             <h2 className="text-sm font-semibold text-secondary">
               Zrušiť účet
@@ -1130,11 +1174,16 @@ export default function NastaveniaPage() {
                 Ide o nezvratnú akciu — vymaže sa firma aj všetky jej dáta a
                 ostatní členovia stratia prístup.
               </p>
-            ) : (
+            ) : myRole ? (
               <p className="mt-2 text-sm text-muted-esblu">
                 Môžete natrvalo zrušiť svoj osobný účet. Firemné dáta
                 (vozidlá, stroje, sklad, dokumenty) zostávajú firme — vymaže
                 sa iba vaša identita a členstvo.
+              </p>
+            ) : (
+              <p className="mt-2 text-sm text-muted-esblu">
+                Tento účet momentálne nie je členom žiadnej firmy. Môžete
+                ho natrvalo zrušiť.
               </p>
             )}
 
@@ -1262,13 +1311,22 @@ export default function NastaveniaPage() {
               </div>
             ) : (
               <div className="mt-6 space-y-4">
-                <p className="text-sm leading-6 text-secondary">
-                  Táto akcia je <strong>nevratná</strong>. Zruší sa vaša
-                  osobná identita a členstvo v tejto firme. Firemné dokumenty
-                  a dáta (vozidlá, stroje, sklad, AI evidencia), ktoré ste
-                  pre firmu vytvorili, jej <strong>zostávajú</strong> — nič
-                  z firemných dát sa nezmaže.
-                </p>
+                {deletePreflight?.orphan ? (
+                  <p className="text-sm leading-6 text-secondary">
+                    Táto akcia je <strong>nevratná</strong>. Tento účet
+                    momentálne nie je členom žiadnej firmy — zruší sa iba
+                    vaša prihlasovacia identita.
+                  </p>
+                ) : (
+                  <p className="text-sm leading-6 text-secondary">
+                    Táto akcia je <strong>nevratná</strong>. Zruší sa vaša
+                    osobná identita a členstvo v tejto firme. Firemné
+                    dokumenty a dáta (vozidlá, stroje, sklad, AI evidencia),
+                    ktoré ste pre firmu vytvorili, jej{" "}
+                    <strong>zostávajú</strong> — nič z firemných dát sa
+                    nezmaže.
+                  </p>
+                )}
 
                 {deleteError && (
                   <p className="text-sm font-medium text-red-400">
