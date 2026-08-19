@@ -28,6 +28,8 @@ import {
   stripPartialAccountDeletionMarker,
   type AccountDeletionPreflight,
 } from "@/lib/account-deletion";
+import { useLocale } from "@/lib/i18n/LocaleProvider";
+import LanguageSwitcher from "@/app/components/LanguageSwitcher";
 
 const MEMBER_ROLE_LABELS: Record<string, string> = {
   owner: "Majiteľ",
@@ -93,6 +95,7 @@ Správna hodnota:
 );
 
 export default function NastaveniaPage() {
+  const { t } = useLocale();
   const [userId, setUserId] = useState("");
   const [companyName, setCompanyName] = useState("");
 
@@ -718,6 +721,20 @@ export default function NastaveniaPage() {
       </div>
 
       <div className="mt-8 max-w-2xl space-y-6">
+        <section className="rounded-3xl border border-subtle bg-surface-1 p-8 shadow-lg backdrop-blur-xl">
+          <h2 className="text-2xl font-bold text-primary">
+            {t("settings.language.title")}
+          </h2>
+
+          <p className="mt-2 text-sm text-muted-esblu">
+            {t("settings.language.description")}
+          </p>
+
+          <div className="mt-5">
+            <LanguageSwitcher />
+          </div>
+        </section>
+
         {isOwnerOrAdmin(myRole) && (
         <section className="rounded-3xl border border-subtle bg-surface-1 p-8 shadow-lg backdrop-blur-xl">
           <h2 className="text-2xl font-bold text-primary">

@@ -3,6 +3,8 @@ import { PublicLegalLayout } from "@/app/components/PublicLegalLayout";
 import { LegalMarkdown } from "@/app/components/LegalMarkdown";
 import { readLegalMarkdown } from "@/lib/legal-content";
 import { legalConfig } from "@/lib/legal-config";
+import { getServerLocale } from "@/lib/i18n/server-locale";
+import { translate } from "@/lib/i18n/translate";
 
 export const metadata: Metadata = {
   title: "Zásady ochrany osobných údajov | Esblu",
@@ -13,17 +15,21 @@ export const metadata: Metadata = {
 // legal/privacy/<version>.md (pozri lib/legal-content.ts), ktorého SHA-256
 // je uložený v legal_documents.content_hash. Úprava textu = nová verzia
 // (nový .md súbor + nová hodnota legalConfig.privacyPolicyVersion), nikdy
-// úprava existujúceho .md súboru.
-export default function PrivacyPolicyPage() {
+// úprava existujúceho .md súboru. DE/EN preklad je čisto zobrazovacia vec
+// (pozri komentár v app/podmienky-pouzivania/page.tsx).
+export default async function PrivacyPolicyPage() {
+  const locale = await getServerLocale();
   const markdown = readLegalMarkdown(
     "privacy_policy",
-    legalConfig.privacyPolicyVersion
+    legalConfig.privacyPolicyVersion,
+    locale
   );
 
   return (
     <PublicLegalLayout
-      title="Zásady ochrany osobných údajov"
+      title={translate(locale, "legal.titles.privacy")}
       updatedAt={`16. augusta 2026 (verzia ${legalConfig.privacyPolicyVersion})`}
+      locale={locale}
     >
       <LegalMarkdown markdown={markdown} />
     </PublicLegalLayout>

@@ -10,6 +10,8 @@ import {
   getInvitePreview,
   type InvitePreview,
 } from "@/lib/company";
+import { useLocale } from "@/lib/i18n/LocaleProvider";
+import LanguageSwitcher from "@/app/components/LanguageSwitcher";
 
 // Táto stránka NIKDY nevolá ensureMyOwnerCompany() / esblu_ensure_my_owner_company().
 // Registrácia aj prihlásenie tu vždy skončí zavolaním
@@ -19,15 +21,11 @@ import {
 
 type PageState = "loading" | "invalid" | "ready" | "accepting" | "accepted";
 
-const ROLE_LABELS: Record<string, string> = {
-  admin: "Plný prístup",
-  employee: "Zamestnanec",
-};
-
 export default function InviteAcceptPage() {
   const params = useParams<{ token: string }>();
   const router = useRouter();
   const token = typeof params?.token === "string" ? params.token : "";
+  const { t } = useLocale();
 
   // Počiatočná hodnota sa počíta priamo z `token` (dostupný synchrónne z
   // useParams pri prvom rendri) — bez tohto by prázdny token vyžadoval
@@ -126,17 +124,17 @@ export default function InviteAcceptPage() {
     const normalizedEmail = formEmail.trim().toLowerCase();
 
     if (!validateEmail(normalizedEmail)) {
-      setFormError("Zadaj platnú e-mailovú adresu.");
+      setFormError(t("invite.validationInvalidEmail"));
       return;
     }
 
     if (password.length < 8) {
-      setFormError("Heslo musí mať minimálne 8 znakov.");
+      setFormError(t("invite.validationPasswordTooShort"));
       return;
     }
 
     if (password !== confirmPassword) {
-      setFormError("Heslá sa nezhodujú.");
+      setFormError(t("invite.validationPasswordMismatch"));
       return;
     }
 
@@ -161,7 +159,7 @@ export default function InviteAcceptPage() {
     setSubmitting(false);
 
     if (error) {
-      setFormError("Registrácia sa nepodarila: " + error.message);
+      setFormError(t("invite.registrationFailedPrefix") + error.message);
       return;
     }
 
@@ -180,12 +178,12 @@ export default function InviteAcceptPage() {
     const normalizedEmail = formEmail.trim().toLowerCase();
 
     if (!validateEmail(normalizedEmail)) {
-      setFormError("Zadaj platnú e-mailovú adresu.");
+      setFormError(t("invite.validationInvalidEmail"));
       return;
     }
 
     if (!password) {
-      setFormError("Zadajte heslo.");
+      setFormError(t("invite.validationMissingPassword"));
       return;
     }
 
@@ -199,7 +197,7 @@ export default function InviteAcceptPage() {
     setSubmitting(false);
 
     if (error) {
-      setFormError("Prihlásenie sa nepodarilo. Skontroluj heslo.");
+      setFormError(t("invite.loginFailed"));
       return;
     }
 
@@ -216,7 +214,7 @@ export default function InviteAcceptPage() {
   if (state === "loading") {
     return (
       <Centered>
-        <p className="text-secondary">Načítavam pozvánku...</p>
+        <p className="text-secondary">{t("invite.loading")}</p>
       </Centered>
     );
   }
@@ -224,18 +222,20 @@ export default function InviteAcceptPage() {
   if (state === "invalid") {
     return (
       <Centered>
-        <h1 className="text-2xl font-bold text-primary">
-          Pozvánka nie je platná
-        </h1>
+        <div className="flex items-start justify-between gap-4">
+          <h1 className="text-2xl font-bold text-primary">
+            {t("invite.invalidTitle")}
+          </h1>
+          <LanguageSwitcher />
+        </div>
         <p className="mt-3 text-secondary">
-          Tento odkaz na pozvánku je neplatný, bol už použitý, alebo jeho
-          platnosť vypršala. Požiadajte majiteľa firmy o novú pozvánku.
+          {t("invite.invalidDescription")}
         </p>
         <Link
           href="/login"
           className="mt-6 inline-block rounded-xl bg-blue-600 px-6 py-3 font-semibold text-white hover:bg-blue-700"
         >
-          Prejsť na prihlásenie
+          {t("invite.goToLogin")}
         </Link>
       </Centered>
     );
@@ -245,10 +245,10 @@ export default function InviteAcceptPage() {
     return (
       <Centered>
         <h1 className="text-2xl font-bold text-primary">
-          Pozvánka bola prijatá
+          {t("invite.acceptedTitle")}
         </h1>
         <p className="mt-3 text-secondary">
-          Presmerúvam ťa do aplikácie...
+          {t("invite.acceptedRedirecting")}
         </p>
       </Centered>
     );
@@ -258,18 +258,24 @@ export default function InviteAcceptPage() {
     return null;
   }
 
-  const roleLabel = ROLE_LABELS[preview.role] || preview.role;
+  const roleLabel =
+    preview.role === "admin" || preview.role === "employee"
+      ? t(`common.roles.${preview.role}`)
+      : preview.role;
 
   return (
     <Centered>
-      <h1 className="text-2xl font-bold text-primary">
-        Pozvánka do firmy
-      </h1>
+      <div className="flex items-start justify-between gap-4">
+        <h1 className="text-2xl font-bold text-primary">
+          {t("invite.title")}
+        </h1>
+        <LanguageSwitcher />
+      </div>
 
       <p className="mt-3 text-secondary">
-        Boli ste pozvaní s prístupom typu{" "}
-        <span className="font-semibold">{roleLabel}</span>. Táto pozvánka je
-        určená pre e-mail v tvare{" "}
+        {t("invite.invitedWithRole")}{" "}
+        <span className="font-semibold">{roleLabel}</span>.{" "}
+        {t("invite.forEmail")}{" "}
         <span className="font-semibold">{preview.masked_email}</span>.
       </p>
 
@@ -282,7 +288,7 @@ export default function InviteAcceptPage() {
       {sessionEmail ? (
         <div className="mt-6">
           <p className="text-sm text-secondary">
-            Si prihlásený ako{" "}
+            {t("invite.loggedInAs")}{" "}
             <span className="font-semibold">{sessionEmail}</span>.
           </p>
 
@@ -293,8 +299,8 @@ export default function InviteAcceptPage() {
             className="mt-4 w-full rounded-xl bg-blue-600 px-6 py-3 font-semibold text-white hover:bg-blue-700 disabled:bg-gray-400"
           >
             {state === "accepting"
-              ? "Prijímam pozvánku..."
-              : "Prijať pozvánku"}
+              ? t("invite.acceptingButton")
+              : t("invite.acceptButton")}
           </button>
 
           <button
@@ -303,13 +309,12 @@ export default function InviteAcceptPage() {
             disabled={state === "accepting"}
             className="mt-3 w-full rounded-xl border border-subtle px-6 py-3 font-semibold text-secondary hover:bg-surface-2"
           >
-            Odhlásiť sa a prihlásiť iným účtom
+            {t("invite.signOutAndSwitch")}
           </button>
         </div>
       ) : awaitingEmailConfirmation ? (
         <p className="mt-6 rounded-xl bg-info-soft p-3 text-sm text-blue-800">
-          Skontroluj svoj e-mail a potvrď registráciu. Následne sa vráť na
-          tento odkaz a prihlás sa.
+          {t("invite.awaitingEmailConfirmation")}
         </p>
       ) : (
         <div className="mt-6">
@@ -326,7 +331,7 @@ export default function InviteAcceptPage() {
                   : "text-secondary"
               }`}
             >
-              Vytvoriť účet
+              {t("invite.tabRegister")}
             </button>
             <button
               type="button"
@@ -338,14 +343,14 @@ export default function InviteAcceptPage() {
                 mode === "login" ? "bg-blue-600 text-white" : "text-secondary"
               }`}
             >
-              Už mám účet
+              {t("invite.tabLogin")}
             </button>
           </div>
 
           <div className="mt-4 space-y-3">
             <input
               type="email"
-              placeholder="E-mail, na ktorý bola pozvánka odoslaná"
+              placeholder={t("invite.emailPlaceholder")}
               autoComplete="email"
               className="w-full rounded-xl border p-3"
               value={formEmail}
@@ -355,7 +360,7 @@ export default function InviteAcceptPage() {
 
             <input
               type="password"
-              placeholder="Heslo"
+              placeholder={t("invite.passwordPlaceholder")}
               autoComplete={
                 mode === "register" ? "new-password" : "current-password"
               }
@@ -368,7 +373,7 @@ export default function InviteAcceptPage() {
             {mode === "register" && (
               <input
                 type="password"
-                placeholder="Potvrdenie hesla"
+                placeholder={t("invite.confirmPasswordPlaceholder")}
                 autoComplete="new-password"
                 className="w-full rounded-xl border p-3"
                 value={confirmPassword}
@@ -385,10 +390,10 @@ export default function InviteAcceptPage() {
             className="mt-4 w-full rounded-xl bg-blue-600 px-6 py-3 font-semibold text-white hover:bg-blue-700 disabled:bg-gray-400"
           >
             {submitting
-              ? "Pracujem..."
+              ? t("invite.working")
               : mode === "register"
-                ? "Vytvoriť účet a prijať pozvánku"
-                : "Prihlásiť sa a prijať pozvánku"}
+                ? t("invite.submitRegister")
+                : t("invite.submitLogin")}
           </button>
         </div>
       )}

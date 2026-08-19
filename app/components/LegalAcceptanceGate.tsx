@@ -9,6 +9,8 @@ import {
   getMyPendingLegalAcceptances,
   type PendingLegalAcceptance,
 } from "@/lib/legal-acceptance";
+import { useLocale } from "@/lib/i18n/LocaleProvider";
+import LanguageSwitcher from "./LanguageSwitcher";
 
 // Cesty, na ktorých sa blokujúci modal NIKDY nezobrazuje — verejné právne
 // stránky (musia byť čitateľné aj bez potvrdenia), prihlásenie/registrácia,
@@ -36,6 +38,7 @@ export default function LegalAcceptanceGate({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const { t } = useLocale();
   const skip = SKIP_PATH_PREFIXES.some(
     (prefix) => pathname === prefix || pathname?.startsWith(prefix + "/")
   );
@@ -117,9 +120,7 @@ export default function LegalAcceptanceGate({
 
       setPending([]);
     } catch {
-      setSubmitError(
-        "Potvrdenie sa nepodarilo uložiť. Skús to prosím znova."
-      );
+      setSubmitError(t("legalGate.submitError"));
     } finally {
       setSubmitting(false);
     }
@@ -153,14 +154,15 @@ export default function LegalAcceptanceGate({
       {mustBlock && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
           <div className="w-full max-w-lg rounded-2xl bg-surface-1 p-6 shadow-2xl sm:p-8">
-            <h2 className="text-2xl font-bold text-primary">
-              Aktualizované právne dokumenty
-            </h2>
+            <div className="flex items-start justify-between gap-4">
+              <h2 className="text-2xl font-bold text-primary">
+                {t("legalGate.title")}
+              </h2>
+              <LanguageSwitcher />
+            </div>
 
             <p className="mt-3 text-sm leading-6 text-secondary">
-              Aby ste mohli pokračovať v používaní Esblu, potvrďte prosím
-              nasledujúce aktuálne dokumenty. Toto potvrdenie je potrebné iba
-              raz a je viazané na váš účet.
+              {t("legalGate.description")}
             </p>
 
             <div className="mt-6 space-y-4">
@@ -176,15 +178,17 @@ export default function LegalAcceptanceGate({
                     disabled={submitting}
                   />
                   <span>
-                    Súhlasím s{" "}
+                    {t("legalGate.agreeTermsPrefix")}{" "}
                     <Link
                       href="/podmienky-pouzivania"
                       target="_blank"
                       className="font-semibold text-blue-700 hover:underline"
                     >
-                      Podmienkami používania
+                      {t("legalGate.agreeTermsLink")}
                     </Link>{" "}
-                    (verzia {termsDoc.version}).
+                    {t("legalGate.termsVersionSuffix", {
+                      version: termsDoc.version,
+                    })}
                   </span>
                 </label>
               )}
@@ -201,15 +205,17 @@ export default function LegalAcceptanceGate({
                     disabled={submitting}
                   />
                   <span>
-                    Potvrdzujem, že som sa oboznámil/a so{" "}
+                    {t("legalGate.agreePrivacyPrefix")}{" "}
                     <Link
                       href="/ochrana-osobnych-udajov"
                       target="_blank"
                       className="font-semibold text-blue-700 hover:underline"
                     >
-                      Zásadami ochrany osobných údajov
+                      {t("legalGate.agreePrivacyLink")}
                     </Link>{" "}
-                    (verzia {privacyDoc.version}).
+                    {t("legalGate.privacyVersionSuffix", {
+                      version: privacyDoc.version,
+                    })}
                   </span>
                 </label>
               )}
@@ -227,7 +233,7 @@ export default function LegalAcceptanceGate({
               disabled={!canSubmit || submitting}
               className="mt-6 w-full rounded-xl bg-blue-600 px-6 py-3 font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-400"
             >
-              {submitting ? "Ukladám..." : "Potvrdiť a pokračovať"}
+              {submitting ? t("legalGate.saving") : t("legalGate.confirmButton")}
             </button>
 
             <button
@@ -236,7 +242,7 @@ export default function LegalAcceptanceGate({
               disabled={submitting}
               className="mt-3 w-full text-center text-sm font-semibold text-muted-esblu hover:underline"
             >
-              Odhlásiť sa
+              {t("legalGate.logout")}
             </button>
           </div>
         </div>

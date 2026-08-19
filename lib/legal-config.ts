@@ -63,10 +63,18 @@ export const legalConfig = {
   // novej DPA verzie) → ostávajú na pôvodných verziách.
   privacyPolicyVersion: "1.2",
   termsVersion: "1.0",
-  // Cookie Policy je v tejto fáze NOVÝ dokument (predtým nepublikovaný) —
-  // verzia 1.0 od dátumu prvého publikovania, ktorý sa doplní pri reálnom
-  // nasadení (pozri gdpr-launch-checklist.md).
-  cookiePolicyVersion: "1.0",
+  // Cookie Policy v1.1 (2026-08-19): appka pridáva viacjazyčnú podporu
+  // (SK/DE/EN) a na zapamätanie zvolenej jazykovej preferencie naprieč
+  // stránkami/návštevami (aj pred registráciou/prihlásením) po prvýkrát
+  // používa vlastný cookie (`esblu_locale`, nevyhnutný/funkčný, žiadne
+  // sledovanie/marketing). v1.0 tvrdila "Esblu aktuálne nepoužíva žiadne
+  // cookies" — toto tvrdenie by po pridaní esblu_locale prestalo byť
+  // pravdivé, preto je nová verzia nevyhnutná (nie kozmetická zmena).
+  // required=false zostáva nezmenené (informačný dokument, rovnako ako
+  // v1.0) — táto zmena preto nevyvolá blokujúci LegalAcceptanceGate modal.
+  // Pozri legal/cookies/1.1.md a
+  // supabase/migrations/20260819100000_add_cookie_policy_v1_1_locale.sql.
+  cookiePolicyVersion: "1.1",
   // DPA ide vo verzii 1.1 (v1.0 nikdy nebola verejne nasadená, takže ide
   // stále o "prvé reálne publikovanie", nie o obsahovú zmenu naživo
   // publikovaného dokumentu) — v1.1 dopĺňa oproti pôvodnému draftu: čl. 4

@@ -3,6 +3,8 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import LegalAcceptanceGate from "./components/LegalAcceptanceGate";
 import CompanyDpaGate from "./components/CompanyDpaGate";
+import { LocaleProvider } from "@/lib/i18n/LocaleProvider";
+import { getServerLocale } from "@/lib/i18n/server-locale";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -24,20 +26,28 @@ export const viewport: Viewport = {
   themeColor: "#2563eb",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Jazyk sa určuje výhradne zo server-side cookie (bez zmeny URL/routingu
+  // — pozri lib/i18n/locales.ts pre zdôvodnenie architektúry). html lang sa
+  // nastavuje už tu, aby prvé vykreslenie na serveri aj klientovi bolo vždy
+  // zhodné (žiadny hydration mismatch, žiadny FOUC v zlom jazyku).
+  const locale = await getServerLocale();
+
   return (
     <html
-      lang="sk"
+      lang={locale}
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        <LegalAcceptanceGate>
-          <CompanyDpaGate>{children}</CompanyDpaGate>
-        </LegalAcceptanceGate>
+        <LocaleProvider initialLocale={locale}>
+          <LegalAcceptanceGate>
+            <CompanyDpaGate>{children}</CompanyDpaGate>
+          </LegalAcceptanceGate>
+        </LocaleProvider>
       </body>
     </html>
   );

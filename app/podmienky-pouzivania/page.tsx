@@ -3,6 +3,8 @@ import { PublicLegalLayout } from "@/app/components/PublicLegalLayout";
 import { LegalMarkdown } from "@/app/components/LegalMarkdown";
 import { readLegalMarkdown } from "@/lib/legal-content";
 import { legalConfig } from "@/lib/legal-config";
+import { getServerLocale } from "@/lib/i18n/server-locale";
+import { translate } from "@/lib/i18n/translate";
 
 export const metadata: Metadata = {
   title: "Podmienky používania Esblu",
@@ -14,13 +16,18 @@ export const metadata: Metadata = {
 // SHA-256 je uložený v legal_documents.content_hash. Úprava textu sa robí
 // VÝHRADNE pridaním novej verzie (nový .md súbor + nová hodnota
 // legalConfig.termsVersion), nikdy úpravou existujúceho .md súboru.
-export default function TermsPage() {
-  const markdown = readLegalMarkdown("terms", legalConfig.termsVersion);
+// DE/EN preklad (legal/terms/<version>.de.md, .en.md) je čisto zobrazovacia
+// vec — nemení versioned/immutable legal acceptance model (ten eviduje iba
+// document_type + version, nie locale, pozri lib/legal-content.ts).
+export default async function TermsPage() {
+  const locale = await getServerLocale();
+  const markdown = readLegalMarkdown("terms", legalConfig.termsVersion, locale);
 
   return (
     <PublicLegalLayout
-      title="Podmienky používania Esblu"
+      title={translate(locale, "legal.titles.terms")}
       updatedAt={`21. júla 2026 (verzia ${legalConfig.termsVersion})`}
+      locale={locale}
     >
       <LegalMarkdown markdown={markdown} />
     </PublicLegalLayout>

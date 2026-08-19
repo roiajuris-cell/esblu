@@ -3,6 +3,8 @@ import {
   LegalSection,
   PublicLegalLayout,
 } from "@/app/components/PublicLegalLayout";
+import { getServerLocale } from "@/lib/i18n/server-locale";
+import { translate } from "@/lib/i18n/translate";
 
 export const metadata: Metadata = {
   title: "Kontakt | Esblu",
@@ -12,17 +14,17 @@ export const metadata: Metadata = {
 const emailLinkClass =
   "break-all font-semibold text-blue-700 underline decoration-blue-300 underline-offset-4";
 
-export default function ContactPage() {
-  return (
-    <PublicLegalLayout title="Kontakt">
-      <p>
-        Esblu je bezplatná testovacia verzia služby na firemnú evidenciu.
-        Prevádzkovateľom je Jaroslav Juriš, Slovenská republika.
-      </p>
+export default async function ContactPage() {
+  const locale = await getServerLocale();
+  const t = (key: string) => translate(locale, key);
 
-      <LegalSection title="Všeobecné otázky a podpora">
+  return (
+    <PublicLegalLayout title={t("legal.titles.contact")} locale={locale}>
+      <p>{t("legal.contactPage.intro")}</p>
+
+      <LegalSection title={t("legal.contactPage.generalTitle")}>
         <p>
-          Napíšte nám na{" "}
+          {t("legal.contactPage.generalText")}{" "}
           <a href="mailto:info@esblu.com" className={emailLinkClass}>
             info@esblu.com
           </a>
@@ -30,9 +32,9 @@ export default function ContactPage() {
         </p>
       </LegalSection>
 
-      <LegalSection title="Ochrana osobných údajov">
+      <LegalSection title={t("legal.contactPage.privacyTitle")}>
         <p>
-          Žiadosti a otázky týkajúce sa osobných údajov pošlite na{" "}
+          {t("legal.contactPage.privacyText")}{" "}
           <a href="mailto:privacy@esblu.com" className={emailLinkClass}>
             privacy@esblu.com
           </a>
@@ -41,8 +43,7 @@ export default function ContactPage() {
       </LegalSection>
 
       <p className="rounded-2xl bg-surface-2 p-5 text-sm text-secondary">
-        Pri žiadosti o podporu opíšte problém čo najpresnejšie. Do e-mailu
-        neposielajte heslo ani iné prihlasovacie údaje.
+        {t("legal.contactPage.supportNote")}
       </p>
     </PublicLegalLayout>
   );

@@ -7,6 +7,8 @@ import { supabase } from "@/lib/supabase";
 import { ensureMyOwnerCompany, getEnsureOwnerCompanyErrorMessage } from "@/lib/company";
 import { acceptLegalDocumentAtRegistration } from "@/lib/legal-acceptance";
 import { REQUIRED_ACCEPTANCE_DOCUMENTS } from "@/lib/legal-config";
+import { useLocale } from "@/lib/i18n/LocaleProvider";
+import LanguageSwitcher from "@/app/components/LanguageSwitcher";
 
 // Closed Beta (supabase/migrations/20260816130000_add_closed_beta_allowlist.sql):
 // verejná owner registrácia je dočasne obmedzená iba na schválených beta
@@ -43,6 +45,7 @@ const CLOSED_BETA_ERROR_MARKER = "uzavretej beta verzii";
 
 export default function LoginPage() {
   const router = useRouter();
+  const { t } = useLocale();
 
   const [mode, setMode] = useState<"login" | "register">("login");
   const [email, setEmail] = useState("");
@@ -114,12 +117,12 @@ export default function LoginPage() {
     const normalizedEmail = email.trim().toLowerCase();
 
     if (!validateEmail(normalizedEmail)) {
-      alert("Zadaj platnú e-mailovú adresu.");
+      alert(t("auth.login.validationInvalidEmail"));
       return;
     }
 
     if (!password) {
-      alert("Zadaj heslo.");
+      alert(t("auth.login.validationMissingPassword"));
       return;
     }
 
@@ -133,7 +136,7 @@ export default function LoginPage() {
     setLoading(false);
 
     if (error) {
-      alert("Prihlásenie sa nepodarilo. Skontroluj e-mail a heslo.");
+      alert(t("auth.login.loginFailed"));
       return;
     }
 
@@ -148,24 +151,22 @@ export default function LoginPage() {
     const normalizedEmail = email.trim().toLowerCase();
 
     if (!validateEmail(normalizedEmail)) {
-      alert("Zadaj platnú e-mailovú adresu.");
+      alert(t("auth.login.validationInvalidEmail"));
       return;
     }
 
     if (password.length < 8) {
-      alert("Heslo musí mať minimálne 8 znakov.");
+      alert(t("auth.login.validationPasswordTooShort"));
       return;
     }
 
     if (password !== confirmPassword) {
-      alert("Heslá sa nezhodujú.");
+      alert(t("auth.login.validationPasswordMismatch"));
       return;
     }
 
     if (!agreedTerms || !agreedPrivacy) {
-      alert(
-        "Pred registráciou musíš súhlasiť s Podmienkami používania a potvrdiť oboznámenie sa so Zásadami ochrany osobných údajov."
-      );
+      alert(t("auth.login.validationMustAgreeLegal"));
       return;
     }
 
@@ -188,10 +189,13 @@ export default function LoginPage() {
       // (esblu_before_user_created_beta_gate), error.message je už
       // hotová, zrozumiteľná slovenská správa — zobraz ju priamo bez
       // technického prefixu.
+      // Closed Beta hlášku posiela DB Auth hook vždy po slovensky (server-side,
+      // bez znalosti UI jazyka) — tu ju nahradíme preloženou verziou podľa
+      // aktuálneho jazyka namiesto zobrazenia surového SK textu z error.message.
       alert(
         error.message.includes(CLOSED_BETA_ERROR_MARKER)
-          ? error.message
-          : "Registrácia sa nepodarila: " + error.message
+          ? t("auth.closedBeta.message")
+          : t("auth.login.registrationFailedPrefix") + error.message
       );
       return;
     }
@@ -231,7 +235,7 @@ export default function LoginPage() {
       );
 
       setLoading(false);
-      alert("Účet bol vytvorený. Teraz si prihlásený.");
+      alert(t("auth.login.accountCreatedImmediate"));
       router.push("/");
       router.refresh();
       return;
@@ -239,9 +243,7 @@ export default function LoginPage() {
 
     setLoading(false);
 
-    alert(
-      "Registrácia prebehla úspešne. Skontroluj svoj e-mail a potvrď registráciu."
-    );
+    alert(t("auth.login.accountCreatedPendingConfirm"));
 
     setMode("login");
   }
@@ -249,7 +251,7 @@ async function resetPassword() {
   const normalizedEmail = email.trim().toLowerCase();
 
   if (!validateEmail(normalizedEmail)) {
-    alert("Najprv zadaj platnú e-mailovú adresu.");
+    alert(t("auth.resetPassword.validationInvalidEmail"));
     return;
   }
 
@@ -265,13 +267,11 @@ async function resetPassword() {
   setResetLoading(false);
 
   if (error) {
-    alert("E-mail na obnovu hesla sa nepodarilo odoslať: " + error.message);
+    alert(t("auth.resetPassword.requestFailedPrefix") + error.message);
     return;
   }
 
-  alert(
-    "Odkaz na vytvorenie nového hesla bol odoslaný. Skontroluj aj priečinok Spam."
-  );
+  alert(t("auth.resetPassword.success"));
 }
   function switchMode() {
     setMode((currentMode) =>
@@ -285,49 +285,43 @@ async function resetPassword() {
   return (
     <main className="app-shell-bg flex min-h-screen items-center justify-center p-6">
       <div className="w-full max-w-md rounded-2xl bg-surface-1 p-8 shadow">
-        <h1 className="text-3xl font-bold text-primary">
-          {mode === "login" ? "Prihlásenie" : "Registrácia firmy"}
-        </h1>
+        <div className="flex items-start justify-between gap-4">
+          <h1 className="text-3xl font-bold text-primary">
+            {mode === "login"
+              ? t("auth.login.title")
+              : t("auth.login.registerTitle")}
+          </h1>
+          <LanguageSwitcher />
+        </div>
 
         <p className="mt-2 text-muted-esblu">
           {mode === "login"
-            ? "Prihlás sa do aplikácie Esblu."
-            : "Vytvor nový účet pre svoju firmu."}
+            ? t("auth.login.subtitleLogin")
+            : t("auth.login.subtitleRegister")}
         </p>
 
         {accountDeletedNotice && (
           <p className="mt-4 rounded-xl border border-subtle bg-surface-2 px-4 py-3 text-sm text-secondary">
-            Účet bol zrušený.
+            {t("auth.login.accountDeletedShort")}
           </p>
         )}
 
         {accountDeletionPartialNotice && (
           <p className="mt-4 rounded-xl bg-warning-soft px-4 py-3 text-sm leading-6 text-amber-400">
-            Zrušenie účtu sa nepodarilo úplne dokončiť. Odhlásili sme ťa z
-            bezpečnostných dôvodov — kontaktuj prosím podporu na{" "}
-            <a href="mailto:info@esblu.com" className="font-semibold underline">
-              info@esblu.com
-            </a>
-            , overíme a dokončíme zrušenie účtu.
+            {t("auth.login.accountDeletedPartialNotice")}
           </p>
         )}
 
         {mode === "register" && (
           <p className="mt-4 rounded-xl bg-info-soft px-4 py-3 text-sm leading-6 text-blue-800">
-            Esblu je momentálne v uzavretej beta verzii. Registrácia novej
-            firmy je dostupná iba pre schválených beta testerov. Ak máte
-            schválený prístup, pokračujte nižšie — inak nás kontaktujte na{" "}
-            <a href="mailto:info@esblu.com" className="font-semibold underline">
-              info@esblu.com
-            </a>
-            .
+            {t("auth.closedBeta.registerNotice")}
           </p>
         )}
 
         <div className="mt-6 space-y-4">
           <input
             type="email"
-            placeholder="E-mail"
+            placeholder={t("auth.login.email")}
             autoComplete="email"
             className="w-full rounded-xl border p-3"
             value={email}
@@ -337,7 +331,7 @@ async function resetPassword() {
 
           <input
             type="password"
-            placeholder="Heslo"
+            placeholder={t("auth.login.password")}
             autoComplete={
               mode === "login" ? "current-password" : "new-password"
             }
@@ -350,7 +344,7 @@ async function resetPassword() {
           {mode === "register" && (
             <input
               type="password"
-              placeholder="Potvrdenie hesla"
+              placeholder={t("auth.login.confirmPasswordPlaceholder")}
               autoComplete="new-password"
               className="w-full rounded-xl border p-3"
               value={confirmPassword}
@@ -373,13 +367,13 @@ async function resetPassword() {
                 disabled={loading}
               />
               <span>
-                Súhlasím s{" "}
+                {t("auth.login.agreeTermsPrefix")}{" "}
                 <Link
                   href="/podmienky-pouzivania"
                   target="_blank"
                   className="font-semibold text-blue-700 hover:underline"
                 >
-                  Podmienkami používania
+                  {t("auth.login.agreeTermsLink")}
                 </Link>
                 .
               </span>
@@ -394,13 +388,13 @@ async function resetPassword() {
                 disabled={loading}
               />
               <span>
-                Potvrdzujem, že som sa oboznámil/a so{" "}
+                {t("auth.login.agreePrivacyPrefix")}{" "}
                 <Link
                   href="/ochrana-osobnych-udajov"
                   target="_blank"
                   className="font-semibold text-blue-700 hover:underline"
                 >
-                  Zásadami ochrany osobných údajov
+                  {t("auth.login.agreePrivacyLink")}
                 </Link>
                 .
               </span>
@@ -418,10 +412,10 @@ async function resetPassword() {
   className="btn-primary mt-6 w-full px-6 py-3 text-center"
 >
   {loading
-    ? "Pracujem..."
+    ? t("auth.login.working")
     : mode === "login"
-      ? "Prihlásiť sa"
-      : "Vytvoriť účet"}
+      ? t("auth.login.submitLogin")
+      : t("auth.login.submitRegister")}
 </button>
 
 {mode === "login" && (
@@ -432,8 +426,8 @@ async function resetPassword() {
     className="mt-3 w-full text-center text-sm font-semibold text-blue-700 hover:underline disabled:text-gray-400"
   >
     {resetLoading
-      ? "Odosielam odkaz..."
-      : "Zabudol si heslo?"}
+      ? t("auth.login.sendingResetLink")
+      : t("auth.login.forgotPassword")}
   </button>
 )}
 
@@ -444,8 +438,8 @@ async function resetPassword() {
           className="mt-3 w-full rounded-xl border border-subtle px-6 py-3 font-semibold text-secondary hover:bg-surface-2 disabled:cursor-not-allowed disabled:text-gray-400"
         >
           {mode === "login"
-            ? "Nemáš účet? Registrovať firmu"
-            : "Už máš účet? Prihlásiť sa"}
+            ? t("auth.login.switchToRegister")
+            : t("auth.login.switchToLogin")}
         </button>
 
         <nav
@@ -453,16 +447,16 @@ async function resetPassword() {
           className="mt-6 flex flex-wrap justify-center gap-x-4 gap-y-2 border-t border-subtle pt-5 text-center text-xs font-medium text-secondary"
         >
           <Link href="/ochrana-osobnych-udajov" className="hover:text-blue-700 hover:underline">
-            Ochrana osobných údajov
+            {t("common.legalLinks.privacy")}
           </Link>
           <Link href="/podmienky-pouzivania" className="hover:text-blue-700 hover:underline">
-            Podmienky používania
+            {t("common.legalLinks.terms")}
           </Link>
           <Link href="/cookies" className="hover:text-blue-700 hover:underline">
-            Cookies
+            {t("common.legalLinks.cookies")}
           </Link>
           <Link href="/kontakt" className="hover:text-blue-700 hover:underline">
-            Kontakt
+            {t("common.legalLinks.contact")}
           </Link>
         </nav>
       </div>

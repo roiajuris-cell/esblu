@@ -1,5 +1,9 @@
+"use client";
+
 import Image from "next/image";
 import Link from "next/link";
+import { useLocale } from "@/lib/i18n/LocaleProvider";
+import LanguageSwitcher from "./LanguageSwitcher";
 
 // =============================================================================
 // PublicLandingPage — verejná marketingová stránka (neprihlásený návštevník
@@ -45,71 +49,72 @@ const FEATURE_ACCENT_STYLES: Record<
 
 // Rovnaké 4 moduly a rovnaké obrázky ako v app/components/Dashboard.tsx
 // (modules[]) — landing page zámerne nepoužíva vlastné/nové obrázky.
-// Titulok prvej karty je "Inbox" (nie "AI Evidencia"), aby zodpovedal
-// aktuálnemu názvu modulu v appke (viď Dashboard.tsx/ai-evidencia/page.tsx).
-const featureCards: {
-  title: string;
-  description: string;
+// Samotný text (title/description/examples) sa prekladá cez t() vnútri
+// komponentu nižšie (getFeatureCards) — tu ostávajú iba jazykovo neutrálne
+// metadáta (obrázok, accent farba, prekladové kľúče).
+const featureCardDefs: {
+  titleKey: string;
+  descKey: string;
   image: string;
   accent: FeatureAccent;
-  examples?: string[];
+  exampleKeys?: string[];
 }[] = [
   {
-    title: "Inbox",
-    description:
-      "Odfotíte alebo nahráte podporovaný dokument a Esblu sa z neho pokúsi automaticky načítať dostupné údaje. Výsledok pred uložením vždy skontrolujete a potvrdíte.",
+    titleKey: "landing.features.inboxTitle",
+    descKey: "landing.features.inboxDesc",
     image: "/images/ai-evidencia.png",
     accent: "cyan",
-    examples: ["vážne lístky", "dodacie listy", "technický preukaz"],
+    exampleKeys: [
+      "landing.features.inboxExample1",
+      "landing.features.inboxExample2",
+      "landing.features.inboxExample3",
+    ],
   },
   {
-    title: "Vozidlá",
-    description:
-      "Evidencia vozidiel, technických údajov, dokumentov, fotografií a servisných záznamov.",
+    titleKey: "landing.features.vehiclesTitle",
+    descKey: "landing.features.vehiclesDesc",
     image: "/images/van.png",
     accent: "blue",
   },
   {
-    title: "Stroje",
-    description:
-      "Prehľad firemných strojov a techniky vrátane základných údajov a fotografií.",
+    titleKey: "landing.features.machinesTitle",
+    descKey: "landing.features.machinesDesc",
     image: "/images/excavator.png",
     accent: "orange",
   },
   {
-    title: "Sklad",
-    description:
-      "Jednoduchá evidencia skladových položiek, množstva a fotografií.",
+    titleKey: "landing.features.inventoryTitle",
+    descKey: "landing.features.inventoryDesc",
     image: "/images/warehouse.png",
     accent: "teal",
   },
 ];
 
-const audienceExamples = [
-  "stavebné firmy",
-  "firmy vykonávajúce výkopy a optické siete",
-  "servisné firmy",
-  "menšie dopravné firmy",
-  "firmy s vlastnými vozidlami, strojmi alebo skladom",
+const audienceExampleKeys = [
+  "landing.audience.example1",
+  "landing.audience.example2",
+  "landing.audience.example3",
+  "landing.audience.example4",
+  "landing.audience.example5",
 ];
 
-const freePlanItems = [
-  "5 dokumentov v Inboxe",
-  "2 vozidlá",
-  "2 stroje",
-  "5 skladových položiek",
-  "1 používateľský účet",
-  "export dostupných údajov",
+const freePlanItemKeys = [
+  "landing.freePlan.item1",
+  "landing.freePlan.item2",
+  "landing.freePlan.item3",
+  "landing.freePlan.item4",
+  "landing.freePlan.item5",
+  "landing.freePlan.item6",
 ];
 
 // AI transparentnosť (bod 1 zadania) — konzervatívne, vopred schválené
 // formulácie. Zámerne bez mena konkrétneho AI poskytovateľa (ten je
 // zdokumentovaný na /ochrana-osobnych-udajov a /subprocessors).
-const aiTransparencyPoints = [
-  "Esblu používa AI na asistované spracovanie dokumentov.",
-  "AI môže urobiť chybu.",
-  "Používateľ údaje pred finálnym uložením kontroluje a potvrdzuje.",
-  "Esblu nepoužíva túto funkciu na autonómne rozhodovanie s právnymi alebo obdobne významnými účinkami.",
+const aiTransparencyPointKeys = [
+  "landing.ai.point1",
+  "landing.ai.point2",
+  "landing.ai.point3",
+  "landing.ai.point4",
 ];
 
 function BrandMark() {
@@ -163,6 +168,7 @@ const DOT_ACCENT_BG: Record<FeatureAccent, string> = {
 
 export default function PublicLandingPage() {
   const currentYear = new Date().getFullYear();
+  const { t } = useLocale();
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-page-bg text-primary">
@@ -184,28 +190,31 @@ export default function PublicLandingPage() {
               href="#funkcie"
               className="rounded-lg px-2 py-2 transition hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-cyan"
             >
-              Funkcie
+              {t("landing.nav.features")}
             </a>
             <a
               href="#bezplatny-plan"
               className="rounded-lg px-2 py-2 transition hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-cyan"
             >
-              Bezplatný plán
+              {t("landing.nav.freePlan")}
             </a>
             <a
               href="#kontakt"
               className="rounded-lg px-2 py-2 transition hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-cyan"
             >
-              Kontakt
+              {t("landing.nav.contact")}
             </a>
           </nav>
 
-          <Link
-            href="/login"
-            className="btn-secondary inline-flex min-h-11 items-center px-4 py-2 text-sm"
-          >
-            Prihlásiť sa
-          </Link>
+          <div className="flex items-center gap-3">
+            <LanguageSwitcher variant="dark" />
+            <Link
+              href="/login"
+              className="btn-secondary inline-flex min-h-11 items-center px-4 py-2 text-sm"
+            >
+              {t("landing.nav.login")}
+            </Link>
+          </div>
         </div>
       </header>
 
@@ -234,16 +243,13 @@ export default function PublicLandingPage() {
           <div className="relative mx-auto grid max-w-6xl items-center gap-12 px-4 py-20 sm:px-6 sm:py-24 lg:grid-cols-[1.12fr_0.88fr] lg:px-8 lg:py-28">
             <div>
               <p className="inline-flex rounded-full border border-accent-cyan/30 bg-accent-cyan/10 px-4 py-2 text-sm font-bold text-accent-cyan">
-                Bezplatná testovacia verzia
+                {t("landing.hero.badge")}
               </p>
               <h1 className="mt-6 max-w-3xl text-4xl font-black leading-tight tracking-tight text-white sm:text-5xl lg:text-6xl">
-                Firemná evidencia dokumentov, vozidiel, strojov a skladu na
-                jednom mieste.
+                {t("landing.hero.title")}
               </h1>
               <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-300 sm:text-xl">
-                Esblu pomáha stavebným a servisným firmám spracovať dokumenty
-                pomocou AI, evidovať techniku a udržať firemné údaje prehľadne
-                usporiadané.
+                {t("landing.hero.subtitle")}
               </p>
 
               <div className="mt-8 flex flex-col gap-3 sm:flex-row">
@@ -251,18 +257,17 @@ export default function PublicLandingPage() {
                   href="mailto:info@esblu.com"
                   className="btn-primary inline-flex min-h-12 items-center justify-center px-6 py-3"
                 >
-                  Požiadať o beta prístup
+                  {t("landing.hero.ctaPrimary")}
                 </a>
                 <Link
                   href="/login"
                   className="btn-secondary inline-flex min-h-12 items-center justify-center px-6 py-3"
                 >
-                  Prihlásiť sa
+                  {t("landing.hero.ctaSecondary")}
                 </Link>
               </div>
               <p className="mt-4 text-sm text-muted-esblu">
-                Esblu je momentálne v uzavretej beta verzii — nová
-                registrácia je dostupná iba pre schválených testerov.
+                {t("landing.hero.betaNotice")}
               </p>
             </div>
 
@@ -272,10 +277,10 @@ export default function PublicLandingPage() {
                 <div className="flex items-center justify-between border-b border-subtle pb-5">
                   <div>
                     <p className="text-sm font-semibold text-accent-cyan">
-                      Firemná evidencia
+                      {t("landing.hero.cardKicker")}
                     </p>
                     <p className="mt-1 text-xl font-black text-primary">
-                      Všetko dôležité prehľadne
+                      {t("landing.hero.cardTitle")}
                     </p>
                   </div>
                   <span className="grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-accent-cyan to-accent-blue-strong">
@@ -286,10 +291,26 @@ export default function PublicLandingPage() {
                 <div className="mt-5 grid grid-cols-2 gap-3">
                   {(
                     [
-                      ["Inbox", "Dokumenty", "cyan"],
-                      ["Vozidlá", "Technické údaje", "blue"],
-                      ["Stroje", "Firemná technika", "orange"],
-                      ["Sklad", "Položky a množstvo", "teal"],
+                      [
+                        t("landing.features.inboxTitle"),
+                        t("landing.hero.moduleInboxDesc"),
+                        "cyan",
+                      ],
+                      [
+                        t("landing.features.vehiclesTitle"),
+                        t("landing.hero.moduleVehiclesDesc"),
+                        "blue",
+                      ],
+                      [
+                        t("landing.features.machinesTitle"),
+                        t("landing.hero.moduleMachinesDesc"),
+                        "orange",
+                      ],
+                      [
+                        t("landing.features.inventoryTitle"),
+                        t("landing.hero.moduleInventoryDesc"),
+                        "teal",
+                      ],
                     ] as [string, string, FeatureAccent][]
                   ).map(([title, description, accent]) => (
                     <div
@@ -312,7 +333,7 @@ export default function PublicLandingPage() {
                   <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-accent-cyan text-[#051221]">
                     AI
                   </span>
-                  Menej ručného prepisovania dokumentov
+                  {t("landing.hero.cardAiNote")}
                 </div>
               </div>
             </div>
@@ -327,24 +348,24 @@ export default function PublicLandingPage() {
           <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
             <div className="max-w-2xl">
               <p className="text-sm font-bold uppercase tracking-[0.18em] text-accent-cyan">
-                Jedna aplikácia, štyri prehľady
+                {t("landing.features.kicker")}
               </p>
               <h2 className="mt-3 text-3xl font-black tracking-tight text-primary sm:text-4xl">
-                Čo Esblu dokáže
+                {t("landing.features.title")}
               </h2>
               <p className="mt-4 text-lg leading-8 text-secondary">
-                Základné firemné evidencie sú na jednom mieste a dostupné pod
-                vlastným používateľským účtom.
+                {t("landing.features.subtitle")}
               </p>
             </div>
 
             <div className="mt-10 grid gap-6 md:grid-cols-2">
-              {featureCards.map((feature) => {
+              {featureCardDefs.map((feature) => {
                 const styles = FEATURE_ACCENT_STYLES[feature.accent];
+                const title = t(feature.titleKey);
 
                 return (
                   <article
-                    key={feature.title}
+                    key={feature.titleKey}
                     className="surface-card surface-card-hover flex min-h-full flex-col p-6 transition sm:p-7"
                   >
                     <div
@@ -360,22 +381,22 @@ export default function PublicLandingPage() {
                       />
                     </div>
                     <h3 className="mt-6 text-2xl font-black text-primary">
-                      {feature.title}
+                      {title}
                     </h3>
                     <p className="mt-3 leading-7 text-secondary">
-                      {feature.description}
+                      {t(feature.descKey)}
                     </p>
-                    {feature.examples && (
+                    {feature.exampleKeys && (
                       <ul
                         className="mt-5 flex flex-wrap gap-2"
                         aria-label="Príklady dokumentov"
                       >
-                        {feature.examples.map((example) => (
+                        {feature.exampleKeys.map((exampleKey) => (
                           <li
-                            key={example}
+                            key={exampleKey}
                             className={`rounded-full px-3 py-1 text-sm font-semibold ${styles.chip}`}
                           >
-                            {example}
+                            {t(exampleKey)}
                           </li>
                         ))}
                       </ul>
@@ -397,37 +418,33 @@ export default function PublicLandingPage() {
           <div className="mx-auto grid max-w-6xl gap-12 px-4 sm:px-6 lg:grid-cols-2 lg:px-8">
             <div>
               <p className="text-sm font-bold uppercase tracking-[0.18em] text-accent-cyan">
-                AI spracovanie
+                {t("landing.ai.kicker")}
               </p>
               <h2 className="mt-3 text-3xl font-black tracking-tight sm:text-4xl">
-                Menej ručného prepisovania dokumentov
+                {t("landing.ai.title")}
               </h2>
               <p className="mt-5 text-lg leading-8 text-slate-300">
-                Esblu dokáže pri podporovaných dokumentoch automaticky
-                rozpoznať niektoré dostupné údaje, napríklad číslo dokumentu,
-                dátum, SPZ, materiál, hmotnosť, dodávateľa alebo zákazníka.
-                Rozsah rozpoznaných údajov závisí od typu a kvality dokumentu.
+                {t("landing.ai.description")}
               </p>
 
               <aside className="mt-7 rounded-2xl border border-subtle bg-surface-2 p-6">
                 <h3 className="text-base font-black text-primary">
-                  AI transparentnosť
+                  {t("landing.ai.transparencyTitle")}
                 </h3>
 
                 <ul className="mt-4 space-y-3">
-                  {aiTransparencyPoints.map((point) => (
-                    <li key={point} className="flex items-start gap-3">
+                  {aiTransparencyPointKeys.map((pointKey) => (
+                    <li key={pointKey} className="flex items-start gap-3">
                       <CheckIcon />
                       <span className="text-sm leading-6 text-slate-200">
-                        {point}
+                        {t(pointKey)}
                       </span>
                     </li>
                   ))}
                 </ul>
 
                 <p className="mt-5 rounded-xl bg-warning-soft px-4 py-3 text-sm font-semibold leading-6 text-amber-400">
-                  AI výstup môže obsahovať chyby. Používateľ musí všetky
-                  údaje pred uložením alebo ďalším použitím skontrolovať.
+                  {t("landing.ai.warning")}
                 </p>
 
                 <div className="mt-5 flex flex-wrap gap-x-5 gap-y-2 text-sm font-semibold">
@@ -435,34 +452,34 @@ export default function PublicLandingPage() {
                     href="/ochrana-osobnych-udajov"
                     className="text-accent-cyan hover:underline"
                   >
-                    Zásady ochrany osobných údajov →
+                    {t("landing.ai.privacyLink")}
                   </Link>
                   <Link
                     href="/podmienky-pouzivania"
                     className="text-accent-cyan hover:underline"
                   >
-                    Podmienky používania →
+                    {t("landing.ai.termsLink")}
                   </Link>
                 </div>
               </aside>
             </div>
 
             <ol className="grid gap-4">
-              {[
-                "Nahrajte alebo odfoťte dokument.",
-                "Skontrolujte rozpoznané údaje.",
-                "Uložte dokument do evidencie alebo ho exportujte.",
-              ].map((step, index) => (
-                <li
-                  key={step}
-                  className="flex items-center gap-5 rounded-2xl border border-subtle bg-surface-2 p-5"
-                >
-                  <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-gradient-to-br from-accent-cyan to-accent-blue-strong text-lg font-black text-[#051221]">
-                    {index + 1}
-                  </span>
-                  <span className="text-lg font-semibold leading-7">{step}</span>
-                </li>
-              ))}
+              {["landing.ai.step1", "landing.ai.step2", "landing.ai.step3"].map(
+                (stepKey, index) => (
+                  <li
+                    key={stepKey}
+                    className="flex items-center gap-5 rounded-2xl border border-subtle bg-surface-2 p-5"
+                  >
+                    <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-gradient-to-br from-accent-cyan to-accent-blue-strong text-lg font-black text-[#051221]">
+                      {index + 1}
+                    </span>
+                    <span className="text-lg font-semibold leading-7">
+                      {t(stepKey)}
+                    </span>
+                  </li>
+                )
+              )}
             </ol>
           </div>
         </section>
@@ -474,26 +491,24 @@ export default function PublicLandingPage() {
           <div className="mx-auto grid max-w-6xl gap-10 px-4 sm:px-6 lg:grid-cols-[0.9fr_1.1fr] lg:px-8">
             <div>
               <p className="text-sm font-bold uppercase tracking-[0.18em] text-accent-cyan">
-                Praktická evidencia
+                {t("landing.audience.kicker")}
               </p>
               <h2 className="mt-3 text-3xl font-black tracking-tight text-primary sm:text-4xl">
-                Pre koho je Esblu určené
+                {t("landing.audience.title")}
               </h2>
               <p className="mt-5 text-lg leading-8 text-secondary">
-                Esblu je určené najmä pre menšie stavebné, výkopové, servisné,
-                dopravné a technické firmy, ktoré dnes evidujú dokumenty v
-                papieroch, správach, fotografiách alebo tabuľkách.
+                {t("landing.audience.description")}
               </p>
             </div>
 
             <ul className="grid gap-3 sm:grid-cols-2">
-              {audienceExamples.map((example) => (
+              {audienceExampleKeys.map((exampleKey) => (
                 <li
-                  key={example}
+                  key={exampleKey}
                   className="flex items-start gap-3 rounded-2xl border border-subtle bg-surface-1 p-5 font-semibold leading-6 text-primary shadow-sm"
                 >
                   <CheckIcon />
-                  {example}
+                  {t(exampleKey)}
                 </li>
               ))}
             </ul>
@@ -510,10 +525,10 @@ export default function PublicLandingPage() {
           <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
             <div className="mx-auto max-w-2xl text-center">
               <p className="text-sm font-bold uppercase tracking-[0.18em] text-accent-cyan">
-                Začnite bez platby
+                {t("landing.freePlan.kicker")}
               </p>
               <h2 className="mt-3 text-3xl font-black tracking-tight text-primary sm:text-4xl">
-                Vyskúšajte Esblu zdarma
+                {t("landing.freePlan.title")}
               </h2>
             </div>
 
@@ -523,18 +538,20 @@ export default function PublicLandingPage() {
                 className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-accent-cyan to-accent-blue-strong opacity-80"
               />
               <p className="text-lg font-bold text-accent-cyan">
-                Bezplatná testovacia verzia
+                {t("landing.freePlan.badge")}
               </p>
               <p className="mt-3 text-5xl font-black tracking-tight text-primary">
-                0 €
+                {t("landing.freePlan.price")}
               </p>
-              <p className="mt-2 text-sm text-muted-esblu">bez platobnej karty</p>
+              <p className="mt-2 text-sm text-muted-esblu">
+                {t("landing.freePlan.priceNote")}
+              </p>
 
               <ul className="mt-7 space-y-3">
-                {freePlanItems.map((item) => (
-                  <li key={item} className="flex items-start gap-3 text-secondary">
+                {freePlanItemKeys.map((itemKey) => (
+                  <li key={itemKey} className="flex items-start gap-3 text-secondary">
                     <CheckIcon />
-                    <span>{item}</span>
+                    <span>{t(itemKey)}</span>
                   </li>
                 ))}
               </ul>
@@ -543,16 +560,12 @@ export default function PublicLandingPage() {
                 href="mailto:info@esblu.com"
                 className="btn-primary mt-8 flex min-h-12 w-full items-center justify-center px-6 py-3"
               >
-                Požiadať o beta prístup
+                {t("landing.freePlan.cta")}
               </a>
             </div>
 
             <p className="mx-auto mt-7 max-w-2xl text-center leading-7 text-secondary">
-              Platená verzia s vyššími limitmi sa pripravuje. Esblu je
-              momentálne v uzavretej beta verzii — noví používatelia sa do
-              nej dostanú po individuálnom schválení, registrácia do
-              bezplatnej verzie nezaručuje konkrétnu cenu ani funkcie budúcej
-              platenej verzie.
+              {t("landing.freePlan.note")}
             </p>
           </div>
         </section>
@@ -566,34 +579,31 @@ export default function PublicLandingPage() {
               <div className="grid gap-10 lg:grid-cols-[1.1fr_0.9fr]">
                 <div>
                   <p className="text-sm font-bold uppercase tracking-[0.18em] text-accent-cyan">
-                    Dôvera a bezpečnosť
+                    {t("landing.security.kicker")}
                   </p>
                   <h2 className="mt-3 text-3xl font-black tracking-tight sm:text-4xl">
-                    Vaše firemné údaje zostávajú oddelené
+                    {t("landing.security.title")}
                   </h2>
                   <p className="mt-5 text-lg leading-8 text-slate-300">
-                    Údaje používateľských účtov sú v aplikácii oddelené
-                    pomocou prístupových pravidiel. Prenos medzi zariadením a
-                    službou prebieha šifrovane. Žiadny online systém však
-                    nemožno označiť za absolútne bezpečný.
+                    {t("landing.security.description")}
                   </p>
                 </div>
 
                 <ul className="space-y-4">
                   {[
-                    "Používateľ sa prihlasuje vlastným účtom.",
-                    "Jednotliví používatelia nemajú mať prístup k údajom iných účtov.",
-                    "Dôležité originály dokumentov a vlastné zálohy si má používateľ ponechať.",
-                  ].map((item) => (
+                    "landing.security.point1",
+                    "landing.security.point2",
+                    "landing.security.point3",
+                  ].map((itemKey) => (
                     <li
-                      key={item}
+                      key={itemKey}
                       className="flex items-start gap-3 rounded-2xl bg-surface-2 p-4 leading-7 text-slate-200"
                     >
                       <span
                         aria-hidden="true"
                         className="mt-2 h-2.5 w-2.5 shrink-0 rounded-full bg-accent-cyan"
                       />
-                      {item}
+                      {t(itemKey)}
                     </li>
                   ))}
                 </ul>
@@ -607,24 +617,23 @@ export default function PublicLandingPage() {
         <section className="bg-gradient-to-br from-accent-cyan to-accent-blue-strong py-16 sm:py-20">
           <div className="mx-auto max-w-4xl px-4 text-center sm:px-6 lg:px-8">
             <h2 className="text-3xl font-black tracking-tight text-[#051221] sm:text-4xl">
-              Vyskúšajte, či vám Esblu zjednoduší firemnú evidenciu.
+              {t("landing.finalCta.title")}
             </h2>
             <p className="mx-auto mt-4 max-w-2xl text-lg leading-8 text-[#051221]/80">
-              Esblu je momentálne v uzavretej beta verzii. Napíšte nám a po
-              schválení vám radi otvoríme prístup zdarma.
+              {t("landing.finalCta.description")}
             </p>
             <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
               <a
                 href="mailto:info@esblu.com"
                 className="inline-flex min-h-12 items-center justify-center rounded-xl bg-page-bg px-6 py-3 font-bold text-primary transition hover:bg-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#051221] focus-visible:ring-offset-2"
               >
-                Požiadať o beta prístup
+                {t("landing.finalCta.ctaPrimary")}
               </a>
               <Link
                 href="/login"
                 className="inline-flex min-h-12 items-center justify-center rounded-xl px-6 py-3 font-bold text-[#051221] underline decoration-[#051221]/40 underline-offset-4 transition hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#051221]"
               >
-                Už mám účet
+                {t("landing.finalCta.ctaSecondary")}
               </Link>
             </div>
           </div>
@@ -636,7 +645,7 @@ export default function PublicLandingPage() {
           <div>
             <BrandMark />
             <p className="mt-4 text-sm text-muted-esblu">
-              Bezplatná testovacia verzia
+              {t("landing.footer.tagline")}
             </p>
             <a
               href="mailto:info@esblu.com"
@@ -644,6 +653,9 @@ export default function PublicLandingPage() {
             >
               info@esblu.com
             </a>
+            <div className="mt-5">
+              <LanguageSwitcher variant="dark" />
+            </div>
           </div>
 
           {/* Právne odkazy (bod 2 zadania) — doplnené Cookies/DPA/
@@ -654,30 +666,30 @@ export default function PublicLandingPage() {
             className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm font-semibold sm:grid-cols-3"
           >
             <Link href="/ochrana-osobnych-udajov" className={footerLinkClass}>
-              Ochrana osobných údajov
+              {t("landing.footer.privacy")}
             </Link>
             <Link href="/podmienky-pouzivania" className={footerLinkClass}>
-              Podmienky používania
+              {t("landing.footer.terms")}
             </Link>
             <Link href="/cookies" className={footerLinkClass}>
-              Cookies
+              {t("landing.footer.cookies")}
             </Link>
             <Link href="/dpa" className={footerLinkClass}>
-              DPA
+              {t("landing.footer.dpa")}
             </Link>
             <Link href="/subprocessors" className={footerLinkClass}>
-              Sprostredkovatelia
+              {t("landing.footer.subprocessors")}
             </Link>
             <Link href="/kontakt" className={footerLinkClass}>
-              Kontakt
+              {t("landing.footer.contact")}
             </Link>
             <Link href="/login" className={footerLinkClass}>
-              Prihlásenie
+              {t("landing.footer.login")}
             </Link>
           </nav>
         </div>
         <div className="border-t border-subtle px-4 py-5 text-center text-xs text-muted-esblu">
-          © {currentYear} Esblu
+          {t("landing.footer.copyright", { year: currentYear })}
         </div>
       </footer>
     </div>
