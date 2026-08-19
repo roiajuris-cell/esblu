@@ -12,6 +12,51 @@ import {
 import { useCompanyDpaLegalHold } from "@/app/components/CompanyDpaGate";
 import { LEGAL_HOLD_MESSAGE } from "@/lib/company-dpa";
 
+// Dokumenty priradené k vozidlu z AI Inboxu (PZP, technický preukaz) —
+// bod 2/3 zadania: po potvrdení v Inboxe majú tieto dokumenty "skončiť"
+// priamo pri vozidle. Reuse existujúceho document/document_links modelu
+// (žiadna nová tabuľka) — rovnaké riadky, aké appka už zapisuje z
+// app/ai-evidencia, iba čítané tu cez vehicle_id namiesto company_id.
+const LINKED_DOCUMENT_TYPE_LABELS: Record<string, string> = {
+  insurance: "PZP / poistná zmluva",
+  vehicle_registration: "Technický preukaz",
+};
+
+const LINKED_ATTACHMENT_TYPE_LABELS: Record<string, string> = {
+  white_card: "Biela karta",
+  green_card: "Zelená karta / potvrdenie o poistení",
+  insurance_event: "Záznam o poistnej udalosti",
+  vehicle_registration_back: "Zadná strana technického preukazu",
+  other: "Iný súvisiaci dokument",
+};
+
+type LinkedVehicleDocument = {
+  id: string;
+  document_type: string | null;
+  extracted_fields: Record<string, unknown> | null;
+  storage_bucket: string | null;
+  storage_path: string | null;
+  original_filename: string | null;
+  created_at: string | null;
+  signedUrl: string | null;
+  attachments: {
+    id: string;
+    attachment_type: string;
+    signedUrl: string | null;
+  }[];
+};
+
+function describeInsuranceSummary(fields: Record<string, unknown> | null): string {
+  if (!fields) return "";
+  const provider = typeof fields.provider === "string" ? fields.provider : "";
+  const policyNumber =
+    typeof fields.policyNumber === "string" ? fields.policyNumber : "";
+  const parts = [provider, policyNumber ? `č. ${policyNumber}` : ""].filter(
+    Boolean
+  );
+  return parts.join(" — ");
+}
+
 async function compressVehiclePhoto(file: File): Promise<File> {
   const imageUrl = URL.createObjectURL(file);
 
@@ -87,6 +132,10 @@ export default function VehicleDetailPage() {
   const [isUploadingPhotos, setIsUploadingPhotos] = useState(false);
   const [deletingPhotoId, setDeletingPhotoId] = useState<string | null>(null);
   const [lightboxPhoto, setLightboxPhoto] = useState<any>(null);
+  const [linkedDocuments, setLinkedDocuments] = useState<
+    LinkedVehicleDocument[]
+  >([]);
+  const [linkedDocumentsLoading, setLinkedDocumentsLoading] = useState(false);
 
   const emptyService = {
     service_date: "",
@@ -120,6 +169,128 @@ export default function VehicleDetailPage() {
 
     if (membership?.company_id) {
       loadPhotos(membership.company_id);
+      loadLinkedDocuments(membership.company_id);
+    }
+  }
+
+  // Dokumenty priradené k tomuto vozidlu z AI Inboxu (PZP, technický
+  // preukaz) — pozri komentár pri LINKED_DOCUMENT_TYPE_LABELS vyššie.
+  // Číta výhradne existujúce public.documents/document_links/
+  // document_attachments (žiadna nová tabuľka), RLS je rovnaká pre
+  // owner/admin/employee (SELECT je pre všetky aktívne role firmy).
+  async function loadLinkedDocuments(currentCompanyId: string = companyId) {
+    if (!currentCompanyId) {
+      setLinkedDocuments([]);
+      return;
+    }
+
+    setLinkedDocumentsLoading(true);
+
+    try {
+      const { data, error } = await supabase
+        .from("documents")
+        .select(
+          "id, document_type, extracted_fields, storage_bucket, storage_path, original_filename, created_at, document_links!inner(vehicle_id)"
+        )
+        .eq("company_id", currentCompanyId)
+        .eq("document_links.vehicle_id", vehicleId)
+        .in("document_type", ["insurance", "vehicle_registration"])
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false });
+
+      if (error || !data) {
+        console.error("Chyba pri načítaní dokumentov vozidla:", error);
+        setLinkedDocuments([]);
+        return;
+      }
+
+      type LinkedDocumentRow = {
+        id: string;
+        document_type: string | null;
+        extracted_fields: Record<string, unknown> | null;
+        storage_bucket: string | null;
+        storage_path: string | null;
+        original_filename: string | null;
+        created_at: string | null;
+      };
+      type LinkedAttachmentRow = {
+        id: string;
+        document_id: string;
+        storage_bucket: string;
+        storage_path: string;
+        attachment_type: string;
+      };
+
+      const documentRows = data as unknown as LinkedDocumentRow[];
+      const documentIds = documentRows.map((doc) => doc.id);
+
+      const { data: attachmentsData, error: attachmentsError } =
+        documentIds.length > 0
+          ? await supabase
+              .from("document_attachments")
+              .select("id, document_id, storage_bucket, storage_path, attachment_type")
+              .eq("company_id", currentCompanyId)
+              .in("document_id", documentIds)
+          : { data: [] as LinkedAttachmentRow[], error: null };
+
+      if (attachmentsError) {
+        console.error(
+          "Chyba pri načítaní príloh dokumentov vozidla:",
+          attachmentsError
+        );
+      }
+
+      const enriched = await Promise.all(
+        documentRows.map(async (doc) => {
+          let signedUrl: string | null = null;
+
+          if (doc.storage_bucket && doc.storage_path) {
+            const { data: signed } = await supabase.storage
+              .from(doc.storage_bucket)
+              .createSignedUrl(doc.storage_path, 3600);
+            signedUrl = signed?.signedUrl ?? null;
+          }
+
+          const docAttachments = ((attachmentsData as LinkedAttachmentRow[]) || []).filter(
+            (a) => a.document_id === doc.id
+          );
+
+          const attachmentsWithUrls = await Promise.all(
+            docAttachments.map(async (a) => {
+              let attachmentUrl: string | null = null;
+
+              if (a.storage_bucket && a.storage_path) {
+                const { data: signed } = await supabase.storage
+                  .from(a.storage_bucket)
+                  .createSignedUrl(a.storage_path, 3600);
+                attachmentUrl = signed?.signedUrl ?? null;
+              }
+
+              return {
+                id: a.id,
+                attachment_type: a.attachment_type,
+                signedUrl: attachmentUrl,
+              };
+            })
+          );
+
+          return {
+            id: doc.id,
+            document_type: doc.document_type,
+            extracted_fields: doc.extracted_fields,
+            storage_bucket: doc.storage_bucket,
+            storage_path: doc.storage_path,
+            original_filename: doc.original_filename,
+            created_at: doc.created_at,
+            signedUrl,
+            attachments: attachmentsWithUrls,
+          } as LinkedVehicleDocument;
+        })
+      );
+
+      setLinkedDocuments(enriched);
+    } finally {
+      setLinkedDocumentsLoading(false);
     }
   }
 
@@ -613,6 +784,84 @@ export default function VehicleDetailPage() {
                     </button>
                   )}
                 </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="surface-card mt-10 p-8">
+        <h2 className="text-2xl font-bold">📄 PZP a technický preukaz</h2>
+        <p className="mt-1 text-sm text-muted-esblu">
+          Dokumenty potvrdené v AI Inboxe a priradené k tomuto vozidlu.
+        </p>
+
+        {linkedDocumentsLoading ? (
+          <p className="mt-6 text-muted-esblu">Načítavam dokumenty...</p>
+        ) : linkedDocuments.length === 0 ? (
+          <p className="mt-6 text-muted-esblu">
+            Zatiaľ tu nie je priradené žiadne PZP ani technický preukaz.
+            Nahraj ich cez AI Inbox — po potvrdení sa automaticky zobrazia tu.
+          </p>
+        ) : (
+          <div className="mt-6 space-y-4">
+            {linkedDocuments.map((doc) => (
+              <div
+                key={doc.id}
+                className="rounded-2xl border border-subtle bg-surface-2 p-6"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-lg font-bold text-primary">
+                      {LINKED_DOCUMENT_TYPE_LABELS[doc.document_type || ""] ||
+                        "Dokument"}
+                    </h3>
+
+                    {doc.document_type === "insurance" && (
+                      <p className="mt-1 text-sm text-muted-esblu">
+                        {describeInsuranceSummary(doc.extracted_fields) ||
+                          "Bez ďalších podrobností"}
+                      </p>
+                    )}
+
+                    {doc.created_at && (
+                      <p className="mt-1 text-xs text-muted-esblu">
+                        Nahraté {new Date(doc.created_at).toLocaleDateString("sk-SK")}
+                      </p>
+                    )}
+                  </div>
+
+                  {doc.signedUrl && (
+                    <a
+                      href={doc.signedUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700"
+                    >
+                      Otvoriť
+                    </a>
+                  )}
+                </div>
+
+                {doc.attachments.length > 0 && (
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {doc.attachments.map((attachment) =>
+                      attachment.signedUrl ? (
+                        <a
+                          key={attachment.id}
+                          href={attachment.signedUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="rounded-lg border border-subtle bg-surface-1 px-3 py-2 text-xs font-semibold text-secondary hover:bg-surface-hover"
+                        >
+                          {LINKED_ATTACHMENT_TYPE_LABELS[
+                            attachment.attachment_type
+                          ] || "Príloha"}
+                        </a>
+                      ) : null
+                    )}
+                  </div>
+                )}
               </div>
             ))}
           </div>

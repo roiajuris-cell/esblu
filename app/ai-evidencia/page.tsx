@@ -135,7 +135,8 @@ const REVIEW_ONLY_FIELD_LABELS: Record<OtherDocumentType, [string, string][]> = 
     ["provider", "Poisťovňa"],
     ["policyNumber", "Číslo zmluvy"],
     ["insuranceType", "Druh poistenia"],
-    ["vehicleIdentifier", "Vozidlo / stroj"],
+    ["vehicleIdentifier", "Vozidlo / stroj (ŠPZ)"],
+    ["vin", "VIN"],
     ["validFrom", "Platnosť od"],
     ["validTo", "Platnosť do"],
     ["premiumAmount", "Poistné"],
@@ -319,6 +320,71 @@ async function findDuplicateVehicle(
     data.find((vehicle) => normalizeSpz(vehicle.spz) === normalizedSpz) ??
     null
   );
+}
+
+// Deterministické párovanie PZP → existujúce vozidlo firmy (bod 2 zadania).
+// Poradie: 1) VIN (spoľahlivejší, prakticky unikátny identifikátor), 2) ŠPZ.
+// Pracuje nad už načítaným vehicleOptions (žiadny ďalší DB dotaz) —
+// vehicleOptions je vždy filtrovaný na aktívnu firmu volajúceho (RLS +
+// company_id filter v loadVehicleAndMachineOptions), takže párovanie nikdy
+// neopustí hranicu firmy.
+//
+// NIKDY nehádaj potichu: ak identifikátor zodpovedá VIACERÝM vozidlám naraz
+// (ambiguous), nevracia sa žiadne vozidlo — iba príznak, že treba ručný
+// výber. Ak nezodpovedá žiadnemu, tiež sa nič nepredvyberie (no-match) a
+// UI nechá používateľa vybrať vozidlo ručne alebo flow zastaví.
+function matchInsuranceVehicle(
+  vin: unknown,
+  vehicleIdentifier: unknown,
+  vehicleOptions: { id: string; spz: string | null; vin: string | null }[]
+): {
+  vehicleId: string | null;
+  ambiguous: boolean;
+  matchedBy: "vin" | "spz" | null;
+} {
+  const trimmedVin =
+    typeof vin === "string" && vin.trim().length > 0
+      ? vin.trim().toUpperCase()
+      : "";
+
+  if (trimmedVin) {
+    const vinMatches = vehicleOptions.filter(
+      (vehicle) =>
+        typeof vehicle.vin === "string" &&
+        vehicle.vin.trim().toUpperCase() === trimmedVin
+    );
+
+    if (vinMatches.length === 1) {
+      return { vehicleId: vinMatches[0].id, ambiguous: false, matchedBy: "vin" };
+    }
+
+    if (vinMatches.length > 1) {
+      return { vehicleId: null, ambiguous: true, matchedBy: null };
+    }
+
+    // 0 zhôd na VIN — pokračuj na ŠPZ, VIN v dokumente mohol byť
+    // nesprávne prečítaný alebo vozidlo v evidencii nemá VIN vyplnené.
+  }
+
+  const normalizedSpz = normalizeSpz(vehicleIdentifier);
+
+  if (!normalizedSpz) {
+    return { vehicleId: null, ambiguous: false, matchedBy: null };
+  }
+
+  const spzMatches = vehicleOptions.filter(
+    (vehicle) => normalizeSpz(vehicle.spz) === normalizedSpz
+  );
+
+  if (spzMatches.length === 1) {
+    return { vehicleId: spzMatches[0].id, ambiguous: false, matchedBy: "spz" };
+  }
+
+  if (spzMatches.length > 1) {
+    return { vehicleId: null, ambiguous: true, matchedBy: null };
+  }
+
+  return { vehicleId: null, ambiguous: false, matchedBy: null };
 }
 
 function normalizeMachineLabel(value: unknown): string {
@@ -647,8 +713,15 @@ export default function AiEvidenciaPage() {
   const [selectedVehicleId, setSelectedVehicleId] = useState("");
   const [selectedMachineId, setSelectedMachineId] = useState("");
   const [vehicleOptions, setVehicleOptions] = useState<
-    { id: string; spz: string | null }[]
+    { id: string; spz: string | null; vin: string | null }[]
   >([]);
+  // PZP auto-matching (bod 2 zadania — VIN → ŠPZ, bez tichého hádania):
+  // true, keď identifikátor z PZP zodpovedá VIACERÝM vozidlám firmy naraz.
+  // V tom prípade sa NIKDY nepredvyberie žiadne vozidlo — používateľ musí
+  // vybrať ručne (rovnaký princíp ako findDuplicateVehicle pri technickom
+  // preukaze, len s explicitným rozlíšením "no match" vs. "ambiguous").
+  const [insuranceMatchAmbiguous, setInsuranceMatchAmbiguous] =
+    useState(false);
   const [machineOptions, setMachineOptions] = useState<
     { id: string; name: string | null }[]
   >([]);
@@ -774,13 +847,32 @@ const unassignedReceipts = otherDocuments.filter(
 const unassignedInvoices = otherDocuments.filter(
   (doc) => doc.document_type === "invoice" && !isDocumentAssigned(doc)
 );
-const otherDocumentsFlatList = otherDocuments.filter(
-  (doc) =>
-    !(
-      (doc.document_type === "receipt" || doc.document_type === "invoice") &&
-      !isDocumentAssigned(doc)
-    )
-);
+// PZP a technický preukaz, ktoré už boli potvrdené a priradené k vozidlu/
+// stroju, sa v Inboxe NEMAJÚ zobrazovať ako samostatná archivovaná položka
+// (zadanie, bod 2/3) — dokument aj jeho súbor v Storage naďalej existujú
+// bezo zmeny (nič sa nemaže), iba sa v tomto zozname skryjú, pretože ich
+// "domovom" je od tejto chvíle detail príslušného vozidla/stroja (rovnaký
+// dopyt cez document_links, iba na inej stránke — pozri app/vozidla/[id]).
+// Ostatné typy dokumentov (faktúra, bloček, servisný doklad, iné) sa touto
+// zmenou nedotýkajú — ich flow ostáva presne taký, ako bol.
+const otherDocumentsFlatList = otherDocuments.filter((doc) => {
+  if (
+    (doc.document_type === "receipt" || doc.document_type === "invoice") &&
+    !isDocumentAssigned(doc)
+  ) {
+    return false;
+  }
+
+  if (
+    (doc.document_type === "insurance" ||
+      doc.document_type === "vehicle_registration") &&
+    isDocumentAssigned(doc)
+  ) {
+    return false;
+  }
+
+  return true;
+});
 const openFolderDocuments =
   openFolder === "receipt"
     ? unassignedReceipts
@@ -1015,51 +1107,96 @@ const openFolderDocuments =
             : [],
         });
 
-        // Ak dokument obsahuje identifikátor vozidla/stroja (dnes iba
-        // service_document, prípadne insurance.vehicleIdentifier), skús ho
-        // bez zásahu používateľa spárovať s existujúcim vozidlom alebo
-        // strojom podľa už načítaných zoznamov — nikdy nenúť ručné
-        // prepisovanie, ak entita už existuje. Pri nejednoznačnosti alebo
-        // chýbajúcom identifikátore ostáva priradenie nezvolené.
-        const identifier =
-          (documentType === "service_document" &&
-            typeof fields.vehicleOrMachineIdentifier === "string" &&
-            fields.vehicleOrMachineIdentifier) ||
-          (documentType === "insurance" &&
-            typeof fields.vehicleIdentifier === "string" &&
-            fields.vehicleIdentifier) ||
-          "";
+        setInsuranceMatchAmbiguous(false);
 
-        const normalizedIdentifierSpz = identifier ? normalizeSpz(identifier) : null;
-        const matchedVehicle = normalizedIdentifierSpz
-          ? vehicleOptions.find(
-              (vehicle) => normalizeSpz(vehicle.spz) === normalizedIdentifierSpz
-            )
-          : undefined;
+        if (documentType === "insurance") {
+          // PZP — deterministické párovanie VIN → ŠPZ (bod 2 zadania),
+          // NIKDY tiché hádanie. Presne jedna zhoda sa predvyberie; viac
+          // zhôd naraz (ambiguous) alebo žiadna zhoda ostávajú bez
+          // predvýberu a používateľ musí vozidlo/stroj vybrať ručne.
+          const match = matchInsuranceVehicle(
+            fields.vin,
+            fields.vehicleIdentifier,
+            vehicleOptions
+          );
 
-        const normalizedIdentifierLabel = identifier
-          ? normalizeMachineLabel(identifier)
-          : "";
-        const matchedMachine =
-          !matchedVehicle && normalizedIdentifierLabel
-            ? machineOptions.find(
-                (machine) =>
-                  normalizeMachineLabel(machine.name) === normalizedIdentifierLabel
+          if (match.vehicleId) {
+            setAssignmentTarget("vehicle");
+            setSelectedVehicleId(match.vehicleId);
+            setSelectedMachineId("");
+          } else if (match.ambiguous) {
+            setInsuranceMatchAmbiguous(true);
+            setAssignmentTarget(null);
+            setSelectedVehicleId("");
+            setSelectedMachineId("");
+          } else {
+            // Žiadna zhoda na vozidlo — skús ešte strojový fallback podľa
+            // pôvodného vehicleIdentifier (napr. PZP prívesu/stroja), presne
+            // ako doteraz. Nič sa nevytvára automaticky, iba sa predvyberie
+            // existujúci stroj, ak jednoznačne zodpovedá.
+            const normalizedIdentifierLabel =
+              typeof fields.vehicleIdentifier === "string" && fields.vehicleIdentifier
+                ? normalizeMachineLabel(fields.vehicleIdentifier)
+                : "";
+            const matchedMachine = normalizedIdentifierLabel
+              ? machineOptions.find(
+                  (machine) =>
+                    normalizeMachineLabel(machine.name) === normalizedIdentifierLabel
+                )
+              : undefined;
+
+            if (matchedMachine) {
+              setAssignmentTarget("machine");
+              setSelectedMachineId(matchedMachine.id);
+              setSelectedVehicleId("");
+            } else {
+              setAssignmentTarget(null);
+              setSelectedVehicleId("");
+              setSelectedMachineId("");
+            }
+          }
+        } else {
+          // Ostatné typy (dnes iba service_document) — nezmenené: skús
+          // identifikátor spárovať s vozidlom (ŠPZ) alebo strojom podľa už
+          // načítaných zoznamov. Pri nejednoznačnosti/chýbajúcom
+          // identifikátore ostáva priradenie nezvolené.
+          const identifier =
+            (documentType === "service_document" &&
+              typeof fields.vehicleOrMachineIdentifier === "string" &&
+              fields.vehicleOrMachineIdentifier) ||
+            "";
+
+          const normalizedIdentifierSpz = identifier ? normalizeSpz(identifier) : null;
+          const matchedVehicle = normalizedIdentifierSpz
+            ? vehicleOptions.find(
+                (vehicle) => normalizeSpz(vehicle.spz) === normalizedIdentifierSpz
               )
             : undefined;
 
-        if (matchedVehicle) {
-          setAssignmentTarget("vehicle");
-          setSelectedVehicleId(matchedVehicle.id);
-          setSelectedMachineId("");
-        } else if (matchedMachine) {
-          setAssignmentTarget("machine");
-          setSelectedMachineId(matchedMachine.id);
-          setSelectedVehicleId("");
-        } else {
-          setAssignmentTarget(null);
-          setSelectedVehicleId("");
-          setSelectedMachineId("");
+          const normalizedIdentifierLabel = identifier
+            ? normalizeMachineLabel(identifier)
+            : "";
+          const matchedMachine =
+            !matchedVehicle && normalizedIdentifierLabel
+              ? machineOptions.find(
+                  (machine) =>
+                    normalizeMachineLabel(machine.name) === normalizedIdentifierLabel
+                )
+              : undefined;
+
+          if (matchedVehicle) {
+            setAssignmentTarget("vehicle");
+            setSelectedVehicleId(matchedVehicle.id);
+            setSelectedMachineId("");
+          } else if (matchedMachine) {
+            setAssignmentTarget("machine");
+            setSelectedMachineId(matchedMachine.id);
+            setSelectedVehicleId("");
+          } else {
+            setAssignmentTarget(null);
+            setSelectedVehicleId("");
+            setSelectedMachineId("");
+          }
         }
       }
 
@@ -1092,6 +1229,7 @@ const openFolderDocuments =
     setSelectedVehicleId("");
     setSelectedMachineId("");
     setDocumentNote("");
+    setInsuranceMatchAmbiguous(false);
   }
 
   function updateResult(field: string, value: string) {
@@ -1349,9 +1487,22 @@ review_status: reviewStatus,
       return;
     }
 
+    // PZP musí vždy skončiť priradené k existujúcemu vozidlu/stroju (bod 2
+    // zadania) — nikdy sa neukladá "bez priradenia". UI nižšie preto pre
+    // insurance vôbec neponúka možnosť "none"; táto kontrola je obranná
+    // duplicita pre prípad priameho volania mimo bežného UI stavu.
+    if (scanDocumentType === "insurance" && assignmentTarget === "none") {
+      setError(
+        "PZP musí byť priradené k existujúcemu vozidlu alebo stroju. Vyber vozidlo nižšie, alebo ak ešte v evidencii nie je, najprv ho pridaj (napr. cez technický preukaz)."
+      );
+      return;
+    }
+
     if (!assignmentTarget) {
       setError(
-        "Najprv zvoľ, či dokument priradiť k vozidlu, stroju, alebo bez priradenia."
+        scanDocumentType === "insurance"
+          ? "Vyber vozidlo alebo stroj, ku ktorému PZP patrí."
+          : "Najprv zvoľ, či dokument priradiť k vozidlu, stroju, alebo bez priradenia."
       );
       return;
     }
@@ -2415,7 +2566,7 @@ async function loadVehicleAndMachineOptions(
   const [vehiclesResult, machinesResult] = await Promise.all([
     supabase
       .from("vehicles")
-      .select("id, spz")
+      .select("id, spz, vin")
       .eq("company_id", currentCompanyId)
       .order("spz", { ascending: true }),
     supabase
@@ -3185,10 +3336,35 @@ function formatDocDate(value: unknown): string {
                 používateľ k priradeniu vôbec dostane. */}
             <div className="space-y-4 rounded-2xl border border-subtle bg-surface-1 p-5">
               <h3 className="text-lg font-black text-primary">
-                Chcete dokument priradiť?
+                {scanDocumentType === "insurance"
+                  ? "Ku ktorému vozidlu/stroju PZP patrí?"
+                  : "Chcete dokument priradiť?"}
               </h3>
 
-              <div className="grid grid-cols-3 gap-2">
+              {scanDocumentType === "insurance" && insuranceMatchAmbiguous && (
+                <p className="rounded-xl bg-amber-500/10 p-3 text-sm font-semibold text-amber-400">
+                  ⚠️ Identifikátor z dokumentu (VIN/ŠPZ) zodpovedá viacerým
+                  vozidlám naraz — automaticky sme nič nevybrali. Vyber
+                  správne vozidlo ručne nižšie.
+                </p>
+              )}
+
+              {scanDocumentType === "insurance" &&
+                !insuranceMatchAmbiguous &&
+                assignmentTarget === null && (
+                  <p className="rounded-xl bg-surface-2 p-3 text-sm text-muted-esblu">
+                    Vozidlo podľa VIN/ŠPZ z dokumentu sa nenašlo. Vyber ho
+                    ručne, alebo ak v evidencii ešte nie je, najprv ho pridaj.
+                  </p>
+                )}
+
+              <div
+                className={`grid gap-2 ${
+                  scanDocumentType === "insurance"
+                    ? "grid-cols-2"
+                    : "grid-cols-3"
+                }`}
+              >
                 <button
                   type="button"
                   onClick={() => setAssignmentTarget("vehicle")}
@@ -3211,17 +3387,19 @@ function formatDocDate(value: unknown): string {
                 >
                   🚜 Stroj
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setAssignmentTarget("none")}
-                  className={`rounded-2xl px-3 py-4 text-sm font-bold ${
-                    assignmentTarget === "none"
-                      ? "bg-blue-600 text-white"
-                      : "bg-surface-2 text-secondary"
-                  }`}
-                >
-                  Bez priradenia
-                </button>
+                {scanDocumentType !== "insurance" && (
+                  <button
+                    type="button"
+                    onClick={() => setAssignmentTarget("none")}
+                    className={`rounded-2xl px-3 py-4 text-sm font-bold ${
+                      assignmentTarget === "none"
+                        ? "bg-blue-600 text-white"
+                        : "bg-surface-2 text-secondary"
+                    }`}
+                  >
+                    Bez priradenia
+                  </button>
+                )}
               </div>
 
               {assignmentTarget === "vehicle" && (

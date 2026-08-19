@@ -256,6 +256,12 @@ const INSURANCE_FIELDS_SCHEMA = {
     policyNumber: { type: ["string", "null"] },
     insuranceType: { type: ["string", "null"] },
     vehicleIdentifier: { type: ["string", "null"] },
+    // VIN — samostatné pole (odlíšené od vehicleIdentifier/SPZ nižšie), aby
+    // appka mohla PZP deterministicky spárovať s existujúcim vozidlom podľa
+    // VIN ako prvej voľby (spoľahlivejší identifikátor než SPZ), presne ako
+    // pri technickom preukaze. Pridané ako čisto ADITÍVNE rozšírenie schémy —
+    // vehicleIdentifier ostáva bezo zmeny (naďalej SPZ/sériové číslo stroja).
+    vin: { type: ["string", "null"] },
     validFrom: { type: ["string", "null"] },
     validTo: { type: ["string", "null"] },
     premiumAmount: { type: ["number", "null"], minimum: 0 },
@@ -266,6 +272,7 @@ const INSURANCE_FIELDS_SCHEMA = {
     "policyNumber",
     "insuranceType",
     "vehicleIdentifier",
+    "vin",
     "validFrom",
     "validTo",
     "premiumAmount",
@@ -537,6 +544,11 @@ podľa toho, v akom jazyku je zvyšok dokumentu.
   dokumente uvedená.
 - vehicleIdentifier vráť iba ak dokument jasne odkazuje na konkrétne
   vozidlo (SPZ) alebo stroj (sériové/výrobné číslo); inak null.
+- vin vráť IBA ak je na dokumente jasne vytlačené identifikačné číslo
+  vozidla (VIN / číslo karosérie, presne 17 znakov, písmená a čísla, bez
+  písmen I/O/Q) — samostatne od vehicleIdentifier/SPZ vyššie; ak VIN na
+  dokumente nie je uvedený alebo je nečitateľný, vráť null (nikdy si ho
+  nevymýšľaj ani neodvodzuj z iného poľa).
 - validFrom a validTo (platnosť poistenia "od"/"do") vráť ako YYYY-MM-DD,
   alebo null pri nejednoznačnom dátume.
 - premiumAmount je výška poistného (celkové alebo splátka podľa toho, čo je
@@ -835,6 +847,7 @@ function normalizeInsuranceFields(data: Record<string, unknown>) {
     policyNumber: nullableText(data.policyNumber),
     insuranceType: nullableText(data.insuranceType),
     vehicleIdentifier: nullableText(data.vehicleIdentifier),
+    vin: nullableText(data.vin),
     validFrom: nullableText(data.validFrom),
     validTo: nullableText(data.validTo),
     premiumAmount: toFiniteNumberOrNull(data.premiumAmount, { min: 0 }),
