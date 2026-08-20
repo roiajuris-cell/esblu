@@ -50,7 +50,7 @@ const de = {
     planLimitMessage:
       "Sie haben das Limit der kostenlosen Version erreicht. Die kostenpflichtige Version von Esblu befindet sich in Vorbereitung.",
     planResourceLabels: {
-      ai_evidence: "Posteingang",
+      ai_evidence: "Inbox",
       vehicles: "Fahrzeuge",
       inventory_items: "Lager",
       machines: "Maschinen",
@@ -65,7 +65,7 @@ const de = {
   nav: {
     overview: "Übersicht",
     dashboard: "Übersicht",
-    inbox: "Posteingang",
+    inbox: "Inbox",
     vehicles: "Fahrzeuge",
     machines: "Maschinen",
     inventory: "Lager",
@@ -143,7 +143,7 @@ const de = {
       subtitle:
         "Die wichtigsten Firmenverwaltungen sind an einem Ort und über ein eigenes Benutzerkonto zugänglich.",
       examplesAriaLabel: "Dokumentbeispiele",
-      inboxTitle: "Posteingang",
+      inboxTitle: "Inbox",
       inboxDesc:
         "Sie fotografieren oder laden ein unterstütztes Dokument hoch, und Esblu versucht, die verfügbaren Daten automatisch zu erkennen. Das Ergebnis prüfen und bestätigen Sie vor dem Speichern immer selbst.",
       inboxExample1: "Wiegescheine",
@@ -195,7 +195,7 @@ const de = {
       badge: "Kostenlose Testversion",
       price: "0 €",
       priceNote: "ohne Zahlungskarte",
-      item1: "5 Dokumente im Posteingang",
+      item1: "5 Dokumente in der Inbox",
       item2: "2 Fahrzeuge",
       item3: "2 Maschinen",
       item4: "5 Lagerartikel",
@@ -376,7 +376,7 @@ const de = {
   companyDpaGate: {
     title: "Auftragsverarbeitungsvertrag (AVV)",
     description:
-      "Damit Ihre Firma in Esblu personenbezogene Daten Dritter verarbeiten kann (z. B. in Dokumenten, Fotos oder Erfassungen), müssen Sie als Firmeninhaber zunächst den aktuellen Auftragsverarbeitungsvertrag in ihrem Namen annehmen. Diese Bestätigung ist nur einmal pro Dokumentversion erforderlich und ist an Ihre Firma gebunden (nicht nur an Ihr persönliches Konto). Bis Sie die AVV annehmen, bleiben Aktionen, die neue Datensätze mit personenbezogenen Daten erstellen (Fahrzeuge, Maschinen, Lager, KI-Posteingang, Dokumente), in der App vorübergehend deaktiviert — das sichere Anzeigen und Bearbeiten bestehender Daten ist davon nicht betroffen.",
+      "Damit Ihre Firma in Esblu personenbezogene Daten Dritter verarbeiten kann (z. B. in Dokumenten, Fotos oder Erfassungen), müssen Sie als Firmeninhaber zunächst den aktuellen Auftragsverarbeitungsvertrag in ihrem Namen annehmen. Diese Bestätigung ist nur einmal pro Dokumentversion erforderlich und ist an Ihre Firma gebunden (nicht nur an Ihr persönliches Konto). Bis Sie die AVV annehmen, bleiben Aktionen, die neue Datensätze mit personenbezogenen Daten erstellen (Fahrzeuge, Maschinen, Lager, KI-Inbox, Dokumente), in der App vorübergehend deaktiviert — das sichere Anzeigen und Bearbeiten bestehender Daten ist davon nicht betroffen.",
     readCurrentDpa: "Aktuellen AVV lesen (Version {{version}})",
     confirmAuthorityLabel:
       "Ich bestätige, dass ich befugt bin, im Namen dieser Firma zu handeln, und nehme in ihrem Namen den Auftragsverarbeitungsvertrag (AVV), Version {{version}}, an.",
@@ -386,7 +386,7 @@ const de = {
     employeeNoticeTitle:
       "Das Konto Ihrer Firma wartet auf die Bestätigung des AVV durch den Firmeninhaber.",
     employeeNoticeDescription:
-      "Der Auftragsverarbeitungsvertrag muss im Namen der Firma von deren Inhaber (Owner) bestätigt werden — Administrator- oder andere Berechtigungen in der App reichen dafür nicht aus. Bis dies geschieht, sind einige Funktionen (z. B. Hochladen neuer Dokumente, KI-Posteingang, Fahrzeuge, Maschinen oder Lagerartikel) vorübergehend nicht verfügbar; bestehende Daten können Sie weiterhin einsehen.",
+      "Der Auftragsverarbeitungsvertrag muss im Namen der Firma von deren Inhaber (Owner) bestätigt werden — Administrator- oder andere Berechtigungen in der App reichen dafür nicht aus. Bis dies geschieht, sind einige Funktionen (z. B. Hochladen neuer Dokumente, KI-Inbox, Fahrzeuge, Maschinen oder Lagerartikel) vorübergehend nicht verfügbar; bestehende Daten können Sie weiterhin einsehen.",
     employeeNoticeDismiss: "Verstanden",
     viewDpa: "AVV anzeigen",
     errors: {
@@ -616,7 +616,7 @@ const de = {
       delivery_note: "Lieferschein",
       invoice: "Rechnung",
       receipt: "Beleg",
-      insurance: "KFZ-Haftpflicht / Versicherungsvertrag",
+      insurance: "KFZ-Versicherung",
       service_document: "Servicebeleg",
       vehicle_registration: "Fahrzeugschein",
       other: "Dokument zur Prüfung",
@@ -637,7 +637,7 @@ const de = {
       totalAmount: "Betrag",
       vatAmount: "MwSt.",
       currency: "Währung",
-      variableSymbol: "Variabler Symbol",
+      variableSymbol: "Variabelsymbol",
       description: "Beschreibung",
       merchant: "Händler",
       purchaseDate: "Datum",
@@ -779,7 +779,7 @@ const de = {
       imageInvalidContentPrefixed: "{{label}} hat keinen gültigen Bildinhalt.",
       aiNoDataReturned: "Die KI hat keine Daten zurückgegeben.",
     },
-    documentSavedToInbox: "Das Dokument wurde im Inbox gespeichert.",
+    documentSavedToInbox: "Das Dokument wurde in der Inbox gespeichert.",
     noPlate: "ohne Kennzeichen",
     noPlateCapitalized: "Ohne Kennzeichen",
     withoutSpzGroup: "OHNE KENNZEICHEN",
@@ -799,7 +799,7 @@ const de = {
     registration: {
       sectionTitle: "🚘 Fahrzeugschein",
       sectionDescription:
-        "Fotografieren Sie die Vorder- und Rückseite des Fahrzeugscheins. Die KI verarbeitet die Daten als ein Dokument; nach Ihrer Prüfung und Bestätigung wird das Fahrzeug im Modul Fahrzeuge erstellt oder aktualisiert. Die Fotos werden zusammen mit dem Dokument im Inbox gespeichert.",
+        "Fotografieren Sie die Vorder- und Rückseite des Fahrzeugscheins. Die KI verarbeitet die Daten als ein Dokument; nach Ihrer Prüfung und Bestätigung wird das Fahrzeug im Modul Fahrzeuge erstellt oder aktualisiert. Die Fotos werden zusammen mit dem Dokument in der Inbox gespeichert.",
       frontTitle: "Vorderseite",
       frontRequired: "Pflichtfoto",
       backTitle: "Rückseite",
@@ -925,7 +925,7 @@ const de = {
     noInvoiceNumber: "Ohne Rechnungsnummer",
     otherDocumentsTitle: "Weitere Dokumente",
     otherDocumentsDescription:
-      "KFZ-Versicherung, Servicebelege, sonstige Dokumente und zugeordnete Rechnungen/Belege, gespeichert über den Inbox.",
+      "KFZ-Versicherung, Servicebelege, sonstige Dokumente und zugeordnete Rechnungen/Belege, gespeichert über die Inbox.",
     noSavedDocuments: "Hier sind noch keine gespeicherten Dokumente vorhanden.",
     documentDetailTitle: "📄 Dokumentdetail",
     typeLabel: "Typ",
@@ -967,10 +967,10 @@ const de = {
   vehicles: {
     list: {
       subtitle: "Erfassung der Firmenfahrzeuge.",
-      addViaInboxTitle: "Neues Fahrzeug über den Posteingang hinzufügen",
+      addViaInboxTitle: "Neues Fahrzeug über die Inbox hinzufügen",
       addViaInboxDescription:
-        "Fotografieren Sie den Fahrzeugschein (Vorder- und Rückseite) im Modul Posteingang — die KI liest die Daten aus, und nach Ihrer Bestätigung wird das Fahrzeug automatisch angelegt oder einem vorhandenen zugeordnet.",
-      openInboxCta: "Posteingang öffnen →",
+        "Fotografieren Sie den Fahrzeugschein (Vorder- und Rückseite) im Modul Inbox — die KI liest die Daten aus, und nach Ihrer Bestätigung wird das Fahrzeug automatisch angelegt oder einem vorhandenen zugeordnet.",
+      openInboxCta: "Inbox öffnen →",
       noneYetShort: "Sie haben noch kein Fahrzeug gespeichert.",
       savedVehiclesTitle: "Gespeicherte Fahrzeuge",
       noneYet: "Es ist noch kein Fahrzeug gespeichert.",
@@ -1016,10 +1016,10 @@ const de = {
       documentTypeRegistration: "Fahrzeugschein",
       documentsTitle: "📄 KFZ-Versicherung und Fahrzeugschein",
       documentsDescription:
-        "Im AI-Posteingang bestätigte und diesem Fahrzeug zugeordnete Dokumente.",
+        "In der KI-Inbox bestätigte und diesem Fahrzeug zugeordnete Dokumente.",
       loadingDocuments: "Dokumente werden geladen...",
       noDocumentsYet:
-        "Hier ist noch keine KFZ-Versicherung und kein Fahrzeugschein zugeordnet. Laden Sie sie über den AI-Posteingang hoch — nach der Bestätigung erscheinen sie automatisch hier.",
+        "Hier ist noch keine KFZ-Versicherung und kein Fahrzeugschein zugeordnet. Laden Sie sie über die KI-Inbox hoch — nach der Bestätigung erscheinen sie automatisch hier.",
       noFurtherDetails: "Ohne weitere Angaben",
       uploadedOn: "Hochgeladen am {{date}}",
       attachmentFallback: "Anhang",
@@ -1313,7 +1313,7 @@ const de = {
       totalNettoCombined: "Netto gesamt",
       withoutSpz: "Ohne Kennzeichen",
       summarySheetName: "Übersicht",
-      summaryTitle: "Übersicht Posteingang",
+      summaryTitle: "Inbox-Übersicht",
       exportedDocumentCount: "Anzahl exportierter Dokumente",
       totalNetto: "Netto gesamt",
       nettoNote:

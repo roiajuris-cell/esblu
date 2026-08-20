@@ -614,7 +614,7 @@ const en = {
       delivery_note: "delivery note",
       invoice: "invoice",
       receipt: "receipt",
-      insurance: "Motor insurance / policy",
+      insurance: "vehicle insurance",
       service_document: "service document",
       vehicle_registration: "vehicle registration certificate",
       other: "document to review",
@@ -702,7 +702,7 @@ const en = {
       photoSaveFailed: "The photo could not be saved: {{message}}",
       saveFailed: "Save failed.",
       pzpMustBeAssigned:
-        "The motor insurance must be assigned to an existing vehicle or machine. Select a vehicle below, or add it first if it isn't in the records yet (e.g. via the registration certificate).",
+        "The vehicle insurance must be assigned to an existing vehicle or machine. Select a vehicle below, or add it first if it isn't in the records yet (e.g. via the registration certificate).",
       pzpChooseTarget: "Select the vehicle or machine the insurance belongs to.",
       chooseAssignment: "First choose whether to assign the document to a vehicle, a machine, or nothing.",
       chooseVehicle: "Select the vehicle you want to assign the document to.",
@@ -912,7 +912,7 @@ const en = {
     noInvoiceNumber: "No invoice number",
     otherDocumentsTitle: "Other documents",
     otherDocumentsDescription:
-      "Motor insurance, service documents, other documents, and assigned invoices/receipts saved via the Inbox.",
+      "Vehicle insurance, service documents, other documents, and assigned invoices/receipts saved via the Inbox.",
     noSavedDocuments: "There are no saved documents here yet.",
     documentDetailTitle: "📄 Document detail",
     typeLabel: "Type",
@@ -973,9 +973,9 @@ const en = {
     fields: {
       hmotnost: "Weight",
       objem: "Displacement",
-      stk: "MOT",
+      stk: "Roadworthiness",
       ek: "Emissions test",
-      stkValidUntil: "MOT valid until",
+      stkValidUntil: "Roadworthiness valid until",
       ekValidUntil: "Emissions test valid until",
     },
     services: {
