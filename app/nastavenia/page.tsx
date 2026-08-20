@@ -29,73 +29,73 @@ import {
   type AccountDeletionPreflight,
 } from "@/lib/account-deletion";
 import { useLocale } from "@/lib/i18n/LocaleProvider";
+import { formatDateTime } from "@/lib/i18n/format";
 import LanguageSwitcher from "@/app/components/LanguageSwitcher";
 
-const MEMBER_ROLE_LABELS: Record<string, string> = {
-  owner: "Majiteľ",
-  admin: "Plný prístup",
-  employee: "Zamestnanec",
-};
+function getMemberRoleLabels(t: (key: string) => string): Record<string, string> {
+  return {
+    owner: t("settings.users.roles.owner"),
+    admin: t("settings.users.roles.admin"),
+    employee: t("settings.users.roles.employee"),
+  };
+}
 
-const INVITE_STATUS_LABELS: Record<string, string> = {
-  pending: "Čaká na prijatie",
-  accepted: "Prijatá",
-  revoked: "Zrušená",
-  expired: "Vypršala",
-};
+function getInviteStatusLabels(t: (key: string) => string): Record<string, string> {
+  return {
+    pending: t("settings.users.inviteStatus.pending"),
+    accepted: t("settings.users.inviteStatus.accepted"),
+    revoked: t("settings.users.inviteStatus.revoked"),
+    expired: t("settings.users.inviteStatus.expired"),
+  };
+}
 
-const feedbackSubject = "Spätná väzba k Esblu";
-const feedbackBody = `Dobrý deň,
-
-používam testovaciu verziu Esblu a chcem poslať spätnú väzbu.
-
-Čo som robil:
-
-Čo sa stalo alebo čo mi chýba:
-
-Zariadenie alebo prehliadač:
-
-Ďakujem.`;
-const feedbackMailto = `mailto:info@esblu.com?subject=${encodeURIComponent(
-  feedbackSubject
-)}&body=${encodeURIComponent(feedbackBody)}`;
-
-const DOC_TYPE_LABELS: Record<string, string> = {
-  terms: "Podmienky používania",
-  privacy_policy: "Zásady ochrany osobných údajov",
-  dpa: "Zmluva o spracúvaní osobných údajov (DPA)",
-  cookie_policy: "Cookies",
-};
-
-function buildPrivacyRequestMailto(subject: string, body: string) {
-  return `mailto:privacy@esblu.com?subject=${encodeURIComponent(
+function buildMailto(to: string, subject: string, body: string) {
+  return `mailto:${to}?subject=${encodeURIComponent(
     subject
   )}&body=${encodeURIComponent(body)}`;
 }
 
-const exportRequestMailto = buildPrivacyRequestMailto(
-  "Žiadosť o export osobných údajov — Esblu",
-  `Dobrý deň,
+function getFeedbackMailto(t: (key: string) => string): string {
+  return buildMailto(
+    "info@esblu.com",
+    t("settings.feedback.mailSubject"),
+    t("settings.feedback.mailBody")
+  );
+}
 
-žiadam o export osobných údajov spojených s mojím účtom v Esblu (e-mail účtu: ).
+function getDocTypeLabels(t: (key: string) => string): Record<string, string> {
+  return {
+    terms: t("settings.privacy.docTypes.terms"),
+    privacy_policy: t("settings.privacy.docTypes.privacy_policy"),
+    dpa: t("settings.privacy.docTypes.dpa"),
+    cookie_policy: t("settings.privacy.docTypes.cookie_policy"),
+  };
+}
 
-Ďakujem.`
-);
+function getExportRequestMailto(t: (key: string) => string): string {
+  return buildMailto(
+    "privacy@esblu.com",
+    t("settings.privacy.exportMailSubject"),
+    t("settings.privacy.exportMailBody")
+  );
+}
 
-const correctionRequestMailto = buildPrivacyRequestMailto(
-  "Žiadosť o opravu osobných údajov — Esblu",
-  `Dobrý deň,
-
-žiadam o opravu nasledujúcich osobných údajov spojených s mojím účtom v Esblu (e-mail účtu: ):
-
-Nesprávny/neúplný údaj:
-Správna hodnota:
-
-Ďakujem.`
-);
+function getCorrectionRequestMailto(t: (key: string) => string): string {
+  return buildMailto(
+    "privacy@esblu.com",
+    t("settings.privacy.correctionMailSubject"),
+    t("settings.privacy.correctionMailBody")
+  );
+}
 
 export default function NastaveniaPage() {
-  const { t } = useLocale();
+  const { locale, t, tCount } = useLocale();
+  const MEMBER_ROLE_LABELS = getMemberRoleLabels(t);
+  const INVITE_STATUS_LABELS = getInviteStatusLabels(t);
+  const DOC_TYPE_LABELS = getDocTypeLabels(t);
+  const feedbackMailto = getFeedbackMailto(t);
+  const exportRequestMailto = getExportRequestMailto(t);
+  const correctionRequestMailto = getCorrectionRequestMailto(t);
   const [userId, setUserId] = useState("");
   const [companyName, setCompanyName] = useState("");
 
@@ -189,7 +189,7 @@ export default function NastaveniaPage() {
         // chybe iba ostane isOrphanAccount=false (sekcia sa jednoducho
         // nezobrazí, nič sa nerozbije).
         try {
-          const preflight = await fetchAccountDeletionPreflight();
+          const preflight = await fetchAccountDeletionPreflight(locale);
           setIsOrphanAccount(preflight.orphan === true);
         } catch (preflightError) {
           console.error(
@@ -216,7 +216,7 @@ export default function NastaveniaPage() {
     const normalizedEmail = inviteEmail.trim().toLowerCase();
 
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
-      setInviteError("Zadaj platnú e-mailovú adresu.");
+      setInviteError(t("settings.users.invalidEmail"));
       return;
     }
 
@@ -233,7 +233,7 @@ export default function NastaveniaPage() {
         await loadCompanyUsers(userId);
       }
     } catch (error) {
-      setInviteError(getCreateInviteErrorMessage(error));
+      setInviteError(getCreateInviteErrorMessage(error, t));
     } finally {
       setInviteSubmitting(false);
     }
@@ -353,7 +353,7 @@ export default function NastaveniaPage() {
 
   async function saveSettings() {
     if (!userId) {
-      alert("Nie si prihlásený.");
+      alert(t("settings.errors.notLoggedIn"));
       return;
     }
 
@@ -363,7 +363,7 @@ export default function NastaveniaPage() {
 
     if (findError) {
       setSettingsLoading(false);
-      alert("Nastavenia sa nepodarilo načítať.");
+      alert(t("settings.errors.settingsLoadFailed"));
       return;
     }
 
@@ -378,7 +378,7 @@ export default function NastaveniaPage() {
 
       if (error) {
         setSettingsLoading(false);
-        alert("Nastavenia sa nepodarilo uložiť: " + error.message);
+        alert(t("settings.errors.settingsSaveFailedPrefix", { message: error.message }));
         return;
       }
     } else {
@@ -390,13 +390,13 @@ export default function NastaveniaPage() {
 
       if (error) {
         setSettingsLoading(false);
-        alert("Nastavenia sa nepodarilo uložiť: " + error.message);
+        alert(t("settings.errors.settingsSaveFailedPrefix", { message: error.message }));
         return;
       }
     }
 
     setSettingsLoading(false);
-    alert("Nastavenia boli uložené.");
+    alert(t("settings.errors.settingsSaved"));
   }
 
   async function compressLogo(file: File): Promise<File> {
@@ -407,7 +407,7 @@ export default function NastaveniaPage() {
       await new Promise<void>((resolve, reject) => {
         image.onload = () => resolve();
         image.onerror = () =>
-          reject(new Error("Obrázok sa nepodarilo načítať."));
+          reject(new Error(t("settings.errors.imageLoadFailed")));
         image.src = objectUrl;
       });
 
@@ -428,7 +428,7 @@ export default function NastaveniaPage() {
       const context = canvas.getContext("2d");
 
       if (!context) {
-        throw new Error("Obrázok sa nepodarilo spracovať.");
+        throw new Error(t("settings.errors.imageProcessFailed"));
       }
 
       context.drawImage(image, 0, 0, width, height);
@@ -439,7 +439,7 @@ export default function NastaveniaPage() {
             if (result) {
               resolve(result);
             } else {
-              reject(new Error("Logo sa nepodarilo skomprimovať."));
+              reject(new Error(t("settings.errors.logoCompressFailed")));
             }
           },
           "image/webp",
@@ -467,12 +467,12 @@ export default function NastaveniaPage() {
     event.target.value = "";
 
     if (!userId) {
-      alert("Nie si prihlásený.");
+      alert(t("settings.errors.notLoggedIn"));
       return;
     }
 
     if (!selectedFile.type.startsWith("image/")) {
-      alert("Vyber obrázok vo formáte JPEG, PNG alebo WebP.");
+      alert(t("settings.errors.chooseValidImage"));
       return;
     }
 
@@ -484,9 +484,7 @@ export default function NastaveniaPage() {
       const compressedLogo = await compressLogo(selectedFile);
 
       if (compressedLogo.size > 2 * 1024 * 1024) {
-        throw new Error(
-          "Logo je aj po kompresii väčšie než povolené 2 MB."
-        );
+        throw new Error(t("settings.errors.logoTooLargeAfterCompression"));
       }
 
       uploadedPath = `${userId}/${Date.now()}-company-logo.webp`;
@@ -529,7 +527,7 @@ export default function NastaveniaPage() {
         }
       }
 
-      alert("Firemné logo bolo uložené.");
+      alert(t("settings.errors.logoSaved"));
     } catch (error) {
       if (uploadedPath) {
         await supabase.storage
@@ -540,9 +538,9 @@ export default function NastaveniaPage() {
       const message =
         error instanceof Error
           ? error.message
-          : "Logo sa nepodarilo uložiť.";
+          : t("settings.errors.logoSaveFailedGeneric");
 
-      alert("Logo sa nepodarilo uložiť: " + message);
+      alert(t("settings.errors.logoSaveFailedPrefix", { message }));
     } finally {
       setLogoLoading(false);
     }
@@ -554,7 +552,7 @@ export default function NastaveniaPage() {
     }
 
     const confirmed = window.confirm(
-      "Naozaj chceš vymazať firemné logo?"
+      t("settings.errors.confirmDeleteLogo")
     );
 
     if (!confirmed) {
@@ -570,8 +568,9 @@ export default function NastaveniaPage() {
     if (storageError) {
       setLogoLoading(false);
       alert(
-        "Logo sa nepodarilo vymazať z úložiska: " +
-          storageError.message
+        t("settings.errors.logoStorageDeleteFailedPrefix", {
+          message: storageError.message,
+        })
       );
       return;
     }
@@ -582,14 +581,14 @@ export default function NastaveniaPage() {
       setLogoPath("");
       setLogoUrl("");
 
-      alert("Firemné logo bolo vymazané.");
+      alert(t("settings.errors.logoDeleted"));
     } catch (error) {
       const message =
         error instanceof Error
           ? error.message
-          : "Databázový záznam sa nepodarilo upraviť.";
+          : t("settings.errors.logoDbUpdateFailed");
 
-      alert("Logo bolo vymazané, ale nastala chyba: " + message);
+      alert(t("settings.errors.logoDeletedButErrorPrefix", { message }));
     } finally {
       setLogoLoading(false);
     }
@@ -597,12 +596,12 @@ export default function NastaveniaPage() {
 
   async function changePassword() {
     if (newPassword.length < 8) {
-      alert("Nové heslo musí mať minimálne 8 znakov.");
+      alert(t("settings.password.tooShort"));
       return;
     }
 
     if (newPassword !== confirmNewPassword) {
-      alert("Nové heslá sa nezhodujú.");
+      alert(t("settings.password.mismatch"));
       return;
     }
 
@@ -615,14 +614,14 @@ export default function NastaveniaPage() {
     setPasswordLoading(false);
 
     if (error) {
-      alert("Heslo sa nepodarilo zmeniť: " + error.message);
+      alert(t("settings.password.changeFailedPrefix", { message: error.message }));
       return;
     }
 
     setNewPassword("");
     setConfirmNewPassword("");
 
-    alert("Heslo bolo úspešne zmenené.");
+    alert(t("settings.password.changed"));
   }
 
   async function openDeleteAccountModal() {
@@ -634,13 +633,13 @@ export default function NastaveniaPage() {
     setDeletePreflightLoading(true);
 
     try {
-      const preflight = await fetchAccountDeletionPreflight();
+      const preflight = await fetchAccountDeletionPreflight(locale);
       setDeletePreflight(preflight);
     } catch (error) {
       const message =
         error instanceof Error
           ? error.message
-          : "Prípravu na zrušenie účtu sa nepodarilo načítať.";
+          : t("settings.deleteModal.preflightLoadFailed");
       setDeletePreflightError(message);
     } finally {
       setDeletePreflightLoading(false);
@@ -674,6 +673,7 @@ export default function NastaveniaPage() {
 
     try {
       await deleteMyAccount(
+        locale,
         deletePreflight.role === "owner" ? deleteConfirmText : undefined
       );
 
@@ -699,24 +699,24 @@ export default function NastaveniaPage() {
       const message =
         error instanceof Error
           ? stripPartialAccountDeletionMarker(error.message)
-          : "Zrušenie účtu zlyhalo.";
+          : t("settings.deleteModal.deleteFailed");
       setDeleteError(message);
     }
   }
 
   return (
     <main className="app-shell-bg min-h-screen p-4 sm:p-6 lg:p-10">
-      <BackLink href="/" label="Hlavné menu" className="mb-4" />
+      <BackLink href="/" label={t("inbox.backToMenu")} className="mb-4" />
 
       <div className="flex items-center gap-4">
         <img
           src="/images/settings.png"
-          alt="Nastavenia"
+          alt={t("settings.pageTitle")}
           className="h-20 w-20 object-contain"
         />
 
         <h1 className="text-4xl font-bold text-primary">
-          Nastavenia
+          {t("settings.pageTitle")}
         </h1>
       </div>
 
@@ -738,17 +738,17 @@ export default function NastaveniaPage() {
         {isOwnerOrAdmin(myRole) && (
         <section className="rounded-3xl border border-subtle bg-surface-1 p-8 shadow-lg backdrop-blur-xl">
           <h2 className="text-2xl font-bold text-primary">
-            Firma
+            {t("settings.company.title")}
           </h2>
 
           <div className="mt-6">
             <label className="mb-2 block font-semibold">
-              Názov firmy
+              {t("settings.company.nameLabel")}
             </label>
 
             <input
               className="w-full rounded-xl border p-3"
-              placeholder="Napr. Moja firma s.r.o."
+              placeholder={t("settings.company.namePlaceholder")}
               value={companyName}
               onChange={(event) =>
                 setCompanyName(event.target.value)
@@ -759,29 +759,29 @@ export default function NastaveniaPage() {
 
           <div className="mt-6">
             <label className="mb-2 block font-semibold">
-              Firemné logo
+              {t("settings.company.logoLabel")}
             </label>
 
             {logoUrl ? (
               <div className="mb-4 flex min-h-40 items-center justify-center rounded-2xl border border-subtle bg-surface-2 p-4">
                 <img
                   src={logoUrl}
-                  alt="Firemné logo"
+                  alt={t("settings.company.logoAlt")}
                   className="max-h-36 max-w-full object-contain"
                 />
               </div>
             ) : (
               <div className="mb-4 flex min-h-40 items-center justify-center rounded-2xl border border-dashed border-slate-400 bg-surface-1 p-4 text-center text-secondary">
-                Zatiaľ nie je uložené žiadne firemné logo.
+                {t("settings.company.noLogo")}
               </div>
             )}
 
             <label className="btn-secondary inline-flex cursor-pointer px-6 py-3 font-semibold">
               {logoLoading
-                ? "Spracovávam logo..."
+                ? t("settings.company.processingLogo")
                 : logoPath
-                  ? "Zmeniť logo"
-                  : "Pridať logo"}
+                  ? t("settings.company.changeLogo")
+                  : t("settings.company.addLogo")}
 
               <input
                 type="file"
@@ -799,13 +799,12 @@ export default function NastaveniaPage() {
                 disabled={logoLoading}
                 className="ml-3 rounded-xl bg-red-600 px-6 py-3 font-semibold text-white hover:bg-red-700 disabled:bg-gray-400"
               >
-                Vymazať logo
+                {t("settings.company.deleteLogo")}
               </button>
             )}
 
             <p className="mt-3 text-sm text-secondary">
-              Logo sa automaticky zmenší a uloží vo formáte
-              WebP. Maximálna povolená veľkosť je 2 MB.
+              {t("settings.company.logoHint")}
             </p>
           </div>
 
@@ -815,7 +814,7 @@ export default function NastaveniaPage() {
             disabled={settingsLoading || logoLoading}
             className="mt-8 rounded-xl bg-blue-600 px-6 py-3 text-white hover:bg-blue-700 disabled:bg-gray-400"
           >
-            {settingsLoading ? "Ukladám..." : "💾 Uložiť"}
+            {settingsLoading ? t("settings.company.saving") : t("settings.company.save")}
           </button>
         </section>
         )}
@@ -823,23 +822,23 @@ export default function NastaveniaPage() {
         {myRole && (
           <section className="rounded-3xl border border-subtle bg-surface-1 p-8 shadow-lg backdrop-blur-xl">
             <h2 className="text-2xl font-bold text-primary">
-              Používatelia
+              {t("settings.users.title")}
             </h2>
 
             <p className="mt-2 text-sm text-secondary">
-              Vaše členstvo:{" "}
+              {t("settings.users.yourMembership")}{" "}
               <span className="font-semibold">
                 {MEMBER_ROLE_LABELS[myRole] || myRole}
               </span>
             </p>
 
             {usersLoading ? (
-              <p className="mt-4 text-sm text-secondary">Načítavam...</p>
+              <p className="mt-4 text-sm text-secondary">{t("settings.users.loading")}</p>
             ) : (
               <>
                 {members.length > 0 && (
                   <div className="mt-6">
-                    <h3 className="font-semibold text-primary">Členovia</h3>
+                    <h3 className="font-semibold text-primary">{t("settings.users.membersTitle")}</h3>
 
                     <ul className="mt-3 space-y-2">
                       {members.map((member) => (
@@ -864,7 +863,7 @@ export default function NastaveniaPage() {
                     {invites.length > 0 && (
                       <div className="mt-6">
                         <h3 className="font-semibold text-primary">
-                          Pozvánky
+                          {t("settings.users.invitesTitle")}
                         </h3>
 
                         <ul className="mt-3 space-y-2">
@@ -894,13 +893,13 @@ export default function NastaveniaPage() {
 
                     <div className="mt-6 rounded-2xl border border-dashed border-subtle p-5">
                       <h3 className="font-semibold text-primary">
-                        Pozvať používateľa
+                        {t("settings.users.inviteUserTitle")}
                       </h3>
 
                       <div className="mt-4 space-y-3">
                         <input
                           type="email"
-                          placeholder="Email"
+                          placeholder={t("settings.users.emailPlaceholder")}
                           className="w-full rounded-xl border p-3"
                           value={inviteEmail}
                           onChange={(event) =>
@@ -918,7 +917,7 @@ export default function NastaveniaPage() {
                               onChange={() => setInviteRole("admin")}
                               disabled={inviteSubmitting}
                             />
-                            Plný prístup
+                            {t("settings.users.roleAdmin")}
                           </label>
 
                           <label className="flex flex-1 items-center gap-2 rounded-xl border border-subtle p-3 text-sm">
@@ -929,7 +928,7 @@ export default function NastaveniaPage() {
                               onChange={() => setInviteRole("employee")}
                               disabled={inviteSubmitting}
                             />
-                            Zamestnanec
+                            {t("settings.users.roleEmployee")}
                           </label>
                         </div>
                       </div>
@@ -947,14 +946,14 @@ export default function NastaveniaPage() {
                         className="mt-4 rounded-xl bg-blue-600 px-6 py-3 font-semibold text-white hover:bg-blue-700 disabled:bg-gray-400"
                       >
                         {inviteSubmitting
-                          ? "Vytváram..."
-                          : "Pozvať používateľa"}
+                          ? t("settings.users.creating")
+                          : t("settings.users.inviteUser")}
                       </button>
 
                       {lastInviteLink && (
                         <div className="mt-4 rounded-xl bg-surface-2 p-4">
                           <p className="text-sm font-semibold text-primary">
-                            Pozvánka bola vytvorená
+                            {t("settings.users.inviteCreated")}
                           </p>
                           <p className="mt-2 break-all text-xs text-secondary">
                             {lastInviteLink}
@@ -964,7 +963,7 @@ export default function NastaveniaPage() {
                             onClick={copyInviteLink}
                             className="mt-3 rounded-xl border border-subtle px-4 py-2 text-sm font-semibold text-secondary hover:bg-surface-1"
                           >
-                            {linkCopied ? "Skopírované ✓" : "Kopírovať odkaz"}
+                            {linkCopied ? t("settings.users.linkCopied") : t("settings.users.copyLink")}
                           </button>
                         </div>
                       )}
@@ -978,24 +977,24 @@ export default function NastaveniaPage() {
 
         <section className="rounded-3xl border border-subtle bg-surface-1 p-8 shadow-lg backdrop-blur-xl">
           <h2 className="text-2xl font-bold text-primary">
-            Zmena hesla
+            {t("settings.password.title")}
           </h2>
 
           <p className="mt-2 text-sm text-secondary">
-            Nové heslo musí mať minimálne 8 znakov.
+            {t("settings.password.minLengthHint")}
           </p>
 
           <div className="mt-6 space-y-4">
             <div>
               <label className="mb-2 block font-semibold">
-                Nové heslo
+                {t("settings.password.newPasswordLabel")}
               </label>
 
               <input
                 type="password"
                 autoComplete="new-password"
                 className="w-full rounded-xl border p-3"
-                placeholder="Zadaj nové heslo"
+                placeholder={t("settings.password.newPasswordPlaceholder")}
                 value={newPassword}
                 onChange={(event) =>
                   setNewPassword(event.target.value)
@@ -1006,14 +1005,14 @@ export default function NastaveniaPage() {
 
             <div>
               <label className="mb-2 block font-semibold">
-                Potvrdenie nového hesla
+                {t("settings.password.confirmPasswordLabel")}
               </label>
 
               <input
                 type="password"
                 autoComplete="new-password"
                 className="w-full rounded-xl border p-3"
-                placeholder="Zadaj nové heslo znova"
+                placeholder={t("settings.password.confirmPasswordPlaceholder")}
                 value={confirmNewPassword}
                 onChange={(event) =>
                   setConfirmNewPassword(event.target.value)
@@ -1030,104 +1029,100 @@ export default function NastaveniaPage() {
             className="btn-secondary mt-8 px-6 py-3 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {passwordLoading
-              ? "Mením heslo..."
-              : "Zmeniť heslo"}
+              ? t("settings.password.changing")
+              : t("settings.password.changeButton")}
           </button>
         </section>
 
         <section className="rounded-3xl border border-subtle bg-surface-1 p-8 shadow-lg backdrop-blur-xl">
           <h2 className="text-2xl font-bold text-primary">
-            Spätná väzba
+            {t("settings.feedback.title")}
           </h2>
 
           <p className="mt-2 leading-7 text-secondary">
-            Našli ste chybu, niečo vám chýba alebo máte návrh na zlepšenie?
-            Napíšte nám. Vaša spätná väzba pomáha zlepšovať testovaciu verziu
-            Esblu.
+            {t("settings.feedback.description")}
           </p>
 
           <a
             href={feedbackMailto}
             className="mt-6 inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-blue-600 px-6 py-3 text-center font-semibold text-white transition hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 sm:w-auto"
           >
-            Poslať spätnú väzbu
+            {t("settings.feedback.sendButton")}
           </a>
 
           <p className="mt-3 text-sm leading-6 text-secondary">
-            Do správy nevkladajte heslá ani citlivé osobné údaje.
+            {t("settings.feedback.privacyHint")}
           </p>
         </section>
 
         <section className="rounded-3xl border border-subtle bg-surface-1 p-8 shadow-lg backdrop-blur-xl">
           <h2 className="text-2xl font-bold text-primary">
-            Právne informácie
+            {t("settings.legal.title")}
           </h2>
 
           <p className="mt-2 text-sm text-secondary">
-            Verejné informácie o pravidlách používania služby a spracúvaní
-            osobných údajov.
+            {t("settings.legal.description")}
           </p>
 
           <nav
-            aria-label="Právne a kontaktné informácie"
+            aria-label={t("settings.legal.navAriaLabel")}
             className="mt-6 grid gap-3"
           >
             <Link
               href="/ochrana-osobnych-udajov"
               className="rounded-xl border border-subtle bg-surface-2 px-5 py-3 font-semibold text-blue-700 transition hover:bg-surface-1"
             >
-              Zásady ochrany osobných údajov
+              {t("settings.legal.privacyLink")}
             </Link>
             <Link
               href="/podmienky-pouzivania"
               className="rounded-xl border border-subtle bg-surface-2 px-5 py-3 font-semibold text-blue-700 transition hover:bg-surface-1"
             >
-              Podmienky používania Esblu
+              {t("settings.legal.termsLink")}
             </Link>
             <Link
               href="/cookies"
               className="rounded-xl border border-subtle bg-surface-2 px-5 py-3 font-semibold text-blue-700 transition hover:bg-surface-1"
             >
-              Cookies
+              {t("settings.legal.cookiesLink")}
             </Link>
             <Link
               href="/dpa"
               className="rounded-xl border border-subtle bg-surface-2 px-5 py-3 font-semibold text-blue-700 transition hover:bg-surface-1"
             >
-              Zmluva o spracúvaní osobných údajov (DPA)
+              {t("settings.legal.dpaLink")}
             </Link>
             <Link
               href="/subprocessors"
               className="rounded-xl border border-subtle bg-surface-2 px-5 py-3 font-semibold text-blue-700 transition hover:bg-surface-1"
             >
-              Zoznam sprostredkovateľov
+              {t("settings.legal.subprocessorsLink")}
             </Link>
             <Link
               href="/kontakt"
               className="rounded-xl border border-subtle bg-surface-2 px-5 py-3 font-semibold text-blue-700 transition hover:bg-surface-1"
             >
-              Kontakt
+              {t("settings.legal.contactLink")}
             </Link>
           </nav>
         </section>
 
         <section className="rounded-3xl border border-subtle bg-surface-1 p-8 shadow-lg backdrop-blur-xl">
           <h2 className="text-2xl font-bold text-primary">
-            Súkromie a dáta
+            {t("settings.privacy.title")}
           </h2>
 
           <p className="mt-2 text-sm text-secondary">
-            Prehľad toho, ktoré verzie právnych dokumentov ste potvrdili, a
-            možnosť požiadať o uplatnenie svojich práv k osobným údajom.
+            {t("settings.privacy.description")}
           </p>
 
           <div className="mt-6">
             <h3 className="font-semibold text-primary">
-              Vaše potvrdené dokumenty
+              {t("settings.privacy.confirmedDocsTitle")}
             </h3>
 
             {acceptancesLoading ? (
-              <p className="mt-3 text-sm text-secondary">Načítavam...</p>
+              <p className="mt-3 text-sm text-secondary">{t("settings.privacy.loading")}</p>
             ) : acceptances.length > 0 ? (
               <ul className="mt-3 space-y-2">
                 {acceptances.map((row) => (
@@ -1138,27 +1133,28 @@ export default function NastaveniaPage() {
                     <span className="font-semibold text-primary">
                       {DOC_TYPE_LABELS[row.document_type] || row.document_type}{" "}
                       <span className="font-normal text-muted-esblu">
-                        (verzia {row.version})
+                        {t("settings.privacy.versionLabel", { version: row.version })}
                       </span>
                     </span>
                     <span className="text-xs text-muted-esblu">
-                      potvrdené{" "}
-                      {new Date(row.accepted_at).toLocaleString("sk-SK")}
+                      {t("settings.privacy.confirmedAt", {
+                        date: formatDateTime(row.accepted_at, locale),
+                      })}
                     </span>
                   </li>
                 ))}
               </ul>
             ) : (
               <p className="mt-3 text-sm text-secondary">
-                Zatiaľ nemáme záznam o potvrdení žiadneho dokumentu (alebo
-                ešte nebola nasadená databázová funkcia na ich evidenciu).
+                {t("settings.privacy.noAcceptancesYet")}
               </p>
             )}
 
             <p className="mt-3 text-xs text-muted-esblu">
-              Aktuálne platné verzie: Podmienky používania v
-              {legalConfig.termsVersion}, Zásady ochrany osobných údajov v
-              {legalConfig.privacyPolicyVersion}.
+              {t("settings.privacy.currentVersions", {
+                terms: legalConfig.termsVersion,
+                privacy: legalConfig.privacyPolicyVersion,
+              })}
             </p>
           </div>
 
@@ -1167,13 +1163,13 @@ export default function NastaveniaPage() {
               href={exportRequestMailto}
               className="rounded-xl border border-subtle bg-surface-2 px-5 py-3 text-center font-semibold text-blue-700 transition hover:bg-surface-1"
             >
-              Požiadať o export mojich údajov
+              {t("settings.privacy.requestExport")}
             </a>
             <a
               href={correctionRequestMailto}
               className="rounded-xl border border-subtle bg-surface-2 px-5 py-3 text-center font-semibold text-blue-700 transition hover:bg-surface-1"
             >
-              Požiadať o opravu mojich údajov
+              {t("settings.privacy.requestCorrection")}
             </a>
           </div>
 
@@ -1182,25 +1178,20 @@ export default function NastaveniaPage() {
         {(myRole || isOrphanAccount) && (
           <section className="rounded-2xl border border-subtle/60 bg-surface-1/60 p-6">
             <h2 className="text-sm font-semibold text-secondary">
-              Zrušiť účet
+              {t("settings.deleteAccount.title")}
             </h2>
 
             {myRole === "owner" ? (
               <p className="mt-2 text-sm text-muted-esblu">
-                Ako majiteľ firmy môžete natrvalo zrušiť celý firemný účet.
-                Ide o nezvratnú akciu — vymaže sa firma aj všetky jej dáta a
-                ostatní členovia stratia prístup.
+                {t("settings.deleteAccount.ownerDescription")}
               </p>
             ) : myRole ? (
               <p className="mt-2 text-sm text-muted-esblu">
-                Môžete natrvalo zrušiť svoj osobný účet. Firemné dáta
-                (vozidlá, stroje, sklad, dokumenty) zostávajú firme — vymaže
-                sa iba vaša identita a členstvo.
+                {t("settings.deleteAccount.memberDescription")}
               </p>
             ) : (
               <p className="mt-2 text-sm text-muted-esblu">
-                Tento účet momentálne nie je členom žiadnej firmy. Môžete
-                ho natrvalo zrušiť.
+                {t("settings.deleteAccount.orphanDescription")}
               </p>
             )}
 
@@ -1209,7 +1200,7 @@ export default function NastaveniaPage() {
               onClick={openDeleteAccountModal}
               className="mt-4 rounded-xl border border-red-900/50 px-5 py-2.5 text-sm font-semibold text-red-400/90 transition hover:border-red-700 hover:bg-red-950/30 hover:text-red-300"
             >
-              Zrušiť účet
+              {t("settings.deleteAccount.button")}
             </button>
           </section>
         )}
@@ -1221,8 +1212,8 @@ export default function NastaveniaPage() {
             <div className="flex items-center justify-between">
               <h2 className="text-2xl font-bold text-primary">
                 {deletePreflight?.role === "owner"
-                  ? "Naozaj chcete zrušiť účet?"
-                  : "Zrušiť účet?"}
+                  ? t("settings.deleteModal.ownerTitle")
+                  : t("settings.deleteModal.genericTitle")}
               </h2>
 
               <button
@@ -1231,13 +1222,13 @@ export default function NastaveniaPage() {
                 disabled={deleteSubmitting}
                 className="rounded-xl bg-surface-2 px-4 py-2 disabled:opacity-50"
               >
-                ✕
+                {t("settings.deleteModal.close")}
               </button>
             </div>
 
             {deletePreflightLoading ? (
               <p className="mt-6 text-sm text-secondary">
-                Načítavam...
+                {t("settings.deleteModal.loading")}
               </p>
             ) : deletePreflightError ? (
               <p className="mt-6 text-sm font-medium text-red-400">
@@ -1246,41 +1237,33 @@ export default function NastaveniaPage() {
             ) : deletePreflight?.role === "owner" ? (
               <div className="mt-6 space-y-4">
                 <p className="text-sm leading-6 text-secondary">
-                  Táto akcia je <strong>nevratná</strong>. Zrušením vášho
-                  owner účtu sa natrvalo zruší celá firma. Odstráni sa:
+                  {t("settings.deleteModal.irreversibleIntro")}
                 </p>
 
                 <ul className="list-disc space-y-1 pl-5 text-sm text-secondary">
-                  <li>firma,</li>
-                  <li>AI evidencia a dokumenty,</li>
-                  <li>vozidlá a servisné záznamy,</li>
-                  <li>stroje a servisné záznamy,</li>
-                  <li>sklad,</li>
-                  <li>uložené fotografie a súbory,</li>
-                  <li>pozvánky (invitations),</li>
-                  <li>členstvá adminov a zamestnancov.</li>
+                  <li>{t("settings.deleteModal.deleteItemCompany")}</li>
+                  <li>{t("settings.deleteModal.deleteItemAiEvidence")}</li>
+                  <li>{t("settings.deleteModal.deleteItemVehicles")}</li>
+                  <li>{t("settings.deleteModal.deleteItemMachines")}</li>
+                  <li>{t("settings.deleteModal.deleteItemInventory")}</li>
+                  <li>{t("settings.deleteModal.deleteItemPhotos")}</li>
+                  <li>{t("settings.deleteModal.deleteItemInvites")}</li>
+                  <li>{t("settings.deleteModal.deleteItemMemberships")}</li>
                 </ul>
 
                 <p className="text-sm leading-6 text-secondary">
-                  {deletePreflight.otherActiveMembersCount > 0 ? (
-                    <>
-                      <strong>
-                        {deletePreflight.otherActiveMembersCount}{" "}
-                        {deletePreflight.otherActiveMembersCount === 1
-                          ? "ďalší člen firmy stratí"
-                          : "ďalších členov firmy stratí"}
-                      </strong>{" "}
-                      prístup k tejto firme. Ich prihlasovacie účty sa
-                      nezmažú — zaniká iba ich členstvo v tejto firme.
-                    </>
-                  ) : (
-                    "Firma aktuálne nemá žiadnych ďalších členov."
-                  )}
+                  {deletePreflight.otherActiveMembersCount > 0
+                    ? tCount("settings.deleteModal.otherMembersWarning", deletePreflight.otherActiveMembersCount, {
+                        count: deletePreflight.otherActiveMembersCount,
+                      })
+                    : t("settings.deleteModal.noOtherMembers")}
                 </p>
 
                 <div>
                   <label className="mb-2 block text-sm font-semibold text-primary">
-                    Pre potvrdenie napíšte presne: {ACCOUNT_DELETION_CONFIRM_PHRASE}
+                    {t("settings.deleteModal.confirmPhraseLabel", {
+                      phrase: ACCOUNT_DELETION_CONFIRM_PHRASE,
+                    })}
                   </label>
 
                   <input
@@ -1308,7 +1291,7 @@ export default function NastaveniaPage() {
                     disabled={deleteSubmitting}
                     className="btn-secondary px-6 py-3 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    Zrušiť
+                    {t("settings.deleteModal.cancel")}
                   </button>
 
                   <button
@@ -1321,8 +1304,8 @@ export default function NastaveniaPage() {
                     className="rounded-xl bg-red-600 px-6 py-3 font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-gray-500 disabled:opacity-60"
                   >
                     {deleteSubmitting
-                      ? "Ruším účet..."
-                      : "Natrvalo zrušiť účet"}
+                      ? t("settings.deleteModal.deletingAccount")
+                      : t("settings.deleteModal.deletePermanently")}
                   </button>
                 </div>
               </div>
@@ -1330,18 +1313,11 @@ export default function NastaveniaPage() {
               <div className="mt-6 space-y-4">
                 {deletePreflight?.orphan ? (
                   <p className="text-sm leading-6 text-secondary">
-                    Táto akcia je <strong>nevratná</strong>. Tento účet
-                    momentálne nie je členom žiadnej firmy — zruší sa iba
-                    vaša prihlasovacia identita.
+                    {t("settings.deleteModal.orphanIrreversible")}
                   </p>
                 ) : (
                   <p className="text-sm leading-6 text-secondary">
-                    Táto akcia je <strong>nevratná</strong>. Zruší sa vaša
-                    osobná identita a členstvo v tejto firme. Firemné
-                    dokumenty a dáta (vozidlá, stroje, sklad, AI evidencia),
-                    ktoré ste pre firmu vytvorili, jej{" "}
-                    <strong>zostávajú</strong> — nič z firemných dát sa
-                    nezmaže.
+                    {t("settings.deleteModal.memberIrreversible")}
                   </p>
                 )}
 
@@ -1358,7 +1334,7 @@ export default function NastaveniaPage() {
                     disabled={deleteSubmitting}
                     className="btn-secondary px-6 py-3 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    Zrušiť
+                    {t("settings.deleteModal.cancel")}
                   </button>
 
                   <button
@@ -1367,7 +1343,7 @@ export default function NastaveniaPage() {
                     disabled={deleteSubmitting}
                     className="rounded-xl bg-red-600 px-6 py-3 font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    {deleteSubmitting ? "Ruším účet..." : "Áno, zrušiť účet"}
+                    {deleteSubmitting ? t("settings.deleteModal.deletingAccount") : t("settings.deleteModal.confirmDelete")}
                   </button>
                 </div>
               </div>

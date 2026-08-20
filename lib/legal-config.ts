@@ -63,18 +63,19 @@ export const legalConfig = {
   // novej DPA verzie) → ostávajú na pôvodných verziách.
   privacyPolicyVersion: "1.2",
   termsVersion: "1.0",
-  // Cookie Policy v1.1 (2026-08-19): appka pridáva viacjazyčnú podporu
-  // (SK/DE/EN) a na zapamätanie zvolenej jazykovej preferencie naprieč
-  // stránkami/návštevami (aj pred registráciou/prihlásením) po prvýkrát
-  // používa vlastný cookie (`esblu_locale`, nevyhnutný/funkčný, žiadne
-  // sledovanie/marketing). v1.0 tvrdila "Esblu aktuálne nepoužíva žiadne
-  // cookies" — toto tvrdenie by po pridaní esblu_locale prestalo byť
-  // pravdivé, preto je nová verzia nevyhnutná (nie kozmetická zmena).
-  // required=false zostáva nezmenené (informačný dokument, rovnako ako
-  // v1.0) — táto zmena preto nevyvolá blokujúci LegalAcceptanceGate modal.
-  // Pozri legal/cookies/1.1.md a
-  // supabase/migrations/20260819100000_add_cookie_policy_v1_1_locale.sql.
-  cookiePolicyVersion: "1.1",
+  // Cookie Policy ostáva na v1.0 (revidované 2026-08-19). Prvý pokus pri
+  // implementácii viacjazyčnej podpory (SK/DE/EN) ukladal zvolený jazyk do
+  // nového cookie `esblu_locale`, čo by bolo v rozpore s tvrdením v1.0
+  // "Esblu aktuálne nepoužíva žiadne cookies" a vyžiadalo by si novú verziu
+  // (pozri zrušenú migráciu — bod nižšie). Namiesto pridávania novej
+  // cookie appka jazykovú preferenciu ukladá do localStorage (rovnaký
+  // mechanizmus, aký už appka používa na Supabase Auth session token) —
+  // pozri lib/i18n/locales.ts a lib/i18n/LocaleProvider.tsx. Právny obsah
+  // Cookie Policy sa teda skutočne NEMENÍ a nová verzia nie je potrebná.
+  // ZRUŠENÉ (nikdy neaplikované v produkcii): pôvodná migrácia
+  // supabase/migrations/20260819100000_add_cookie_policy_v1_1_locale.sql
+  // a súbory legal/cookies/1.1*.md boli odstránené v rámci tejto revízie.
+  cookiePolicyVersion: "1.0",
   // DPA ide vo verzii 1.1 (v1.0 nikdy nebola verejne nasadená, takže ide
   // stále o "prvé reálne publikovanie", nie o obsahovú zmenu naživo
   // publikovaného dokumentu) — v1.1 dopĺňa oproti pôvodnému draftu: čl. 4

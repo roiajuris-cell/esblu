@@ -163,22 +163,22 @@ export async function ensureMyOwnerCompany(): Promise<EnsureOwnerCompanyResult |
   return row ?? null;
 }
 
-const ENSURE_OWNER_COMPANY_ERROR_MESSAGES: Record<string, string> = {
-  ESBLU_BETA_ACCESS_REQUIRED:
-    "Esblu je momentálne v uzavretej beta verzii. Registrácia novej firmy je dostupná iba pre schválených beta testerov. Ak máte záujem, napíšte nám na info@esblu.com.",
-  NOT_AUTHENTICATED: "Najprv sa prihláste alebo si vytvorte účet.",
-};
-
 /**
- * Zrozumiteľná slovenská správa pre chybu z ensureMyOwnerCompany(). Pozn.:
- * bežný scenár neschváleného beta signup-u sa dnes odchytí už skôr — priamo
- * v supabase.auth.signUp() vďaka Auth hooku
- * esblu_before_user_created_beta_gate (auth.users sa vtedy vôbec
+ * Zrozumiteľná, preložená správa pre chybu z ensureMyOwnerCompany(). Text
+ * poskytuje volajúca stránka cez i18n `t()` (kľúče
+ * auth.closedBeta.registerNotice / auth.notAuthenticated /
+ * auth.company.createFailedGeneric) — tento modul si nesmie natvrdo
+ * renderovať slovenský text. Pozn.: bežný scenár neschváleného beta
+ * signup-u sa dnes odchytí už skôr — priamo v supabase.auth.signUp() vďaka
+ * Auth hooku esblu_before_user_created_beta_gate (auth.users sa vtedy vôbec
  * nevytvorí). Táto funkcia pokrýva iba defense-in-depth prípad (napr. Auth
  * hook zatiaľ nie je zapnutý v Supabase Dashboarde, alebo existuje staršie
  * auth.users bez firmy).
  */
-export function getEnsureOwnerCompanyErrorMessage(error: unknown): string {
+export function getEnsureOwnerCompanyErrorMessage(
+  error: unknown,
+  t: (key: string) => string
+): string {
   const text =
     error instanceof Error
       ? error.message
@@ -186,15 +186,15 @@ export function getEnsureOwnerCompanyErrorMessage(error: unknown): string {
         ? error
         : "";
 
-  for (const [code, message] of Object.entries(
-    ENSURE_OWNER_COMPANY_ERROR_MESSAGES
-  )) {
-    if (text.includes(code)) {
-      return message;
-    }
+  if (text.includes("ESBLU_BETA_ACCESS_REQUIRED")) {
+    return t("auth.closedBeta.registerNotice");
   }
 
-  return "Firemný účet sa nepodarilo založiť. Skúste to prosím znova.";
+  if (text.includes("NOT_AUTHENTICATED")) {
+    return t("auth.notAuthenticated");
+  }
+
+  return t("auth.company.createFailedGeneric");
 }
 
 export function isBetaAccessRequiredError(error: unknown): boolean {
@@ -283,19 +283,22 @@ export async function acceptCompanyInvite(
   return row as { company_id: string; role: CompanyMemberRole };
 }
 
-const INVITE_ERROR_MESSAGES: Record<string, string> = {
-  ESBLU_INVALID_TOKEN: "Odkaz na pozvánku je neplatný.",
-  ESBLU_INVITE_ALREADY_ACCEPTED: "Táto pozvánka už bola použitá.",
-  ESBLU_INVITE_REVOKED: "Táto pozvánka bola zrušená.",
-  ESBLU_INVITE_EXPIRED: "Platnosť tejto pozvánky vypršala.",
-  ESBLU_INVITE_EMAIL_MISMATCH:
-    "Táto pozvánka je určená pre iný e-mail. Prihláste sa s e-mailom, na ktorý bola pozvánka odoslaná.",
-  ESBLU_ALREADY_HAS_ACTIVE_MEMBERSHIP:
-    "Váš účet je už členom inej firmy, takže túto pozvánku nie je možné prijať.",
-  NOT_AUTHENTICATED: "Najprv sa prihláste alebo si vytvorte účet.",
-};
+const INVITE_ERROR_CODES = [
+  "ESBLU_INVALID_TOKEN",
+  "ESBLU_INVITE_ALREADY_ACCEPTED",
+  "ESBLU_INVITE_REVOKED",
+  "ESBLU_INVITE_EXPIRED",
+  "ESBLU_INVITE_EMAIL_MISMATCH",
+  "ESBLU_ALREADY_HAS_ACTIVE_MEMBERSHIP",
+] as const;
 
-export function getInviteErrorMessage(error: unknown): string {
+// Text pre volajúceho poskytuje i18n `t()` — kľúče auth.invite.errors.<kód>,
+// auth.notAuthenticated (spoločné s ensureOwnerCompany vyššie) a
+// auth.invite.errors.acceptFailedGeneric.
+export function getInviteErrorMessage(
+  error: unknown,
+  t: (key: string) => string
+): string {
   const text =
     error instanceof Error
       ? error.message
@@ -303,25 +306,32 @@ export function getInviteErrorMessage(error: unknown): string {
         ? error
         : "";
 
-  for (const [code, message] of Object.entries(INVITE_ERROR_MESSAGES)) {
+  for (const code of INVITE_ERROR_CODES) {
     if (text.includes(code)) {
-      return message;
+      return t(`auth.invite.errors.${code}`);
     }
   }
 
-  return "Pozvánku sa nepodarilo prijať. Skúste to prosím znova.";
+  if (text.includes("NOT_AUTHENTICATED")) {
+    return t("auth.notAuthenticated");
+  }
+
+  return t("auth.invite.errors.acceptFailedGeneric");
 }
 
-const CREATE_INVITE_ERROR_MESSAGES: Record<string, string> = {
-  ESBLU_NOT_ACTIVE_OWNER_OR_ADMIN:
-    "Iba majiteľ alebo používateľ s plným prístupom môže vytvárať pozvánky.",
-  ESBLU_INVALID_INVITE_EMAIL: "Zadajte platnú e-mailovú adresu.",
-  ESBLU_INVITE_ALREADY_MEMBER: "Tento používateľ je už členom vašej firmy.",
-  ESBLU_INVITE_ALREADY_PENDING:
-    "Tento e-mail už má aktívnu čakajúcu pozvánku do vašej firmy.",
-};
+const CREATE_INVITE_ERROR_CODES = [
+  "ESBLU_NOT_ACTIVE_OWNER_OR_ADMIN",
+  "ESBLU_INVALID_INVITE_EMAIL",
+  "ESBLU_INVITE_ALREADY_MEMBER",
+  "ESBLU_INVITE_ALREADY_PENDING",
+] as const;
 
-export function getCreateInviteErrorMessage(error: unknown): string {
+// Text pre volajúceho poskytuje i18n `t()` — kľúče
+// auth.invite.createErrors.<kód> a auth.invite.createErrors.createFailedGeneric.
+export function getCreateInviteErrorMessage(
+  error: unknown,
+  t: (key: string) => string
+): string {
   const text =
     error instanceof Error
       ? error.message
@@ -329,11 +339,11 @@ export function getCreateInviteErrorMessage(error: unknown): string {
         ? error
         : "";
 
-  for (const [code, message] of Object.entries(CREATE_INVITE_ERROR_MESSAGES)) {
+  for (const code of CREATE_INVITE_ERROR_CODES) {
     if (text.includes(code)) {
-      return message;
+      return t(`auth.invite.createErrors.${code}`);
     }
   }
 
-  return "Pozvánku sa nepodarilo vytvoriť. Skúste to prosím znova.";
+  return t("auth.invite.createErrors.createFailedGeneric");
 }

@@ -1,10 +1,8 @@
 import type { Metadata } from "next";
 import { PublicLegalLayout } from "@/app/components/PublicLegalLayout";
-import { LegalMarkdown } from "@/app/components/LegalMarkdown";
-import { readLegalMarkdown } from "@/lib/legal-content";
+import { LegalMarkdownLocalized } from "@/app/components/LegalMarkdownLocalized";
+import { readLegalMarkdownAllLocales } from "@/lib/legal-content";
 import { legalConfig } from "@/lib/legal-config";
-import { getServerLocale } from "@/lib/i18n/server-locale";
-import { translate } from "@/lib/i18n/translate";
 
 export const metadata: Metadata = {
   title: "Podmienky používania Esblu",
@@ -18,18 +16,22 @@ export const metadata: Metadata = {
 // legalConfig.termsVersion), nikdy úpravou existujúceho .md súboru.
 // DE/EN preklad (legal/terms/<version>.de.md, .en.md) je čisto zobrazovacia
 // vec — nemení versioned/immutable legal acceptance model (ten eviduje iba
-// document_type + version, nie locale, pozri lib/legal-content.ts).
-export default async function TermsPage() {
-  const locale = await getServerLocale();
-  const markdown = readLegalMarkdown("terms", legalConfig.termsVersion, locale);
+// document_type + version, nie locale, pozri lib/legal-content.ts). Appka
+// nepoužíva cookie na výber jazyka server-side (pozri lib/i18n/locales.ts),
+// preto táto Server Component stránka prečíta všetky 3 jazykové mutácie
+// naraz a výber necháva na klientskom LegalMarkdownLocalized.
+export default function TermsPage() {
+  const markdownByLocale = readLegalMarkdownAllLocales(
+    "terms",
+    legalConfig.termsVersion
+  );
 
   return (
     <PublicLegalLayout
-      title={translate(locale, "legal.titles.terms")}
+      titleKey="legal.titles.terms"
       updatedAt={`21. júla 2026 (verzia ${legalConfig.termsVersion})`}
-      locale={locale}
     >
-      <LegalMarkdown markdown={markdown} />
+      <LegalMarkdownLocalized variants={markdownByLocale} />
     </PublicLegalLayout>
   );
 }

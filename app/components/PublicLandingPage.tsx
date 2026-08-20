@@ -176,14 +176,14 @@ export default function PublicLandingPage() {
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
           <a
             href="#uvod"
-            aria-label="Esblu – späť na začiatok"
+            aria-label={t("landing.nav.backToTop")}
             className="rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-cyan"
           >
             <BrandMark />
           </a>
 
           <nav
-            aria-label="Hlavná navigácia"
+            aria-label={t("landing.nav.mainNavAriaLabel")}
             className="order-3 flex w-full items-center justify-center gap-2 text-sm font-semibold text-slate-300 sm:order-none sm:w-auto sm:gap-5"
           >
             <a
@@ -389,7 +389,7 @@ export default function PublicLandingPage() {
                     {feature.exampleKeys && (
                       <ul
                         className="mt-5 flex flex-wrap gap-2"
-                        aria-label="Príklady dokumentov"
+                        aria-label={t("landing.features.examplesAriaLabel")}
                       >
                         {feature.exampleKeys.map((exampleKey) => (
                           <li
@@ -662,7 +662,7 @@ export default function PublicLandingPage() {
               Sprostredkovatelia popri existujúcich, rovnaké poradie a
               formulácia ako v app/components/PublicLegalLayout.tsx. */}
           <nav
-            aria-label="Právne a kontaktné informácie"
+            aria-label={t("settings.legal.navAriaLabel")}
             className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm font-semibold sm:grid-cols-3"
           >
             <Link href="/ochrana-osobnych-udajov" className={footerLinkClass}>

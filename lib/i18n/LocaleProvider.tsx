@@ -1,60 +1,126 @@
 "use client";
 
-import { createContext, useCallback, useContext, useMemo, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useSyncExternalStore,
+} from "react";
 import { supabase } from "@/lib/supabase";
 import {
-  LOCALE_COOKIE_MAX_AGE_SECONDS,
-  LOCALE_COOKIE_NAME,
+  DEFAULT_LOCALE,
+  LOCALE_STORAGE_KEY,
   normalizeLocale,
   type Locale,
 } from "./locales";
-import { translate } from "./translate";
+import { translate, translateCount } from "./translate";
 
-// Esblu i18n — client-side Context. Drží AKTUÁLNY jazyk (inicializovaný zo
-// server-side cookie cez initialLocale, takže prvé vykreslenie na
-// klientovi je vždy zhodné so serverom — žiadny hydration mismatch/FOUC) a
-// vystavuje t()/setLocale() zvyšku appky.
+// Esblu i18n — client-side Context. Drží AKTUÁLNY jazyk a vystavuje
+// t()/setLocale() zvyšku appky.
 //
-// Perzistencia (zadanie, bod "Preferované správanie"):
-//   - VŽDY: cookie (funguje pred aj po prihlásení, bez DB round-tripu),
+// Perzistencia (revidované — pozri lib/i18n/locales.ts pre plné
+// zdôvodnenie): appka zámerne NEPOUŽÍVA cookie na uloženie jazyka, aby
+// nemenila právny obsah Cookie Policy. Namiesto toho:
+//   - VŽDY: localStorage (rovnaký mechanizmus ako existujúci Supabase Auth
+//     session token — appka tu nezavádza žiadnu novú technológiu),
 //   - NAVYŠE ak je používateľ prihlásený: best-effort zápis do
 //     public.settings.locale (20260819090000_add_settings_locale.sql),
 //     aby sa jazyk obnovil aj po prihlásení z iného zariadenia/prehliadača.
 //     Zlyhanie tohto zápisu (napr. dočasný výpadok siete) NIKDY neblokuje
-//     samotnú zmenu jazyka v UI — cookie je vždy zdroj pravdy pre aktuálnu
-//     reláciu.
+//     samotnú zmenu jazyka v UI.
+// Keďže localStorage nie je na serveri dostupné, prvé SSR vykreslenie je
+// vždy v DEFAULT_LOCALE (sk) — čítanie aktuálnej hodnoty je implementované
+// cez useSyncExternalStore (React-odporúčaný spôsob synchronizácie s
+// externým úložiskom mimo Reactu, namiesto setState() vo vnútri effectu,
+// ktoré by spôsobovalo kaskádové rendery). Vedľajší bonus:
+// useSyncExternalStore automaticky reaguje aj na zmenu jazyka v inej karte
+// (storage event), takže viacero otvorených kariet Esblu zostáva
+// zosynchronizovaných.
 type LocaleContextValue = {
   locale: Locale;
   setLocale: (next: Locale) => void;
   t: (key: string, vars?: Record<string, string | number>) => string;
+  // Plurálová varianta t() — baseKey BEZ prípony (_one/_few/_many), napr.
+  // tCount("inbox.documentsCountSuffix", 3) vyhľadá "..._few". Pozri
+  // lib/i18n/translate.ts (pluralSuffix) pre pravidlá SK vs. DE/EN.
+  tCount: (
+    baseKey: string,
+    count: number,
+    vars?: Record<string, string | number>
+  ) => string;
 };
 
 const LocaleContext = createContext<LocaleContextValue | null>(null);
 
-function setLocaleCookie(locale: Locale) {
-  if (typeof document === "undefined") return;
+const localeChangeListeners = new Set<() => void>();
 
-  document.cookie = `${LOCALE_COOKIE_NAME}=${locale}; path=/; max-age=${LOCALE_COOKIE_MAX_AGE_SECONDS}; SameSite=Lax`;
+function readStoredLocale(): Locale {
+  if (typeof window === "undefined") return DEFAULT_LOCALE;
+
+  try {
+    const stored = window.localStorage.getItem(LOCALE_STORAGE_KEY);
+    return stored ? normalizeLocale(stored) : DEFAULT_LOCALE;
+  } catch {
+    // Súkromné prehliadanie / zakázaný localStorage — appka jednoducho
+    // pokračuje s DEFAULT_LOCALE, nikdy nepadne.
+    return DEFAULT_LOCALE;
+  }
 }
 
-export function LocaleProvider({
-  initialLocale,
-  children,
-}: {
-  initialLocale: Locale;
-  children: React.ReactNode;
-}) {
-  const [locale, setLocaleState] = useState<Locale>(
-    normalizeLocale(initialLocale)
+function getServerLocaleSnapshot(): Locale {
+  return DEFAULT_LOCALE;
+}
+
+function subscribeToLocaleChanges(callback: () => void): () => void {
+  localeChangeListeners.add(callback);
+
+  const onStorageEvent = (event: StorageEvent) => {
+    if (event.key === LOCALE_STORAGE_KEY) callback();
+  };
+  window.addEventListener("storage", onStorageEvent);
+
+  return () => {
+    localeChangeListeners.delete(callback);
+    window.removeEventListener("storage", onStorageEvent);
+  };
+}
+
+function writeStoredLocale(locale: Locale) {
+  if (typeof window === "undefined") return;
+
+  try {
+    window.localStorage.setItem(LOCALE_STORAGE_KEY, locale);
+  } catch {
+    // Rovnako best-effort ako čítanie vyššie.
+  }
+
+  // Zmena z aktuálnej karty storage event NEVYVOLÁ (ten dostanú iba OSTATNÉ
+  // karty) — vlastných poslucháčov preto notifikujeme priamo, aby sa aj
+  // táto karta prekreslila cez useSyncExternalStore ihneď po kliku.
+  localeChangeListeners.forEach((callback) => callback());
+}
+
+export function LocaleProvider({ children }: { children: React.ReactNode }) {
+  const locale = useSyncExternalStore(
+    subscribeToLocaleChanges,
+    readStoredLocale,
+    getServerLocaleSnapshot
   );
+
+  useEffect(() => {
+    if (typeof document !== "undefined") {
+      document.documentElement.lang = locale;
+    }
+  }, [locale]);
 
   const setLocale = useCallback((next: Locale) => {
     const normalized = normalizeLocale(next);
-    setLocaleState(normalized);
-    setLocaleCookie(normalized);
+    writeStoredLocale(normalized);
 
     // Best-effort — ak nie je prihlásený, getSession() vráti null a appka
-    // jednoducho pokračuje s cookie perzistenciou (bod "neprihlásený
+    // jednoducho pokračuje s localStorage perzistenciou (bod "neprihlásený
     // používateľ" zo zadania). Nikdy nič nevyhadzuje/neblokuje UI.
     supabase.auth
       .getSession()
@@ -77,7 +143,16 @@ export function LocaleProvider({
     [locale]
   );
 
-  const value = useMemo(() => ({ locale, setLocale, t }), [locale, setLocale, t]);
+  const tCount = useCallback(
+    (baseKey: string, count: number, vars?: Record<string, string | number>) =>
+      translateCount(locale, baseKey, count, vars),
+    [locale]
+  );
+
+  const value = useMemo(
+    () => ({ locale, setLocale, t, tCount }),
+    [locale, setLocale, t, tCount]
+  );
 
   return (
     <LocaleContext.Provider value={value}>{children}</LocaleContext.Provider>

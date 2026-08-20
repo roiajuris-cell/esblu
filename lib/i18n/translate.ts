@@ -44,3 +44,29 @@ export function translate(
     resolved
   );
 }
+
+// Jednoduchý plurál bez závislosti na knižnici Intl.PluralRules — slovenčina
+// má 3 tvary (1 / 2-4 / 5+ a 0), nemčina a angličtina majú reálne len 2
+// (1 / ostatné), preto dictionary kľúče vždy definujú _one/_few/_many a
+// pre DE/EN sú _few a _many jednoducho identické. baseKey je kľúč BEZ
+// prípony, napr. "inbox.documentsCountSuffix" → vyhľadá
+// "inbox.documentsCountSuffix_one" / "_few" / "_many".
+export function pluralSuffix(locale: Locale, count: number): "_one" | "_few" | "_many" {
+  const n = Math.abs(count);
+  if (locale === "sk") {
+    if (n === 1) return "_one";
+    if (n >= 2 && n <= 4) return "_few";
+    return "_many";
+  }
+  // DE/EN: len jednotné/množné číslo, _few aj _many nesú rovnaký text.
+  return n === 1 ? "_one" : "_many";
+}
+
+export function translateCount(
+  locale: Locale,
+  baseKey: string,
+  count: number,
+  vars?: Record<string, string | number>
+): string {
+  return translate(locale, `${baseKey}${pluralSuffix(locale, count)}`, { count, ...vars });
+}

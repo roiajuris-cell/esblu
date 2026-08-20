@@ -1,6 +1,9 @@
 import OpenAI from "openai";
 import { createClient } from "@supabase/supabase-js";
 import { normalizeSpz } from "@/lib/normalize-spz";
+import { getRequestLocale } from "@/lib/i18n/request-locale";
+import { translate } from "@/lib/i18n/translate";
+import type { Locale } from "@/lib/i18n/locales";
 
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY!,
@@ -75,27 +78,35 @@ function hasValidImageSignature(bytes: Uint8Array, type: string) {
   return false;
 }
 
-async function toImageDataUrl(file: File, label: string) {
+async function toImageDataUrl(file: File, label: string, locale: Locale) {
   if (file.size === 0) {
-    throw new ImageValidationError(`${label} je prázdna.`, 400);
+    throw new ImageValidationError(
+      translate(locale, "inbox.errors.imageEmptyPrefixed", { label }),
+      400
+    );
   }
 
   if (!ALLOWED_IMAGE_TYPES.has(file.type)) {
     throw new ImageValidationError(
-      `${label} musí byť obrázok vo formáte JPEG, PNG alebo WebP.`,
+      translate(locale, "inbox.errors.imageFormatInvalidPrefixed", { label }),
       415
     );
   }
 
   if (file.size > MAX_IMAGE_SIZE) {
-    throw new ImageValidationError(`${label} môže mať najviac 8 MB.`, 413);
+    throw new ImageValidationError(
+      translate(locale, "inbox.errors.imageTooLarge8MBPrefixed", { label }),
+      413
+    );
   }
 
   const bytes = new Uint8Array(await file.arrayBuffer());
 
   if (!hasValidImageSignature(bytes, file.type)) {
     throw new ImageValidationError(
-      `${label} nemá platný obsah obrázka.`,
+      translate(locale, "inbox.errors.imageInvalidContentPrefixed", {
+        label,
+      }),
       400
     );
   }
@@ -128,6 +139,8 @@ function normalizeRegistrationData(value: unknown) {
 }
 
 export async function POST(request: Request) {
+  const locale = getRequestLocale(request);
+
   try {
     const authorization = request.headers.get("authorization");
     const accessToken = authorization?.startsWith("Bearer ")
@@ -136,7 +149,10 @@ export async function POST(request: Request) {
 
     if (!accessToken) {
       return Response.json(
-        { success: false, error: "Na AI načítanie musíš byť prihlásený." },
+        {
+          success: false,
+          error: translate(locale, "inbox.errors.aiLoginRequired"),
+        },
         { status: 401 }
       );
     }
@@ -148,7 +164,10 @@ export async function POST(request: Request) {
 
     if (authError || !user) {
       return Response.json(
-        { success: false, error: "Prihlásenie vypršalo. Prihlás sa znova." },
+        {
+          success: false,
+          error: translate(locale, "inbox.errors.sessionExpired"),
+        },
         { status: 401 }
       );
     }
@@ -159,22 +178,36 @@ export async function POST(request: Request) {
 
     if (!(frontValue instanceof File)) {
       return Response.json(
-        { success: false, error: "Predná strana technického preukazu chýba." },
+        {
+          success: false,
+          error: translate(locale, "inbox.errors.frontSideMissing"),
+        },
         { status: 400 }
       );
     }
 
     if (backValue !== null && !(backValue instanceof File)) {
       return Response.json(
-        { success: false, error: "Zadná strana musí byť obrázok." },
+        {
+          success: false,
+          error: translate(locale, "inbox.errors.backSideMustBeImage"),
+        },
         { status: 400 }
       );
     }
 
-    const frontImage = await toImageDataUrl(frontValue, "Predná strana");
+    const frontImage = await toImageDataUrl(
+      frontValue,
+      translate(locale, "inbox.errors.frontSideLabel"),
+      locale
+    );
     const backImage =
       backValue instanceof File && backValue.size > 0
-        ? await toImageDataUrl(backValue, "Zadná strana")
+        ? await toImageDataUrl(
+            backValue,
+            translate(locale, "inbox.errors.backSideLabel"),
+            locale
+          )
         : null;
 
     const content: Array<
@@ -250,7 +283,10 @@ obrázok, je to zadná strana toho istého technického preukazu.
 
     if (!response.output_text) {
       return Response.json(
-        { success: false, error: "AI nevrátila žiadne údaje." },
+        {
+          success: false,
+          error: translate(locale, "inbox.errors.aiNoDataReturned"),
+        },
         { status: 502 }
       );
     }
@@ -269,7 +305,10 @@ obrázok, je to zadná strana toho istého technického preukazu.
     console.error("VEHICLE REGISTRATION SCAN ERROR:", error);
 
     return Response.json(
-      { success: false, error: "AI načítanie technického preukazu zlyhalo." },
+      {
+        success: false,
+        error: translate(locale, "inbox.errors.registrationAiFailedGeneric"),
+      },
       { status: 500 }
     );
   }

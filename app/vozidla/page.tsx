@@ -5,7 +5,7 @@ import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import PlanLimitNotice from "@/app/components/PlanLimitNotice";
 import { usePlanUsage } from "@/hooks/use-plan-usage";
-import { isPlanLimitReachedError, PLAN_LIMIT_MESSAGE } from "@/lib/plan-limits";
+import { isPlanLimitReachedError } from "@/lib/plan-limits";
 import { normalizeSpz } from "@/lib/normalize-spz";
 import VehicleCard from "../components/VehicleCard";
 import BackLink from "../components/BackLink";
@@ -15,9 +15,12 @@ import {
   type CompanyMemberRole,
 } from "@/lib/company";
 import { useCompanyDpaLegalHold } from "@/app/components/CompanyDpaGate";
-import { LEGAL_HOLD_MESSAGE } from "@/lib/company-dpa";
+import { useLocale } from "@/lib/i18n/LocaleProvider";
 
-async function compressVehiclePhoto(file: File): Promise<File> {
+async function compressVehiclePhoto(
+  file: File,
+  t: (key: string, vars?: Record<string, string | number>) => string
+): Promise<File> {
   const imageUrl = URL.createObjectURL(file);
 
   try {
@@ -26,7 +29,7 @@ async function compressVehiclePhoto(file: File): Promise<File> {
 
       img.onload = () => resolve(img);
       img.onerror = () =>
-        reject(new Error("Fotografiu sa nepodarilo načítať."));
+        reject(new Error(t("vehicles.errors.photoLoadFailed")));
 
       img.src = imageUrl;
     });
@@ -46,7 +49,7 @@ async function compressVehiclePhoto(file: File): Promise<File> {
     const context = canvas.getContext("2d");
 
     if (!context) {
-      throw new Error("Nepodarilo sa pripraviť kompresiu fotografie.");
+      throw new Error(t("vehicles.errors.photoCompressPrepFailed"));
     }
 
     context.drawImage(image, 0, 0, width, height);
@@ -57,7 +60,7 @@ async function compressVehiclePhoto(file: File): Promise<File> {
           if (result) {
             resolve(result);
           } else {
-            reject(new Error("Fotografiu sa nepodarilo skomprimovať."));
+            reject(new Error(t("vehicles.errors.photoCompressFailed")));
           }
         },
         "image/webp",
@@ -65,7 +68,9 @@ async function compressVehiclePhoto(file: File): Promise<File> {
       );
     });
 
-    const baseName = file.name.replace(/\.[^/.]+$/, "") || "vozidlo";
+    const baseName =
+      file.name.replace(/\.[^/.]+$/, "") ||
+      t("vehicles.gallery.defaultPhotoFileName");
 
     return new File([blob], `${baseName}.webp`, {
       type: "image/webp",
@@ -77,6 +82,7 @@ async function compressVehiclePhoto(file: File): Promise<File> {
 }
 
 export default function VozidlaPage() {
+  const { t, tCount } = useLocale();
   const [userId, setUserId] = useState("");
   const [companyId, setCompanyId] = useState("");
   const [role, setRole] = useState<CompanyMemberRole | null>(null);
@@ -148,7 +154,7 @@ export default function VozidlaPage() {
       .order("znacka", { ascending: true });
 
     if (error) {
-      alert("Chyba pri načítaní vozidiel: " + error.message);
+      alert(t("vehicles.errors.loadVehiclesFailed", { message: error.message }));
       return;
     }
 
@@ -166,18 +172,21 @@ export default function VozidlaPage() {
     if (!photoTargetVehicleId) {
       setPhotoUploadFeedback({
         type: "error",
-        text: "Najprv vyber vozidlo, ku ktorému fotografie patria.",
+        text: t("vehicles.gallery.selectVehicleFirst"),
       });
       return;
     }
 
     if (!userId) {
-      setPhotoUploadFeedback({ type: "error", text: "Nie si prihlásený." });
+      setPhotoUploadFeedback({
+        type: "error",
+        text: t("inbox.errors.notLoggedIn"),
+      });
       return;
     }
 
     if (legalHold) {
-      setPhotoUploadFeedback({ type: "error", text: LEGAL_HOLD_MESSAGE });
+      setPhotoUploadFeedback({ type: "error", text: t("common.legalHoldMessage") });
       return;
     }
 
@@ -189,7 +198,7 @@ export default function VozidlaPage() {
     try {
       for (const originalFile of files) {
         try {
-          const compressedFile = await compressVehiclePhoto(originalFile);
+          const compressedFile = await compressVehiclePhoto(originalFile, t);
           const filePath = `${userId}/${photoTargetVehicleId}/${Date.now()}-${crypto.randomUUID()}-${compressedFile.name}`;
 
           const { error: uploadError } = await supabase.storage
@@ -228,12 +237,15 @@ export default function VozidlaPage() {
       if (failedCount === 0) {
         setPhotoUploadFeedback({
           type: "success",
-          text: `${successCount} ${successCount === 1 ? "fotografia bola uložená" : "fotografií bolo uložených"}.`,
+          text: tCount("vehicles.gallery.photosSavedCount", successCount),
         });
       } else {
         setPhotoUploadFeedback({
           type: "error",
-          text: `${failedCount} z ${files.length} fotografií sa nepodarilo nahrať. Skús to znova.`,
+          text: t("vehicles.errors.photosUploadFailedCount", {
+            failedCount,
+            total: files.length,
+          }),
         });
       }
     } finally {
@@ -274,7 +286,7 @@ export default function VozidlaPage() {
     if (!vehicle || saveInProgressRef.current) return;
 
     if (!userId) {
-      alert("Nie si prihlásený.");
+      alert(t("inbox.errors.notLoggedIn"));
       return;
     }
 
@@ -283,7 +295,7 @@ export default function VozidlaPage() {
     // formulár a až pri uložení naraziť na ESBLU_COMPANY_DPA_NOT_ACCEPTED
     // z DB triggera. Netýka sa editácie existujúceho vozidla.
     if (!editingId && legalHold) {
-      alert(LEGAL_HOLD_MESSAGE);
+      alert(t("common.legalHoldMessage"));
       return;
     }
 
@@ -300,7 +312,7 @@ export default function VozidlaPage() {
 
         if (error) throw error;
 
-        alert("Vozidlo bolo upravené.");
+        alert(t("vehicles.messages.vehicleUpdated"));
         setEditingId(null);
         setVehicle(null);
         await loadVehicles();
@@ -310,7 +322,7 @@ export default function VozidlaPage() {
       const latestUsage = await refreshPlanUsage();
 
       if (latestUsage?.isLimited) {
-        alert(PLAN_LIMIT_MESSAGE);
+        alert(t("common.planLimitMessage"));
         return;
       }
 
@@ -318,20 +330,22 @@ export default function VozidlaPage() {
 
       if (error) throw error;
 
-      alert("Vozidlo bolo uložené.");
+      alert(t("vehicles.messages.vehicleSaved"));
       setVehicle(null);
       await Promise.all([loadVehicles(), refreshPlanUsage()]);
     } catch (saveError: unknown) {
       if (isPlanLimitReachedError(saveError, "vehicles")) {
-        alert(PLAN_LIMIT_MESSAGE);
+        alert(t("common.planLimitMessage"));
         await refreshPlanUsage();
       } else {
         const message =
-          saveError instanceof Error ? saveError.message : "Neznáma chyba.";
+          saveError instanceof Error
+            ? saveError.message
+            : t("vehicles.errors.unknownError");
         alert(
           editingId
-            ? "Chyba pri úprave: " + message
-            : "Chyba pri ukladaní: " + message
+            ? t("vehicles.errors.vehicleUpdateFailedPrefix", { message })
+            : t("vehicles.errors.vehicleSaveFailedPrefix", { message })
         );
       }
     } finally {
@@ -364,7 +378,7 @@ export default function VozidlaPage() {
   }
 
   async function handleDeleteVehicle(id: string) {
-    const confirmed = confirm("Naozaj chceš vymazať toto vozidlo?");
+    const confirmed = confirm(t("vehicles.list.confirmDeleteVehicle"));
     if (!confirmed) return;
 
     // Cesty fotografií vozidla načítame PRED zmazaním vozidla — DB riadky
@@ -377,6 +391,23 @@ export default function VozidlaPage() {
       .eq("vehicle_id", id)
       .eq("company_id", companyId);
 
+    // PZP/technický preukaz priradené k tomuto vozidlu (document_links,
+    // pozri esblu_finalize_vehicle_document a
+    // 20260820090000_add_documents_vehicle_archive.sql) načítame PRED
+    // zmazaním vozidla z rovnakého dôvodu ako fotografie vyššie —
+    // document_links.vehicle_id má ON DELETE CASCADE, takže po zmazaní
+    // vozidla už nebude možné zistiť, ktoré dokumenty boli naň naviazané.
+    // Samotný dokument (public.documents) sa NIKDY nemaže spolu s vozidlom
+    // — iba stráca vlastníka, takže ho po zmazaní vozidla vrátime späť do
+    // bežného Inbox listingu (archived_from_inbox_at = null), aby nezostal
+    // "zavesený" bez akéhokoľvek miesta, kde by bol viditeľný.
+    const { data: linkedPzpTpDocs } = await supabase
+      .from("document_links")
+      .select("document_id, documents!inner(document_type)")
+      .eq("vehicle_id", id)
+      .eq("company_id", companyId)
+      .in("documents.document_type", ["insurance", "vehicle_registration"]);
+
     const { error } = await supabase
       .from("vehicles")
       .delete()
@@ -384,8 +415,31 @@ export default function VozidlaPage() {
       .eq("company_id", companyId);
 
     if (error) {
-      alert("Chyba pri mazaní: " + error.message);
+      alert(t("vehicles.errors.vehicleDeleteFailedPrefix", { message: error.message }));
       return;
+    }
+
+    const documentIdsToUnarchive = (linkedPzpTpDocs || [])
+      .map((row) => row.document_id)
+      .filter((docId): docId is string => Boolean(docId));
+
+    if (documentIdsToUnarchive.length > 0) {
+      // Vozidlo zmazať smie iba owner/admin (vehicles_delete_owner_admin) —
+      // teda aj tento plain UPDATE na documents (bežne owner/admin only,
+      // documents_update_owner_admin) je tu vždy v súlade s RLS, keďže sme
+      // sa sem dostali iba vďaka tomu, že volajúci už owner/admin je.
+      const { error: unarchiveError } = await supabase
+        .from("documents")
+        .update({ archived_from_inbox_at: null })
+        .in("id", documentIdsToUnarchive)
+        .eq("company_id", companyId);
+
+      if (unarchiveError) {
+        console.error(
+          "Dokumenty zmazaného vozidla sa nepodarilo vrátiť do Inboxu:",
+          unarchiveError
+        );
+      }
     }
 
     const paths = (photosToClean || [])
@@ -415,19 +469,19 @@ export default function VozidlaPage() {
 
   return (
     <main className="app-shell-bg min-h-screen p-4 sm:p-6 lg:p-10">
-      <BackLink href="/" label="Hlavné menu" className="mb-4" />
+      <BackLink href="/" label={t("inbox.backToMenu")} className="mb-4" />
 
       <div className="flex items-center gap-4">
   <img
     src="/images/van.png"
-    alt="Vozidlá"
+    alt={t("nav.vehicles")}
     className="h-20 w-20 object-contain"
   />
-  <h1 className="text-4xl font-bold text-primary">Vozidlá</h1>
+  <h1 className="text-4xl font-bold text-primary">{t("nav.vehicles")}</h1>
 </div>
 
       <p className="mt-4 text-secondary">
-        Evidencia firemných vozidiel.
+        {t("vehicles.list.subtitle")}
       </p>
 
       {!planUsageLoading && isPlanLimited && (
@@ -442,18 +496,16 @@ export default function VozidlaPage() {
       {role !== "employee" && (
         <div className="mt-8 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-subtle bg-surface-1 p-6 shadow-lg backdrop-blur-xl">
           <div>
-            <h2 className="text-xl font-bold">Nové vozidlo pridáte cez Inbox</h2>
+            <h2 className="text-xl font-bold">{t("vehicles.list.addViaInboxTitle")}</h2>
             <p className="mt-1 text-sm text-secondary">
-              Odfotografujte technický preukaz (prednú a zadnú stranu) v
-              module Inbox — AI údaje načíta a po vašom potvrdení vozidlo
-              automaticky založí alebo priradí k existujúcemu.
+              {t("vehicles.list.addViaInboxDescription")}
             </p>
           </div>
           <Link
             href="/ai-evidencia"
             className="shrink-0 rounded-xl bg-blue-600 px-5 py-3 font-medium text-white hover:bg-blue-700"
           >
-            Otvoriť Inbox →
+            {t("vehicles.list.openInboxCta")}
           </Link>
         </div>
       )}
@@ -464,10 +516,9 @@ export default function VozidlaPage() {
           nedostupné, toto sa ich netýka. */}
       {role && (
         <div className="mt-6 rounded-2xl border border-subtle bg-surface-1 p-6 shadow-lg backdrop-blur-xl">
-          <h2 className="text-xl font-bold">📷 Pridať fotografie vozidla</h2>
+          <h2 className="text-xl font-bold">{t("vehicles.gallery.addPhotosTitle")}</h2>
           <p className="mt-1 text-sm text-secondary">
-            Vyber vozidlo a nahraj jednu alebo viac fotografií naraz. Fotky
-            uvidíš v galérii na detaile vozidla.
+            {t("vehicles.gallery.addPhotosDescription")}
           </p>
 
           <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -476,10 +527,10 @@ export default function VozidlaPage() {
               onChange={(e) => setPhotoTargetVehicleId(e.target.value)}
               className="rounded-xl border border-subtle bg-surface-2 px-4 py-3 outline-none sm:flex-1"
             >
-              <option value="">— vyber vozidlo —</option>
+              <option value="">{t("inbox.chooseVehiclePlaceholder")}</option>
               {vehicles.map((car) => (
                 <option key={car.id} value={car.id}>
-                  {car.spz || "Bez ŠPZ"}
+                  {car.spz || t("inbox.noPlateCapitalized")}
                   {car.znacka ? ` — ${car.znacka} ${car.model || ""}` : ""}
                 </option>
               ))}
@@ -492,7 +543,7 @@ export default function VozidlaPage() {
                   : "cursor-pointer bg-blue-600 text-white hover:bg-blue-700"
               }`}
             >
-              {isUploadingVehiclePhotos ? "Nahrávam..." : "📷 Odfotiť / nahrať"}
+              {isUploadingVehiclePhotos ? t("inbox.uploading") : t("vehicles.gallery.takeOrUploadPhotos")}
               <input
                 type="file"
                 accept="image/*"
@@ -510,7 +561,7 @@ export default function VozidlaPage() {
 
           {vehicles.length === 0 && (
             <p className="mt-2 text-xs text-muted-esblu">
-              Zatiaľ nemáš uložené žiadne vozidlo.
+              {t("vehicles.list.noneYetShort")}
             </p>
           )}
 
@@ -531,23 +582,23 @@ export default function VozidlaPage() {
       {role !== "employee" && vehicle && (
         <div className="mt-8 rounded-2xl bg-surface-1 p-6 shadow">
           <h2 className="mb-6 text-2xl font-bold">
-            {editingId ? "Upraviť vozidlo" : "Skontrolujte údaje vozidla"}
+            {editingId ? t("vehicles.forms.editVehicleTitle") : t("vehicles.forms.reviewVehicleTitle")}
           </h2>
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             {[
-              ["ŠPZ", "spz"],
-              ["VIN", "vin"],
-              ["Značka", "znacka"],
-              ["Model", "model"],
-              ["Rok výroby", "rokVyroby"],
-              ["Palivo", "palivo"],
-              ["Objem motora", "objemMotora"],
-              ["Výkon", "vykon"],
-              ["Farba", "farba"],
-              ["Dátum prvej evidencie", "datumPrvejEvidencie"],
-              ["Hmotnosť", "hmotnost"],
-              ["Počet miest", "pocetMiest"],
+              [t("inbox.fields.spz"), "spz"],
+              [t("inbox.fields.vin"), "vin"],
+              [t("inbox.fields.znacka"), "znacka"],
+              [t("inbox.fields.model"), "model"],
+              [t("inbox.fields.rokVyroby"), "rokVyroby"],
+              [t("inbox.fields.palivo"), "palivo"],
+              [t("inbox.fields.objemMotora"), "objemMotora"],
+              [t("inbox.fields.vykon"), "vykon"],
+              [t("inbox.fields.farba"), "farba"],
+              [t("inbox.fields.datumPrvejEvidencie"), "datumPrvejEvidencie"],
+              [t("vehicles.fields.hmotnost"), "hmotnost"],
+              [t("inbox.fields.pocetMiest"), "pocetMiest"],
             ].map(([label, key]) => (
               <label key={key} className="block">
                 <span className="text-sm font-medium text-secondary">
@@ -563,7 +614,7 @@ export default function VozidlaPage() {
 
             <label className="block">
               <span className="text-sm font-medium text-secondary">
-                STK platí do
+                {t("vehicles.fields.stkValidUntil")}
               </span>
               <input
                 className="mt-1 w-full rounded-xl border p-3"
@@ -575,7 +626,7 @@ export default function VozidlaPage() {
 
             <label className="block">
               <span className="text-sm font-medium text-secondary">
-                EK platí do
+                {t("vehicles.fields.ekValidUntil")}
               </span>
               <input
                 className="mt-1 w-full rounded-xl border p-3"
@@ -593,10 +644,10 @@ export default function VozidlaPage() {
               className="rounded-xl bg-blue-600 px-6 py-3 text-white hover:bg-blue-700 disabled:bg-gray-400"
             >
               {isSaving
-                ? "Ukladám..."
+                ? t("common.buttons.saving")
                 : editingId
-                ? "💾 Uložiť zmeny"
-                : "💾 Uložiť vozidlo"}
+                ? t("vehicles.forms.saveChanges")
+                : t("vehicles.forms.saveVehicle")}
             </button>
 
             {editingId && (
@@ -604,7 +655,7 @@ export default function VozidlaPage() {
                 onClick={cancelEdit}
                 className="rounded-xl bg-surface-2 px-6 py-3 text-primary hover:bg-surface-hover"
               >
-                Zrušiť úpravu
+                {t("vehicles.forms.cancelEdit")}
               </button>
             )}
           </div>
@@ -613,13 +664,13 @@ export default function VozidlaPage() {
 
       <div className="mt-10">
         <h2 className="mb-4 text-2xl font-bold text-primary">
-  Uložené vozidlá
+  {t("vehicles.list.savedVehiclesTitle")}
 </h2>
 
         {vehicles.length === 0 ? (
           <div className="rounded-2xl bg-surface-1 p-6 shadow">
             <p className="text-muted-esblu">
-              Zatiaľ nie je uložené žiadne vozidlo.
+              {t("vehicles.list.noneYet")}
             </p>
           </div>
         ) : (

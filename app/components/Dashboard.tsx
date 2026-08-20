@@ -6,20 +6,22 @@ import type { ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { getCompanyProfile, getMyActiveMembership } from "@/lib/company";
+import { useLocale } from "@/lib/i18n/LocaleProvider";
 import ModuleCard, { type ModuleAccent } from "./ModuleCard";
 
-function getGreeting() {
+function getGreeting(t: (key: string) => string) {
   const hour = new Date().getHours();
 
-  if (hour >= 5 && hour < 12) return "Dobré ráno ☀️";
-  if (hour >= 12 && hour < 18) return "Dobrý deň 👋";
-  if (hour >= 18 && hour < 22) return "Dobrý večer 🌙";
+  if (hour >= 5 && hour < 12) return t("dashboard.greetingMorning");
+  if (hour >= 12 && hour < 18) return t("dashboard.greetingAfternoon");
+  if (hour >= 18 && hour < 22) return t("dashboard.greetingEvening");
 
-  return "Dobrú noc 🌜";
+  return t("dashboard.greetingNight");
 }
 
 export default function Dashboard() {
   const router = useRouter();
+  const { t } = useLocale();
 
   const [vehicles, setVehicles] = useState<any[]>([]);
   const [machines, setMachines] = useState<any[]>([]);
@@ -32,7 +34,7 @@ export default function Dashboard() {
   // výsuvné menu s rovnakou navigáciou ako desktop sidebar. Čisto UI stav,
   // nič dátové/business.
   const [menuOpen, setMenuOpen] = useState(false);
-  const greeting = getGreeting();
+  const greeting = getGreeting(t);
   useEffect(() => {
     checkUser();
   }, []);
@@ -145,18 +147,18 @@ export default function Dashboard() {
     const next30Days = new Date();
     next30Days.setDate(today.getDate() + 30);
 
-    const result: any[] = [];
+    const result: { level: string; type: string; message: string }[] = [];
 
     vehicles.forEach((car) => {
-      checkDate(result, car, "STK", car.stk, today, next30Days);
-      checkDate(result, car, "EK", car.ek, today, next30Days);
+      checkDate(result, car, t("dashboard.stkLabel"), car.stk, today, next30Days);
+      checkDate(result, car, t("dashboard.ekLabel"), car.ek, today, next30Days);
     });
 
     return result;
   }
 
   function checkDate(
-    result: any[],
+    result: { level: string; type: string; message: string }[],
     car: any,
     type: string,
     value: string | null,
@@ -170,18 +172,22 @@ export default function Dashboard() {
       (date.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
     );
 
-    const name = `${car.znacka || ""} ${car.model || ""}`.trim();
-    const spz = car.spz || "bez ŠPZ";
+    const name =
+      `${car.znacka || ""} ${car.model || ""}`.trim() ||
+      t("dashboard.vehicleFallbackName");
+    const spz = car.spz || t("dashboard.noPlate");
 
     if (date < today) {
       result.push({
         level: "red",
-        text: `${type} po termíne: ${name || "Vozidlo"} (${spz})`,
+        type,
+        message: t("dashboard.alertOverdue", { type, name, spz }),
       });
     } else if (date <= next30Days) {
       result.push({
         level: "orange",
-        text: `${type} končí o ${diffDays} dní: ${name || "Vozidlo"} (${spz})`,
+        type,
+        message: t("dashboard.alertDueSoon", { type, name, spz, days: diffDays }),
       });
     }
   }
@@ -198,9 +204,13 @@ export default function Dashboard() {
               .includes(query)
           )
           .map((v) => ({
-            type: "Vozidlo",
-            title: `${v.znacka || ""} ${v.model || ""}`.trim() || "Vozidlo",
-            subtitle: `${v.spz || "bez ŠPZ"} | ${v.vin || "bez VIN"}`,
+            type: t("dashboard.resultTypeVehicle"),
+            title:
+              `${v.znacka || ""} ${v.model || ""}`.trim() ||
+              t("dashboard.vehicleFallbackName"),
+            subtitle: `${v.spz || t("dashboard.noPlate")} | ${
+              v.vin || t("dashboard.noVin")
+            }`,
             href: `/vozidla/${v.id}`,
           })),
 
@@ -211,10 +221,10 @@ export default function Dashboard() {
               .includes(query)
           )
           .map((m) => ({
-            type: "Stroj",
-            title: m.name || "Bez názvu",
-            subtitle: `${m.category || "bez kategórie"} | ${
-              m.serial_number || "bez sériového čísla"
+            type: t("dashboard.resultTypeMachine"),
+            title: m.name || t("dashboard.noName"),
+            subtitle: `${m.category || t("dashboard.noCategory")} | ${
+              m.serial_number || t("dashboard.noSerialNumber")
             }`,
             href: `/stroje/${m.id}`,
           })),
@@ -226,10 +236,10 @@ export default function Dashboard() {
               .includes(query)
           )
           .map((i) => ({
-            type: "Sklad",
-            title: i.name || "Bez názvu",
+            type: t("dashboard.resultTypeInventory"),
+            title: i.name || t("dashboard.noName"),
             subtitle: `${i.quantity || 0} ${i.unit || ""} | ${
-              i.location || "bez umiestnenia"
+              i.location || t("dashboard.noLocation")
             }`,
             href: `/sklad/${i.id}`,
           })),
@@ -245,39 +255,39 @@ export default function Dashboard() {
     accent: ModuleAccent;
   }[] = [
     {
-      title: "Inbox",
-      subtitle: "Inteligentné spracovanie dokumentov",
+      title: t("nav.inbox"),
+      subtitle: t("dashboard.moduleInboxSubtitle"),
       href: "/ai-evidencia",
       image: "/images/ai-evidencia.png",
       accent: "cyan",
     },
     {
-      title: "Vozidlá",
-      subtitle: "uložených vozidiel",
+      title: t("nav.vehicles"),
+      subtitle: t("dashboard.moduleVehiclesSubtitle"),
       stat: String(vehicles.length),
       href: "/vozidla",
       image: "/images/van.png",
       accent: "blue",
     },
     {
-      title: "Stroje",
-      subtitle: "uložených strojov",
+      title: t("nav.machines"),
+      subtitle: t("dashboard.moduleMachinesSubtitle"),
       stat: String(machines.length),
       href: "/stroje",
       image: "/images/excavator.png",
       accent: "orange",
     },
     {
-      title: "Sklad",
-      subtitle: "skladových položiek",
+      title: t("nav.inventory"),
+      subtitle: t("dashboard.moduleInventorySubtitle"),
       stat: String(items.length),
       href: "/sklad",
       image: "/images/warehouse.png",
       accent: "teal",
     },
     {
-      title: "Nastavenia",
-      subtitle: "Nastavenia aplikácie",
+      title: t("nav.settings"),
+      subtitle: t("dashboard.moduleSettingsSubtitle"),
       href: "/nastavenia",
       image: "/images/settings.png",
       accent: "blue",
@@ -287,11 +297,11 @@ export default function Dashboard() {
   // Spoločný zoznam navigačných položiek pre desktop sidebar AJ mobilné
   // výsuvné menu (jeden zdroj pravdy, žiadna duplicita odkazov/ciest).
   const navItems = [
-    { href: "/ai-evidencia", label: "Inbox", image: "/images/ai-evidencia.png" },
-    { href: "/vozidla", label: "Vozidlá", image: "/images/van.png" },
-    { href: "/stroje", label: "Stroje", image: "/images/excavator.png" },
-    { href: "/sklad", label: "Sklad", image: "/images/warehouse.png" },
-    { href: "/nastavenia", label: "Nastavenia", image: "/images/settings.png" },
+    { href: "/ai-evidencia", label: t("nav.inbox"), image: "/images/ai-evidencia.png" },
+    { href: "/vozidla", label: t("nav.vehicles"), image: "/images/van.png" },
+    { href: "/stroje", label: t("nav.machines"), image: "/images/excavator.png" },
+    { href: "/sklad", label: t("nav.inventory"), image: "/images/warehouse.png" },
+    { href: "/nastavenia", label: t("nav.settings"), image: "/images/settings.png" },
   ];
 
   return (
@@ -321,13 +331,13 @@ export default function Dashboard() {
                 {companyName}
               </h1>
               <p className="truncate text-[11px] font-medium text-muted-esblu">
-                Firma pod kontrolou
+                {t("dashboard.tagline")}
               </p>
             </div>
           </div>
 
           <nav className="mt-8 flex-1 space-y-1">
-            <SideLink active href="/" label="Prehľad" icon={<MenuIcon />} />
+            <SideLink active href="/" label={t("nav.overview")} icon={<MenuIcon />} />
             {navItems.map((item) => (
               <SideLink key={item.href} href={item.href} label={item.label} image={item.image} />
             ))}
@@ -338,7 +348,7 @@ export default function Dashboard() {
             className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-secondary transition hover:bg-surface-hover hover:text-primary"
           >
             <LogoutIcon />
-            Odhlásiť sa
+            {t("common.buttons.logout")}
           </button>
         </aside>
 
@@ -349,16 +359,18 @@ export default function Dashboard() {
           <div className="fixed inset-0 z-40 lg:hidden">
             <button
               type="button"
-              aria-label="Zavrieť menu"
+              aria-label={t("dashboard.closeMenu")}
               onClick={() => setMenuOpen(false)}
               className="absolute inset-0 bg-slate-950/70 backdrop-blur-sm"
             />
             <div className="absolute inset-y-0 right-0 flex w-[78%] max-w-xs flex-col border-l border-subtle bg-page-bg-elevated p-5">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-bold text-primary">Menu</span>
+                <span className="text-sm font-bold text-primary">
+                  {t("dashboard.menuTitle")}
+                </span>
                 <button
                   type="button"
-                  aria-label="Zavrieť menu"
+                  aria-label={t("dashboard.closeMenu")}
                   onClick={() => setMenuOpen(false)}
                   className="flex h-9 w-9 items-center justify-center rounded-full bg-surface-2 text-secondary"
                 >
@@ -370,7 +382,7 @@ export default function Dashboard() {
                 <SideLink
                   active
                   href="/"
-                  label="Prehľad"
+                  label={t("nav.overview")}
                   icon={<MenuIcon />}
                   onNavigate={() => setMenuOpen(false)}
                 />
@@ -390,7 +402,7 @@ export default function Dashboard() {
                 className="btn-secondary flex items-center justify-center gap-2 py-3 text-sm"
               >
                 <LogoutIcon />
-                Odhlásiť sa
+                {t("common.buttons.logout")}
               </button>
             </div>
           </div>
@@ -420,7 +432,7 @@ export default function Dashboard() {
 
             <button
               type="button"
-              aria-label="Otvoriť menu"
+              aria-label={t("dashboard.openMenu")}
               onClick={() => setMenuOpen(true)}
               className="surface-card surface-card-hover flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-secondary transition"
             >
@@ -440,7 +452,7 @@ export default function Dashboard() {
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Hľadať vozidlo, stroj alebo skladovú položku..."
+              placeholder={t("dashboard.searchPlaceholder")}
               className="w-full min-w-0 bg-transparent text-base text-primary outline-none placeholder:text-muted-esblu"
             />
           </div>
@@ -449,7 +461,7 @@ export default function Dashboard() {
             <div className="mt-3 space-y-2.5">
               {searchResults.length === 0 ? (
                 <p className="rounded-2xl border border-subtle bg-surface-1/60 p-4 text-sm text-secondary">
-                  Nič sa nenašlo.
+                  {t("dashboard.noResults")}
                 </p>
               ) : (
                 searchResults.map((result, index) => (
@@ -473,7 +485,7 @@ export default function Dashboard() {
 
           <div className="mt-9 grid grid-cols-2 gap-3 lg:mt-12 lg:grid-cols-4 lg:gap-4">
             {modules
-              .filter((module) => module.title !== "Nastavenia")
+              .filter((module) => module.title !== t("nav.settings"))
               .map((module) => (
                 <ModuleCard
                   key={module.href}
@@ -494,10 +506,10 @@ export default function Dashboard() {
             <div className="flex items-center justify-between gap-4">
               <div>
                 <h3 className="text-lg font-bold text-primary sm:text-xl">
-                  Upozornenia STK / EK
+                  {t("dashboard.stkEkTitle")}
                 </h3>
                 <p className="mt-1 text-xs text-muted-esblu">
-                  Automatická kontrola platnosti technických a emisných kontrol.
+                  {t("dashboard.stkEkDescription")}
                 </p>
               </div>
 
@@ -512,13 +524,12 @@ export default function Dashboard() {
 
             {alerts.length === 0 ? (
               <p className="mt-5 text-sm text-secondary">
-                Momentálne nemáte žiadne upozornenia na STK ani EK.
+                {t("dashboard.stkEkNone")}
               </p>
             ) : (
               <div className="mt-4 divide-y divide-[color:var(--color-border-subtle)]">
                 {alerts.map((alert, index) => {
                   const isOverdue = alert.level === "red";
-                  const [label, rest] = alert.text.split(": ");
 
                   return (
                     <div key={index} className="flex items-center gap-3 py-3">
@@ -534,7 +545,7 @@ export default function Dashboard() {
                       </span>
 
                       <p className="min-w-0 flex-1 truncate text-sm font-medium text-primary">
-                        {rest || alert.text}
+                        {alert.message}
                       </p>
 
                       <span
@@ -544,7 +555,7 @@ export default function Dashboard() {
                             : "bg-amber-400/12 text-amber-400"
                         }`}
                       >
-                        {label}
+                        {alert.type}
                       </span>
                     </div>
                   );

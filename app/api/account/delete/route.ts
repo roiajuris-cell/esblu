@@ -1,6 +1,9 @@
 import { verifyRequestUser } from "@/lib/server-auth";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { getRequestLocale } from "@/lib/i18n/request-locale";
+import { translate } from "@/lib/i18n/translate";
+import type { Locale } from "@/lib/i18n/locales";
 
 // =============================================================================
 // POST /api/account/delete
@@ -226,7 +229,8 @@ async function removeStorageTargets(
 // -----------------------------------------------------------------------------
 async function handleOrphanDelete(
   admin: SupabaseClient,
-  userId: string
+  userId: string,
+  locale: Locale
 ): Promise<Response> {
   const { data: ownedCompany, error: ownedCompanyError } = await admin
     .from("companies")
@@ -242,7 +246,7 @@ async function handleOrphanDelete(
       ownedCompanyError.message
     );
     return Response.json(
-      { error: "Nepodarilo sa overiť členstvo vo firme." },
+      { error: translate(locale, "settings.errors.membershipVerifyFailed") },
       { status: 500 }
     );
   }
@@ -257,8 +261,7 @@ async function handleOrphanDelete(
     );
     return Response.json(
       {
-        error:
-          "Tento účet je vlastníkom firmy, ale nemá aktívne členstvo. Kontaktuj podporu.",
+        error: translate(locale, "settings.errors.ownerWithoutMembership"),
       },
       { status: 409 }
     );
@@ -286,8 +289,7 @@ async function handleOrphanDelete(
     // opakovateľná chyba.
     return Response.json(
       {
-        error:
-          "Zrušenie účtu zlyhalo. Skús to prosím znova alebo kontaktuj podporu.",
+        error: translate(locale, "settings.errors.deletionFailedRetry"),
       },
       { status: 500 }
     );
@@ -301,7 +303,12 @@ async function handleOrphanDelete(
       JSON.stringify({ userId })
     );
     return Response.json(
-      { error: "Zrušenie účtu sa nepodarilo úplne overiť. Kontaktuj podporu." },
+      {
+        error: translate(
+          locale,
+          "settings.errors.accountVerificationFailedContactSupport"
+        ),
+      },
       { status: 500 }
     );
   }
@@ -339,8 +346,10 @@ async function handleOrphanDelete(
 }
 
 export async function POST(req: Request) {
+  const locale = getRequestLocale(req);
+
   try {
-    const { user, error: authError } = await verifyRequestUser(req);
+    const { user, error: authError } = await verifyRequestUser(req, locale);
 
     if (authError || !user) {
       return Response.json({ error: authError }, { status: 401 });
@@ -362,13 +371,15 @@ export async function POST(req: Request) {
         membershipError.message
       );
       return Response.json(
-        { error: "Nepodarilo sa overiť členstvo vo firme." },
+        {
+          error: translate(locale, "settings.errors.companyMembershipLoadFailed"),
+        },
         { status: 500 }
       );
     }
 
     if (!membership) {
-      return handleOrphanDelete(admin, user.id);
+      return handleOrphanDelete(admin, user.id, locale);
     }
 
     if (membership.role === "owner") {
@@ -382,7 +393,7 @@ export async function POST(req: Request) {
 
       if (body.confirmPhrase !== "ZRUŠIŤ FIRMU") {
         return Response.json(
-          { error: "Potvrdzovací text nesedí presne." },
+          { error: translate(locale, "settings.errors.confirmPhraseMismatch") },
           { status: 400 }
         );
       }
@@ -413,8 +424,10 @@ export async function POST(req: Request) {
         );
         return Response.json(
           {
-            error:
-              "Zrušenie firemného účtu zlyhalo pred dokončením. Skús to prosím znova alebo kontaktuj podporu.",
+            error: translate(
+              locale,
+              "settings.errors.companyDeletionFailedRetry"
+            ),
           },
           { status: 500 }
         );
@@ -444,8 +457,10 @@ export async function POST(req: Request) {
         // app/nastavenia/page.tsx confirmDeleteAccount()).
         return Response.json(
           {
-            error:
-              "Firemné dáta boli zmazané, ale samotný prihlasovací účet sa nepodarilo dokončiť zrušiť. Kontaktuj podporu.",
+            error: translate(
+              locale,
+              "settings.errors.companyDataDeletedButLoginRemained"
+            ),
             partial: true,
           },
           { status: 500 }
@@ -463,8 +478,10 @@ export async function POST(req: Request) {
         );
         return Response.json(
           {
-            error:
-              "Zrušenie účtu sa nepodarilo úplne overiť. Kontaktuj podporu.",
+            error: translate(
+              locale,
+              "settings.errors.accountVerificationFailedContactSupport"
+            ),
             partial: true,
           },
           { status: 500 }
@@ -505,8 +522,7 @@ export async function POST(req: Request) {
       );
       return Response.json(
         {
-          error:
-            "Zrušenie účtu zlyhalo pred dokončením. Skús to prosím znova alebo kontaktuj podporu.",
+          error: translate(locale, "settings.errors.deletionFailedRetry"),
         },
         { status: 500 }
       );
@@ -539,8 +555,10 @@ export async function POST(req: Request) {
       // odstránené členstvo.
       return Response.json(
         {
-          error:
-            "Členstvo bolo zrušené, ale samotný prihlasovací účet sa nepodarilo dokončiť zrušiť. Kontaktuj podporu.",
+          error: translate(
+            locale,
+            "settings.errors.membershipDeletedButLoginRemained"
+          ),
           partial: true,
         },
         { status: 500 }
@@ -556,7 +574,10 @@ export async function POST(req: Request) {
       );
       return Response.json(
         {
-          error: "Zrušenie účtu sa nepodarilo úplne overiť. Kontaktuj podporu.",
+          error: translate(
+            locale,
+            "settings.errors.accountVerificationFailedContactSupport"
+          ),
           partial: true,
         },
         { status: 500 }
@@ -576,8 +597,10 @@ export async function POST(req: Request) {
     );
     return Response.json(
       {
-        error:
-          "Zrušenie účtu zlyhalo. Nič sa nepotvrdzuje ako dokončené — skús to prosím znova alebo kontaktuj podporu.",
+        error: translate(
+          locale,
+          "settings.errors.deletionFailedNothingConfirmed"
+        ),
       },
       { status: 500 }
     );

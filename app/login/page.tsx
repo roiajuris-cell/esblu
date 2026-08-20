@@ -218,7 +218,7 @@ export default function LoginPage() {
         console.error("Owner company bootstrap zlyhal:", bootstrapError);
         await supabase.auth.signOut();
         setLoading(false);
-        alert(getEnsureOwnerCompanyErrorMessage(bootstrapError));
+        alert(getEnsureOwnerCompanyErrorMessage(bootstrapError, t));
         setMode("login");
         return;
       }
@@ -443,7 +443,7 @@ async function resetPassword() {
         </button>
 
         <nav
-          aria-label="Právne a kontaktné informácie"
+          aria-label={t("settings.legal.navAriaLabel")}
           className="mt-6 flex flex-wrap justify-center gap-x-4 gap-y-2 border-t border-subtle pt-5 text-center text-xs font-medium text-secondary"
         >
           <Link href="/ochrana-osobnych-udajov" className="hover:text-blue-700 hover:underline">

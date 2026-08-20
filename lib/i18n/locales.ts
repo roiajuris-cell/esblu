@@ -5,10 +5,22 @@
 // callbacky, Closed Beta gate, /invite/[token], právny gate, PWA
 // manifest/deep linky, API routes) je dnes bezo stavu jazyka a akákoľvek
 // zmena URL štruktúry by niesla reálne riziko regresie práve v týchto
-// citlivých flow. Namiesto toho appka drží jazyk v cookie (funguje pred aj
-// po prihlásení, číta sa server-side v app/layout.tsx bez FOUC) a voliteľne
-// v public.settings.locale pre prihláseného používateľa (naprieč
-// zariadeniami). Žiadna URL sa touto architektúrou nemení.
+// citlivých flow.
+//
+// Perzistencia jazyka je ZÁMERNE riešená cez localStorage, NIE cez cookie
+// (revidované — pôvodná implementácia používala cookie `esblu_locale`,
+// čo by si vyžiadalo novú verziu Cookie Policy, keďže v1.0 explicitne
+// tvrdí "Esblu nepoužíva žiadne cookies". Aby pridanie i18n funkcie
+// nemenilo právny obsah appky, appka namiesto cookie použije presne ten
+// istý mechanizmus, aký už appka používa na session token — localStorage,
+// ktoré Cookie Policy už dnes explicitne opisuje ako "nie je cookie").
+// Dôsledok: Server Components (napr. app/layout.tsx, verejné právne
+// stránky) nemajú pred prvým vykreslením žiadny signál o preferovanom
+// jazyku (localStorage nie je na serveri dostupné) — vždy SSR-ujú v
+// DEFAULT_LOCALE (sk) a LocaleProvider po mountnutí na klientovi prepne
+// na uloženú preferenciu. Ide o vedomý kompromis (krátky FOUC v SK pri
+// tvrdom reloade pre DE/EN používateľa) výmenou za to, že appka nezavádza
+// žiadnu novú cookie a Cookie Policy zostáva nezmenená (verzia 1.0).
 export const SUPPORTED_LOCALES = ["sk", "de", "en"] as const;
 
 export type Locale = (typeof SUPPORTED_LOCALES)[number];
@@ -18,11 +30,8 @@ export type Locale = (typeof SUPPORTED_LOCALES)[number];
 // používateľovi, ale doplní SK verziu.
 export const DEFAULT_LOCALE: Locale = "sk";
 
-export const LOCALE_COOKIE_NAME = "esblu_locale";
-
-// 1 rok — rovnaký rád veľkosti ako iné trvalé preferenčné cookies, appka
-// nedrží žiadny osobný údaj v hodnote cookie, iba kód jazyka.
-export const LOCALE_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 365;
+// localStorage kľúč (NIE cookie) — pozri komentár vyššie.
+export const LOCALE_STORAGE_KEY = "esblu_locale";
 
 export const LOCALE_LABELS: Record<Locale, string> = {
   sk: "Slovenčina",

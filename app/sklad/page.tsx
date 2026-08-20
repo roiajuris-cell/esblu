@@ -6,14 +6,16 @@ import { supabase } from "@/lib/supabase";
 import PlanLimitNotice from "@/app/components/PlanLimitNotice";
 import { usePlanUsage } from "@/hooks/use-plan-usage";
 import {
-  PLAN_LIMIT_MESSAGE,
   isPlanLimitReachedError,
 } from "@/lib/plan-limits";
 import BackLink from "@/app/components/BackLink";
 import { getMyActiveMembership } from "@/lib/company";
 import { useCompanyDpaLegalHold } from "@/app/components/CompanyDpaGate";
-import { LEGAL_HOLD_MESSAGE } from "@/lib/company-dpa";
-async function compressImage(file: File): Promise<File> {
+import { useLocale } from "@/lib/i18n/LocaleProvider";
+async function compressImage(
+  file: File,
+  t: (key: string) => string
+): Promise<File> {
   const imageUrl = URL.createObjectURL(file);
 
   try {
@@ -21,7 +23,7 @@ async function compressImage(file: File): Promise<File> {
       const img = new Image();
 
       img.onload = () => resolve(img);
-      img.onerror = () => reject(new Error("Fotografiu sa nepodarilo načítať."));
+      img.onerror = () => reject(new Error(t("vehicles.errors.photoLoadFailed")));
       img.src = imageUrl;
     });
 
@@ -41,7 +43,7 @@ async function compressImage(file: File): Promise<File> {
     const context = canvas.getContext("2d");
 
     if (!context) {
-      throw new Error("Nepodarilo sa pripraviť kompresiu fotografie.");
+      throw new Error(t("vehicles.errors.photoCompressPrepFailed"));
     }
 
     context.drawImage(image, 0, 0, width, height);
@@ -52,7 +54,7 @@ async function compressImage(file: File): Promise<File> {
           if (result) {
             resolve(result);
           } else {
-            reject(new Error("Fotografiu sa nepodarilo skomprimovať."));
+            reject(new Error(t("vehicles.errors.photoCompressFailed")));
           }
         },
         "image/webp",
@@ -71,6 +73,7 @@ async function compressImage(file: File): Promise<File> {
   }
 }
 export default function SkladPage() {
+  const { t } = useLocale();
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [userId, setUserId] = useState("");
@@ -147,7 +150,7 @@ function inventoryPhotoUrl(path: string) {
       .order("created_at", { ascending: false });
 
     if (error) {
-      alert("Chyba pri načítaní skladu: " + error.message);
+      alert(t("inventory.errors.loadFailedPrefix", { message: error.message }));
       return;
     }
 
@@ -193,7 +196,7 @@ setItems(itemsWithPhotos);
   if (!file) return;
 
   try {
-    const compressedFile = await compressImage(file);
+    const compressedFile = await compressImage(file, t);
 
     setPhotoFile(compressedFile);
     setPhotoPreview(URL.createObjectURL(compressedFile));
@@ -206,7 +209,7 @@ setItems(itemsWithPhotos);
     );
   } catch (error) {
     console.error("Chyba pri kompresii fotografie:", error);
-    alert("Fotografiu sa nepodarilo spracovať.");
+    alert(t("inbox.errors.photoProcessFailed"));
   }
 }
 
@@ -214,17 +217,17 @@ setItems(itemsWithPhotos);
     if (saveInProgressRef.current) return;
 
     if (!item.name) {
-      alert("Vyplň názov položky.");
+      alert(t("inventory.errors.nameRequired"));
       return;
     }
 
     if (!userId) {
-      alert("Nie si prihlásený.");
+      alert(t("inbox.errors.notLoggedIn"));
       return;
     }
 
     if (!editingId && legalHold) {
-      alert(LEGAL_HOLD_MESSAGE);
+      alert(t("common.legalHoldMessage"));
       return;
     }
 
@@ -259,7 +262,7 @@ setItems(itemsWithPhotos);
     const latestUsage = await refreshPlanUsage();
 
     if (latestUsage?.isLimited) {
-      alert(PLAN_LIMIT_MESSAGE);
+      alert(t("common.planLimitMessage"));
       return;
     }
 
@@ -320,12 +323,14 @@ setItems(itemsWithPhotos);
   }
 } catch (saveError: unknown) {
   if (isPlanLimitReachedError(saveError, "inventory_items")) {
-    alert(PLAN_LIMIT_MESSAGE);
+    alert(t("common.planLimitMessage"));
     await refreshPlanUsage();
   } else {
     const message =
-      saveError instanceof Error ? saveError.message : "Neznáma chyba.";
-    alert("Chyba pri ukladaní položky: " + message);
+      saveError instanceof Error
+        ? saveError.message
+        : t("vehicles.errors.unknownError");
+    alert(t("inventory.errors.saveFailedPrefix", { message }));
 
     if (createdNewItem) {
       await Promise.all([loadItems(), refreshPlanUsage()]);
@@ -356,7 +361,7 @@ setItems(itemsWithPhotos);
 
   async function deleteItem(id: string) {
   const confirmed = confirm(
-    "Naozaj chceš vymazať túto skladovú položku?"
+    t("inventory.errors.deleteConfirm")
   );
 
   if (!confirmed) return;
@@ -372,7 +377,7 @@ setItems(itemsWithPhotos);
       "Chyba pri načítaní fotografií skladovej položky:",
       photosError
     );
-    alert("Nepodarilo sa načítať fotografie skladovej položky.");
+    alert(t("inventory.errors.photosLoadFailed"));
     return;
   }
 
@@ -392,7 +397,7 @@ setItems(itemsWithPhotos);
         "Chyba pri mazaní fotografií zo Storage:",
         storageError
       );
-      alert("Fotografie položky sa nepodarilo vymazať z úložiska.");
+      alert(t("inventory.errors.photosStorageDeleteFailed"));
       return;
     }
   }
@@ -404,7 +409,7 @@ setItems(itemsWithPhotos);
     .eq("company_id", companyId);
 
   if (deleteError) {
-    alert("Chyba pri mazaní položky: " + deleteError.message);
+    alert(t("inventory.errors.deleteFailedPrefix", { message: deleteError.message }));
     return;
   }
 
@@ -418,21 +423,21 @@ setItems(itemsWithPhotos);
 
   return (
     <main className="app-shell-bg min-h-screen p-4 sm:p-6 lg:p-10">
-      <BackLink href="/" label="Hlavné menu" className="mb-4" />
+      <BackLink href="/" label={t("inbox.backToMenu")} className="mb-4" />
 
       <div className="flex items-center gap-4">
   <img
     src="/images/warehouse.png"
-    alt="Sklad"
+    alt={t("nav.inventory")}
     className="h-20 w-20 object-contain"
   />
   <h1 className="text-4xl font-bold text-primary">
-  Sklad
+  {t("nav.inventory")}
 </h1>
 </div>
 
       <p className="mt-4 text-secondary">
-        Evidencia náradia, materiálu a skladových zásob.
+        {t("inventory.list.subtitle")}
       </p>
 
       {!planUsageLoading && isPlanLimited && (
@@ -453,29 +458,29 @@ setItems(itemsWithPhotos);
         disabled={isItemCreationUnavailable}
         className="mt-8 rounded-xl bg-blue-600 px-6 py-3 text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-400"
       >
-        ➕ Pridať položku
+        {t("inventory.list.addItem")}
       </button>
 
       {legalHold && (
-        <p className="mt-3 text-sm text-amber-400">{LEGAL_HOLD_MESSAGE}</p>
+        <p className="mt-3 text-sm text-amber-400">{t("common.legalHoldMessage")}</p>
       )}
 
       {showForm && (
         <div className="mt-8 rounded-2xl border border-subtle bg-surface-1 p-6 shadow-lg backdrop-blur-xl">
           <h2 className="mb-6 text-2xl font-bold">
-            {editingId ? "Upraviť položku" : "Pridať položku"}
+            {editingId ? t("inventory.list.editItemTitle") : t("inventory.list.addItemTitle")}
           </h2>
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <input
-              placeholder="Názov položky"
+              placeholder={t("inventory.list.namePlaceholder")}
               className="rounded-xl border p-3"
               value={item.name}
               onChange={(e) => updateItem("name", e.target.value)}
             />
 
             <input
-              placeholder="Kategória"
+              placeholder={t("inventory.list.categoryPlaceholder")}
               className="rounded-xl border p-3"
               value={item.category}
               onChange={(e) => updateItem("category", e.target.value)}
@@ -483,14 +488,14 @@ setItems(itemsWithPhotos);
 
             <input
               type="number"
-              placeholder="Množstvo"
+              placeholder={t("inventory.list.quantityPlaceholder")}
               className="rounded-xl border p-3"
               value={item.quantity}
               onChange={(e) => updateItem("quantity", e.target.value)}
             />
 
             <input
-              placeholder="Jednotka (ks, m, kg...)"
+              placeholder={t("inventory.list.unitPlaceholder")}
               className="rounded-xl border p-3"
               value={item.unit}
               onChange={(e) => updateItem("unit", e.target.value)}
@@ -498,14 +503,14 @@ setItems(itemsWithPhotos);
 
             <input
               type="number"
-              placeholder="Minimálne množstvo"
+              placeholder={t("inventory.list.minQuantityPlaceholder")}
               className="rounded-xl border p-3"
               value={item.min_quantity}
               onChange={(e) => updateItem("min_quantity", e.target.value)}
             />
 
             <input
-              placeholder="Umiestnenie"
+              placeholder={t("inventory.list.locationPlaceholder")}
               className="rounded-xl border p-3"
               value={item.location}
               onChange={(e) => updateItem("location", e.target.value)}
@@ -513,14 +518,14 @@ setItems(itemsWithPhotos);
           </div>
 
           <textarea
-            placeholder="Poznámky"
+            placeholder={t("inventory.list.notesPlaceholder")}
             className="mt-4 w-full rounded-xl border p-3"
             value={item.notes}
             onChange={(e) => updateItem("notes", e.target.value)}
           />
           <div className="mt-5 grid grid-cols-2 gap-3">
   <label className="cursor-pointer rounded-xl bg-blue-600 px-4 py-3 text-center font-semibold text-white hover:bg-blue-700">
-    📷 Odfotiť
+    {t("inbox.registration.takePhoto")}
     <input
       type="file"
       accept="image/*"
@@ -532,7 +537,7 @@ setItems(itemsWithPhotos);
   </label>
 
   <label className="cursor-pointer rounded-xl border border-subtle bg-surface-1 px-4 py-3 text-center font-semibold text-blue-700 shadow hover:bg-surface-2">
-    🖼️ Galéria
+    {t("machines.detail.galleryButton")}
     <input
       type="file"
       accept="image/*"
@@ -547,7 +552,7 @@ setItems(itemsWithPhotos);
   <div className="mt-4">
     <img
       src={photoPreview}
-      alt="Náhľad fotografie"
+      alt={t("inventory.list.photoPreviewAlt")}
       className="h-48 w-full rounded-xl object-cover"
     />
   </div>
@@ -558,22 +563,22 @@ setItems(itemsWithPhotos);
             className="mt-5 rounded-xl bg-green-600 px-6 py-3 text-white hover:bg-green-700 disabled:bg-gray-400"
           >
             {isSaving
-              ? "Ukladám..."
+              ? t("common.buttons.saving")
               : editingId
-              ? "💾 Uložiť zmeny"
-              : "💾 Uložiť položku"}
+              ? t("vehicles.forms.saveChanges")
+              : t("inventory.list.saveItem")}
           </button>
         </div>
       )}
 
         <div className="mt-10">
   <h2 className="mb-4 text-2xl font-bold text-primary">
-    Uložené položky
+    {t("inventory.list.savedItemsTitle")}
   </h2>
 
         {items.length === 0 ? (
-         <div className="rounded-2xl border border-subtle bg-surface-1 p-6 shadow-lg backdrop-blur-xl"> 
-           <p className="font-medium text-secondary"> Zatiaľ nie je uložená žiadna položka.</p>
+         <div className="rounded-2xl border border-subtle bg-surface-1 p-6 shadow-lg backdrop-blur-xl">
+           <p className="font-medium text-secondary"> {t("inventory.list.noneYet")}</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
@@ -584,7 +589,7 @@ setItems(itemsWithPhotos);
               >{row.first_photo_url ? (
   <img
     src={row.first_photo_url}
-    alt={row.name || "Fotografia položky"}
+    alt={row.name || t("inventory.photoAlt")}
     className="mb-4 h-56 w-full rounded-xl object-cover"
   />
 ) : (
@@ -592,7 +597,7 @@ setItems(itemsWithPhotos);
     <div className="text-center text-muted-esblu">
       <div className="text-6xl">📦</div>
       <p className="mt-2 text-sm font-medium">
-        Bez fotografie
+        {t("inventory.list.noPhoto")}
       </p>
     </div>
   </div>
@@ -600,26 +605,26 @@ setItems(itemsWithPhotos);
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <h3 className="text-2xl font-bold">
-                      {row.name || "Bez názvu"}
+                      {row.name || t("dashboard.noName")}
                     </h3>
 
                     <p className="mt-2 text-secondary">
-                      Kategória: {row.category || "—"}
+                      {t("inventory.list.categoryLabel")}: {row.category || "—"}
                     </p>
                   </div>
 
                   {isLowStock(row) && (
                     <div className="badge-warning rounded-xl px-4 py-2 font-bold">
-                      Nízky stav
+                      {t("inventory.list.lowStock")}
                     </div>
                   )}
                 </div>
 
                 <div className="mt-5 grid grid-cols-2 gap-3 text-sm">
-                  <p><b>Množstvo:</b> {row.quantity ?? 0} {row.unit || ""}</p>
-                  <p><b>Minimum:</b> {row.min_quantity ?? "—"} {row.unit || ""}</p>
-                  <p><b>Umiestnenie:</b> {row.location || "—"}</p>
-                  <p><b>Poznámky:</b> {row.notes || "—"}</p>
+                  <p><b>{t("inventory.list.quantityLabel")}:</b> {row.quantity ?? 0} {row.unit || ""}</p>
+                  <p><b>{t("inventory.list.minimumLabel")}:</b> {row.min_quantity ?? "—"} {row.unit || ""}</p>
+                  <p><b>{t("inventory.list.locationLabel")}:</b> {row.location || "—"}</p>
+                  <p><b>{t("inventory.list.notesLabel")}</b> {row.notes || "—"}</p>
                 </div>
 
                 <div className="mt-5 flex gap-3">
@@ -627,21 +632,21 @@ setItems(itemsWithPhotos);
                     href={`/sklad/${row.id}`}
                     className="btn-secondary px-4 py-2"
                   >
-                    Detail
+                    {t("inventory.list.detailLink")}
                   </Link>
 
                   <button
                     onClick={() => editItem(row)}
                     className="rounded-xl bg-blue-600 px-4 py-2 text-white"
                   >
-                    Upraviť
+                    {t("common.buttons.edit")}
                   </button>
 
                   <button
                     onClick={() => deleteItem(row.id)}
                     className="rounded-xl bg-red-600 px-4 py-2 text-white"
                   >
-                    Vymazať
+                    {t("common.buttons.delete")}
                   </button>
                 </div>
               </div>

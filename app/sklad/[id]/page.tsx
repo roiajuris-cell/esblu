@@ -4,10 +4,12 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import BackLink from "@/app/components/BackLink";
+import { useLocale } from "@/lib/i18n/LocaleProvider";
 
 export default function InventoryItemDetailPage() {
   const { id } = useParams();
   const itemId = String(id);
+  const { t } = useLocale();
 
   const [item, setItem] = useState<any>(null);
 
@@ -26,7 +28,7 @@ export default function InventoryItemDetailPage() {
   }
 
   if (!item) {
-    return <div className="p-10">Načítavam...</div>;
+    return <div className="p-10">{t("common.buttons.loading")}</div>;
   }
 
   const lowStock =
@@ -36,27 +38,27 @@ export default function InventoryItemDetailPage() {
 
   return (
     <main className="app-shell-bg min-h-screen p-10">
-      <BackLink href="/sklad" label="Sklad" className="mb-4" />
+      <BackLink href="/sklad" label={t("nav.inventory")} className="mb-4" />
 
       <h1 className="text-4xl font-bold">📦 {item.name}</h1>
 
       {lowStock && (
         <div className="badge-warning mt-6 rounded-xl p-4 font-bold">
-          ⚠️ Nízky stav zásob
+          {t("inventory.detail.lowStockBadge")}
         </div>
       )}
 
       <div className="surface-card mt-8 p-8">
         <div className="grid grid-cols-2 gap-5">
-          <p><b>Kategória:</b> {item.category || "—"}</p>
-          <p><b>Množstvo:</b> {item.quantity ?? 0} {item.unit || ""}</p>
-          <p><b>Minimálne množstvo:</b> {item.min_quantity ?? "—"} {item.unit || ""}</p>
-          <p><b>Umiestnenie:</b> {item.location || "—"}</p>
+          <p><b>{t("inventory.list.categoryLabel")}:</b> {item.category || "—"}</p>
+          <p><b>{t("inventory.list.quantityLabel")}:</b> {item.quantity ?? 0} {item.unit || ""}</p>
+          <p><b>{t("inventory.detail.minQuantityLabel")}:</b> {item.min_quantity ?? "—"} {item.unit || ""}</p>
+          <p><b>{t("inventory.list.locationLabel")}:</b> {item.location || "—"}</p>
         </div>
 
         {item.notes && (
           <div className="mt-6 rounded-xl bg-surface-2 p-4">
-            <b>Poznámky:</b>
+            <b>{t("inventory.list.notesLabel")}</b>
             <p className="mt-2">{item.notes}</p>
           </div>
         )}

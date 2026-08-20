@@ -1,14 +1,13 @@
-import { cookies } from "next/headers";
-import { LOCALE_COOKIE_NAME, normalizeLocale, type Locale } from "./locales";
-
-// Server-side zistenie jazyka (Server Components, napr. app/layout.tsx) —
-// číta iba cookie (rýchle, bez DB round-tripu, funguje aj pre neprihláseného
-// návštevníka). Prihlásený používateľ má navyše settings.locale ako
-// druhotný zdroj pravdy naprieč zariadeniami — synchronizácia cookie ←
-// settings.locale prebieha na klientovi (LocaleProvider), pretože si
-// vyžaduje aktívnu Supabase session, ktorú Server Component v layout.tsx
-// zámerne nečíta (žiadna zmena existujúceho auth/session flow).
-export async function getServerLocale(): Promise<Locale> {
-  const cookieStore = await cookies();
-  return normalizeLocale(cookieStore.get(LOCALE_COOKIE_NAME)?.value);
-}
+// ZASTARANÉ / NEPOUŽÍVANÉ — pôvodná implementácia čítala jazyk zo
+// server-side cookie `esblu_locale`. Táto cookie bola z architektúry
+// odstránená (pozri lib/i18n/locales.ts pre plné zdôvodnenie — appka
+// jazyk ukladá do localStorage, aby nezavádzala novú cookie a nemenila
+// právny obsah Cookie Policy), takže Server Components už nemajú žiadny
+// signál o preferovanom jazyku pred prvým vykreslením a vždy SSR-ujú v
+// DEFAULT_LOCALE (pozri app/layout.tsx).
+//
+// Súbor nebolo možné v tomto prostredí fyzicky odstrániť (obmedzenie
+// súborového systému v sandboxe pri mazaní súborov v mountnutom
+// priečinku) — je zámerne vyprázdnený a nikde v appke sa neimportuje.
+// Bezpečné zmazať manuálne, ak to prostredie používateľa umožní.
+export {};

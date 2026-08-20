@@ -4,7 +4,7 @@ import "./globals.css";
 import LegalAcceptanceGate from "./components/LegalAcceptanceGate";
 import CompanyDpaGate from "./components/CompanyDpaGate";
 import { LocaleProvider } from "@/lib/i18n/LocaleProvider";
-import { getServerLocale } from "@/lib/i18n/server-locale";
+import { DEFAULT_LOCALE } from "@/lib/i18n/locales";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -26,24 +26,24 @@ export const viewport: Viewport = {
   themeColor: "#2563eb",
 };
 
-export default async function RootLayout({
+export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  // Jazyk sa určuje výhradne zo server-side cookie (bez zmeny URL/routingu
-  // — pozri lib/i18n/locales.ts pre zdôvodnenie architektúry). html lang sa
-  // nastavuje už tu, aby prvé vykreslenie na serveri aj klientovi bolo vždy
-  // zhodné (žiadny hydration mismatch, žiadny FOUC v zlom jazyku).
-  const locale = await getServerLocale();
-
+  // Jazyk sa NEURČUJE zo server-side cookie (revidované — appka zámerne
+  // nezavádza žiadnu novú cookie, pozri lib/i18n/locales.ts pre plné
+  // zdôvodnenie). SSR vždy vykresľuje DEFAULT_LOCALE (sk); LocaleProvider
+  // po mountnutí na klientovi prečíta localStorage a <html lang> aj celý
+  // preložený obsah prepne na uloženú preferenciu (vedomý kompromis — krátky
+  // FOUC v SK pri tvrdom reloade pre DE/EN používateľa).
   return (
     <html
-      lang={locale}
+      lang={DEFAULT_LOCALE}
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        <LocaleProvider initialLocale={locale}>
+        <LocaleProvider>
           <LegalAcceptanceGate>
             <CompanyDpaGate>{children}</CompanyDpaGate>
           </LegalAcceptanceGate>

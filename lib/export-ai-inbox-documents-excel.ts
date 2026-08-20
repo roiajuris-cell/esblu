@@ -1,5 +1,10 @@
 import type { Workbook, Worksheet } from "exceljs";
 
+type TranslateFn = (
+  key: string,
+  vars?: Record<string, string | number>
+) => string;
+
 // -----------------------------------------------------------------------------
 // Dátový export pre zložky "Bločky" a "Faktúry" v AI Evidencii (public.documents
 // s document_type 'receipt' / 'invoice'). Zámerne samostatný, jednoduchší
@@ -102,31 +107,37 @@ function getLocalDateFilePart(date: Date): string {
   )}`;
 }
 
-const RECEIPT_HEADERS = [
-  "Dátum",
-  "Obchodník",
-  "Suma",
-  "Mena",
-  "Spôsob platby",
-  "Kategória",
-  "Poznámka",
-  "Dátum vytvorenia záznamu",
-] as const;
+function getReceiptHeaders(t: TranslateFn): string[] {
+  const h = "xlsxExport.inboxDocuments.receiptHeaders";
+  return [
+    t(`${h}.date`),
+    t(`${h}.merchant`),
+    t(`${h}.amount`),
+    t(`${h}.currency`),
+    t(`${h}.paymentMethod`),
+    t(`${h}.category`),
+    t(`${h}.note`),
+    t(`${h}.recordCreatedAt`),
+  ];
+}
 
-const INVOICE_HEADERS = [
-  "Dátum vystavenia",
-  "Dodávateľ",
-  "Číslo faktúry",
-  "Suma",
-  "Mena",
-  "DPH",
-  "Dátum splatnosti",
-  "Zákazník",
-  "Variabilný symbol",
-  "Popis",
-  "Poznámka",
-  "Dátum vytvorenia záznamu",
-] as const;
+function getInvoiceHeaders(t: TranslateFn): string[] {
+  const h = "xlsxExport.inboxDocuments.invoiceHeaders";
+  return [
+    t(`${h}.issueDate`),
+    t(`${h}.supplier`),
+    t(`${h}.invoiceNumber`),
+    t(`${h}.amount`),
+    t(`${h}.currency`),
+    t(`${h}.vat`),
+    t(`${h}.dueDate`),
+    t(`${h}.customer`),
+    t(`${h}.variableSymbol`),
+    t(`${h}.description`),
+    t(`${h}.note`),
+    t(`${h}.recordCreatedAt`),
+  ];
+}
 
 function addReceiptRows(
   worksheet: Worksheet,
@@ -187,10 +198,11 @@ function addInvoiceRows(
 
 export async function exportAiInboxFolderToExcel(
   kind: AiInboxFolderKind,
-  records: readonly AiInboxDocumentExcelRecord[]
+  records: readonly AiInboxDocumentExcelRecord[],
+  t: TranslateFn
 ): Promise<ExportResult> {
   if (records.length === 0) {
-    throw new Error("Nie sú dostupné žiadne dokumenty na export.");
+    throw new Error(t("xlsxExport.noDocumentsToExport"));
   }
 
   const excelJsModule = await import("exceljs");
@@ -202,13 +214,17 @@ export async function exportAiInboxFolderToExcel(
   workbook.created = generatedAt;
   workbook.modified = generatedAt;
 
-  const sheetName = kind === "receipt" ? "Bločky" : "Faktúry";
+  const sheetName =
+    kind === "receipt"
+      ? t("xlsxExport.inboxDocuments.receiptSheetName")
+      : t("xlsxExport.inboxDocuments.invoiceSheetName");
   const worksheet = workbook.addWorksheet(sheetName, {
     views: [{ state: "frozen", ySplit: 1 }],
   });
 
-  const headers = kind === "receipt" ? RECEIPT_HEADERS : INVOICE_HEADERS;
-  worksheet.addRow([...headers]);
+  const headers =
+    kind === "receipt" ? getReceiptHeaders(t) : getInvoiceHeaders(t);
+  worksheet.addRow(headers);
   styleHeaderRow(worksheet, 1);
   worksheet.autoFilter = {
     from: { row: 1, column: 1 },

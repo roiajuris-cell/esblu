@@ -11,6 +11,7 @@ import {
 } from "@/lib/company";
 import { acceptLegalDocumentAtRegistration } from "@/lib/legal-acceptance";
 import { REQUIRED_ACCEPTANCE_DOCUMENTS } from "@/lib/legal-config";
+import { useLocale } from "@/lib/i18n/LocaleProvider";
 
 // Explicitná, na jeden účel vyhradená route: JEDINÉ miesto (spolu s
 // register() v app/login/page.tsx pri okamžitej session) v celej aplikácii,
@@ -37,6 +38,7 @@ type PageState =
 
 export default function OnboardingCompanyPage() {
   const router = useRouter();
+  const { t } = useLocale();
   const [state, setState] = useState<PageState>("checking");
   const [betaMessage, setBetaMessage] = useState("");
 
@@ -99,7 +101,7 @@ export default function OnboardingCompanyPage() {
       // je zapnutý v Supabase Dashboarde), odhlás ho — nesmie zostať
       // prihlásený v stave "má účet, ale nikdy nebude mať firmu".
       if (isBetaAccessRequiredError(error)) {
-        setBetaMessage(getEnsureOwnerCompanyErrorMessage(error));
+        setBetaMessage(getEnsureOwnerCompanyErrorMessage(error, t));
         await supabase.auth.signOut();
         setState("beta-required");
         return;
@@ -125,8 +127,8 @@ export default function OnboardingCompanyPage() {
       <Centered>
         <p className="text-secondary">
           {state === "checking"
-            ? "Overujem potvrdenie e-mailu..."
-            : "Zakladám firemný účet..."}
+            ? t("onboarding.checkingEmailConfirmation")
+            : t("onboarding.bootstrappingCompany")}
         </p>
       </Centered>
     );
@@ -135,13 +137,13 @@ export default function OnboardingCompanyPage() {
   if (state === "beta-required") {
     return (
       <Centered>
-        <h1 className="text-2xl font-bold text-primary">Uzavretá beta</h1>
+        <h1 className="text-2xl font-bold text-primary">{t("onboarding.betaRequiredTitle")}</h1>
         <p className="mt-3 text-secondary">{betaMessage}</p>
         <Link
           href="/login"
           className="mt-6 inline-block rounded-xl bg-blue-600 px-6 py-3 font-semibold text-white hover:bg-blue-700"
         >
-          Prejsť na prihlásenie
+          {t("invite.goToLogin")}
         </Link>
       </Centered>
     );
@@ -151,17 +153,16 @@ export default function OnboardingCompanyPage() {
     return (
       <Centered>
         <h1 className="text-2xl font-bold text-primary">
-          Odkaz nie je platný
+          {t("onboarding.invalidLinkTitle")}
         </h1>
         <p className="mt-3 text-secondary">
-          Tento odkaz je platný iba bezprostredne po potvrdení e-mailu z
-          registrácie novej firmy. Skús sa prihlásiť znova.
+          {t("onboarding.invalidLinkDescription")}
         </p>
         <Link
           href="/login"
           className="mt-6 inline-block rounded-xl bg-blue-600 px-6 py-3 font-semibold text-white hover:bg-blue-700"
         >
-          Prejsť na prihlásenie
+          {t("invite.goToLogin")}
         </Link>
       </Centered>
     );
@@ -170,17 +171,16 @@ export default function OnboardingCompanyPage() {
   return (
     <Centered>
       <h1 className="text-2xl font-bold text-primary">
-        Niečo sa nepodarilo
+        {t("onboarding.genericErrorTitle")}
       </h1>
       <p className="mt-3 text-secondary">
-        Firemný účet sa nepodarilo založiť. Skús sa prihlásiť znova — ak
-        problém pretrváva, kontaktuj podporu.
+        {t("onboarding.genericErrorDescription")}
       </p>
       <Link
         href="/login"
         className="mt-6 inline-block rounded-xl bg-blue-600 px-6 py-3 font-semibold text-white hover:bg-blue-700"
       >
-        Prejsť na prihlásenie
+        {t("invite.goToLogin")}
       </Link>
     </Centered>
   );

@@ -1,5 +1,7 @@
 import { verifyRequestUser } from "@/lib/server-auth";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
+import { getRequestLocale } from "@/lib/i18n/request-locale";
+import { translate } from "@/lib/i18n/translate";
 
 // -----------------------------------------------------------------------------
 // GET /api/account/preflight
@@ -16,8 +18,10 @@ import { getSupabaseAdmin } from "@/lib/supabase-admin";
 // -----------------------------------------------------------------------------
 
 export async function GET(req: Request) {
+  const locale = getRequestLocale(req);
+
   try {
-    const { user, error: authError } = await verifyRequestUser(req);
+    const { user, error: authError } = await verifyRequestUser(req, locale);
 
     if (authError || !user) {
       return Response.json({ error: authError }, { status: 401 });
@@ -39,7 +43,7 @@ export async function GET(req: Request) {
         membershipError.message
       );
       return Response.json(
-        { error: "Nepodarilo sa overiť členstvo vo firme." },
+        { error: translate(locale, "settings.errors.membershipVerifyFailed") },
         { status: 500 }
       );
     }
@@ -65,7 +69,7 @@ export async function GET(req: Request) {
           ownedCompanyError.message
         );
         return Response.json(
-          { error: "Nepodarilo sa overiť členstvo vo firme." },
+          { error: translate(locale, "settings.errors.membershipVerifyFailed") },
           { status: 500 }
         );
       }
@@ -79,8 +83,7 @@ export async function GET(req: Request) {
         );
         return Response.json(
           {
-            error:
-              "Tento účet je vlastníkom firmy, ale nemá aktívne členstvo. Kontaktuj podporu.",
+            error: translate(locale, "settings.errors.ownerWithoutMembership"),
           },
           { status: 409 }
         );
@@ -110,7 +113,12 @@ export async function GET(req: Request) {
           countError.message
         );
         return Response.json(
-          { error: "Nepodarilo sa načítať počet ostatných členov firmy." },
+          {
+            error: translate(
+              locale,
+              "settings.errors.otherMembersCountLoadFailed"
+            ),
+          },
           { status: 500 }
         );
       }
@@ -129,7 +137,7 @@ export async function GET(req: Request) {
       error instanceof Error ? error.message : error
     );
     return Response.json(
-      { error: "Nepodarilo sa pripraviť zrušenie účtu. Skús to prosím znova." },
+      { error: translate(locale, "settings.errors.deletionPreflightFailed") },
       { status: 500 }
     );
   }

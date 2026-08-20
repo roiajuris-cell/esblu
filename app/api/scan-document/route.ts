@@ -2,6 +2,8 @@ import OpenAI from "openai";
 import { createClient } from "@supabase/supabase-js";
 import { normalizeSpz } from "@/lib/normalize-spz";
 import { normalizeAndValidateWeights } from "@/lib/weight-utils";
+import { getRequestLocale } from "@/lib/i18n/request-locale";
+import { translate } from "@/lib/i18n/translate";
 
 // -----------------------------------------------------------------------------
 // Univerzálny AI Inbox scan endpoint.
@@ -881,6 +883,8 @@ function isAllowedDocumentType(value: unknown): value is DocumentType {
 }
 
 export async function POST(req: Request) {
+  const locale = getRequestLocale(req);
+
   try {
     // 1) Autentifikácia MUSÍ prebehnúť pred akýmkoľvek OpenAI volaním.
     const authorization = req.headers.get("authorization");
@@ -890,7 +894,10 @@ export async function POST(req: Request) {
 
     if (!accessToken) {
       return Response.json(
-        { success: false, error: "Na AI spracovanie musíš byť prihlásený." },
+        {
+          success: false,
+          error: translate(locale, "inbox.errors.aiProcessingLoginRequired"),
+        },
         { status: 401 }
       );
     }
@@ -902,7 +909,10 @@ export async function POST(req: Request) {
 
     if (authError || !user) {
       return Response.json(
-        { success: false, error: "Prihlásenie vypršalo. Prihlás sa znova." },
+        {
+          success: false,
+          error: translate(locale, "inbox.errors.sessionExpired"),
+        },
         { status: 401 }
       );
     }
@@ -913,7 +923,10 @@ export async function POST(req: Request) {
 
     if (!(imageValue instanceof File)) {
       return Response.json(
-        { success: false, error: "Nebol nahraný žiadny obrázok." },
+        {
+          success: false,
+          error: translate(locale, "inbox.errors.noImageUploaded"),
+        },
         { status: 400 }
       );
     }
@@ -922,8 +935,10 @@ export async function POST(req: Request) {
       return Response.json(
         {
           success: false,
-          error:
-            "Nahrať je možné iba obrázok vo formáte JPEG, PNG alebo WebP. PDF zatiaľ nie je podporované.",
+          error: translate(
+            locale,
+            "inbox.errors.unsupportedImageFormatPdfNote"
+          ),
         },
         { status: 400 }
       );
@@ -931,7 +946,10 @@ export async function POST(req: Request) {
 
     if (imageValue.size > MAX_IMAGE_SIZE) {
       return Response.json(
-        { success: false, error: "Obrázok môže mať najviac 10 MB." },
+        {
+          success: false,
+          error: translate(locale, "inbox.errors.imageTooLarge10MB"),
+        },
         { status: 413 }
       );
     }
@@ -978,7 +996,7 @@ export async function POST(req: Request) {
         {
           success: false,
           error: "AI_INCONSISTENT_OUTPUT",
-          message: "AI vrátila neznámy typ dokumentu.",
+          message: translate(locale, "inbox.errors.aiUnknownDocumentType"),
         },
         { status: 422 }
       );
@@ -998,8 +1016,7 @@ export async function POST(req: Request) {
         {
           success: false,
           error: "AI_INCONSISTENT_OUTPUT",
-          message:
-            "AI vyplnila viac než jeden fields objekt naraz. Skús sken zopakovať.",
+          message: translate(locale, "inbox.errors.aiMultipleFieldsFilled"),
         },
         { status: 422 }
       );
@@ -1013,8 +1030,7 @@ export async function POST(req: Request) {
         {
           success: false,
           error: "AI_INCONSISTENT_OUTPUT",
-          message:
-            "Vyplnený fields objekt nezodpovedá rozpoznanému typu dokumentu. Skús sken zopakovať.",
+          message: translate(locale, "inbox.errors.aiFieldsMismatchType"),
         },
         { status: 422 }
       );
@@ -1220,7 +1236,10 @@ export async function POST(req: Request) {
   } catch (error) {
     console.error("DOCUMENT SCAN ERROR:", error);
     return Response.json(
-      { success: false, error: "AI spracovanie dokumentu zlyhalo." },
+      {
+        success: false,
+        error: translate(locale, "inbox.errors.scanFailedGeneric"),
+      },
       { status: 500 }
     );
   }

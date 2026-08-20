@@ -5,7 +5,6 @@ import { supabase } from "@/lib/supabase";
 import PlanLimitNotice from "@/app/components/PlanLimitNotice";
 import { usePlanUsage } from "@/hooks/use-plan-usage";
 import {
-  PLAN_LIMIT_MESSAGE,
   isPlanLimitReachedError,
 } from "@/lib/plan-limits";
 import BackLink from "@/app/components/BackLink";
@@ -18,13 +17,14 @@ import {
   type AiInboxFolderKind,
 } from "@/lib/export-ai-inbox-documents-excel";
 import { normalizeSpz } from "@/lib/normalize-spz";
+import { formatDate, formatDateTime } from "@/lib/i18n/format";
+import { REQUEST_LOCALE_HEADER } from "@/lib/i18n/request-locale";
 import {
   getMyActiveMembership,
   isOwnerOrAdmin,
   type CompanyMemberRole,
 } from "@/lib/company";
 import { useCompanyDpaLegalHold } from "@/app/components/CompanyDpaGate";
-import { LEGAL_HOLD_MESSAGE } from "@/lib/company-dpa";
 import { normalizeWeightUnit } from "@/lib/normalize-weight-unit";
 import {
   convertWeightToTons,
@@ -32,6 +32,7 @@ import {
   normalizeAndValidateWeights,
   parseWeightValue,
 } from "@/lib/weight-utils";
+import { useLocale } from "@/lib/i18n/LocaleProvider";
 
 type ScanDocumentType =
   | "weigh_ticket"
@@ -43,16 +44,20 @@ type ScanDocumentType =
   | "vehicle_registration"
   | "other";
 
-const DOCUMENT_TYPE_LABELS: Record<ScanDocumentType, string> = {
-  weigh_ticket: "vážny lístok",
-  delivery_note: "dodací list",
-  invoice: "faktúra",
-  receipt: "bloček",
-  insurance: "PZP / poistná zmluva",
-  service_document: "servisný doklad",
-  vehicle_registration: "technický preukaz vozidla",
-  other: "dokument na kontrolu",
-};
+function getDocumentTypeLabels(
+  t: (key: string, vars?: Record<string, string | number>) => string
+): Record<ScanDocumentType, string> {
+  return {
+    weigh_ticket: t("inbox.documentTypes.weigh_ticket"),
+    delivery_note: t("inbox.documentTypes.delivery_note"),
+    invoice: t("inbox.documentTypes.invoice"),
+    receipt: t("inbox.documentTypes.receipt"),
+    insurance: t("inbox.documentTypes.insurance"),
+    service_document: t("inbox.documentTypes.service_document"),
+    vehicle_registration: t("inbox.documentTypes.vehicle_registration"),
+    other: t("inbox.documentTypes.other"),
+  };
+}
 
 // Typy dokumentov, ktoré sa ukladajú cez documents/document_links (druhý,
 // všeobecný AI Inbox model — pozri saveOtherDocument nižšie), s ručným
@@ -91,12 +96,16 @@ type AttachmentRow = {
   created_at: string | null;
 };
 
-const ATTACHMENT_TYPE_LABELS: Record<string, string> = {
-  white_card: "Biela karta",
-  green_card: "Zelená karta / potvrdenie o poistení",
-  insurance_event: "Záznam o poistnej udalosti",
-  other: "Iný súvisiaci dokument",
-};
+function getAttachmentTypeLabels(
+  t: (key: string, vars?: Record<string, string | number>) => string
+): Record<string, string> {
+  return {
+    white_card: t("inbox.attachmentTypes.white_card"),
+    green_card: t("inbox.attachmentTypes.green_card"),
+    insurance_event: t("inbox.attachmentTypes.insurance_event"),
+    other: t("inbox.attachmentTypes.other"),
+  };
+}
 
 // Dokumenty typu receipt/invoice bez priradenia k vozidlu/stroju sa v zozname
 // zobrazujú zoskupené do zložiek "Bločky"/"Faktúry" (pozri bod 4 zadania),
@@ -110,60 +119,68 @@ function isDocumentAssigned(doc: OtherDocumentRow): boolean {
 // SK popisky polí pre zobrazenie/editáciu v UI aj pre detail uloženého
 // dokumentu (documents.extracted_fields má rovnaký tvar ako tieto fields
 // objekty z /api/scan-document, takže rovnaká mapa funguje pre obe miesta).
-const REVIEW_ONLY_FIELD_LABELS: Record<OtherDocumentType, [string, string][]> = {
-  invoice: [
-    ["supplier", "Dodávateľ"],
-    ["customer", "Zákazník"],
-    ["invoiceNumber", "Číslo faktúry"],
-    ["issueDate", "Dátum vystavenia"],
-    ["dueDate", "Dátum splatnosti"],
-    ["totalAmount", "Suma"],
-    ["vatAmount", "DPH"],
-    ["currency", "Mena"],
-    ["variableSymbol", "Variabilný symbol"],
-    ["description", "Popis"],
-  ],
-  receipt: [
-    ["merchant", "Obchodník"],
-    ["purchaseDate", "Dátum"],
-    ["totalAmount", "Suma"],
-    ["currency", "Mena"],
-    ["paymentMethod", "Spôsob platby"],
-    ["category", "Kategória"],
-  ],
-  insurance: [
-    ["provider", "Poisťovňa"],
-    ["policyNumber", "Číslo zmluvy"],
-    ["insuranceType", "Druh poistenia"],
-    ["vehicleIdentifier", "Vozidlo / stroj (ŠPZ)"],
-    ["vin", "VIN"],
-    ["validFrom", "Platnosť od"],
-    ["validTo", "Platnosť do"],
-    ["premiumAmount", "Poistné"],
-    ["currency", "Mena"],
-  ],
-  service_document: [
-    ["provider", "Poskytovateľ servisu"],
-    ["serviceDate", "Dátum servisu"],
-    ["vehicleOrMachineIdentifier", "Vozidlo / stroj"],
-    ["description", "Popis"],
-    ["cost", "Cena"],
-    ["currency", "Mena"],
-    ["nextServiceDate", "Ďalší servis"],
-  ],
-  vehicle_registration: [
-    ["spz", "ŠPZ"],
-    ["vin", "VIN"],
-    ["znacka", "Značka"],
-    ["model", "Model"],
-    ["rokVyroby", "Rok výroby"],
-    ["farba", "Farba"],
-    ["cisloTechnickehoPreukazu", "Číslo technického preukazu"],
-  ],
-  other: [["summary", "Zhrnutie"]],
-};
+function getReviewOnlyFieldLabels(
+  t: (key: string, vars?: Record<string, string | number>) => string
+): Record<OtherDocumentType, [string, string][]> {
+  return {
+    invoice: [
+      ["supplier", t("inbox.fields.supplier")],
+      ["customer", t("inbox.fields.customer")],
+      ["invoiceNumber", t("inbox.fields.invoiceNumber")],
+      ["issueDate", t("inbox.fields.issueDate")],
+      ["dueDate", t("inbox.fields.dueDate")],
+      ["totalAmount", t("inbox.fields.totalAmount")],
+      ["vatAmount", t("inbox.fields.vatAmount")],
+      ["currency", t("inbox.fields.currency")],
+      ["variableSymbol", t("inbox.fields.variableSymbol")],
+      ["description", t("inbox.fields.description")],
+    ],
+    receipt: [
+      ["merchant", t("inbox.fields.merchant")],
+      ["purchaseDate", t("inbox.fields.purchaseDate")],
+      ["totalAmount", t("inbox.fields.totalAmount")],
+      ["currency", t("inbox.fields.currency")],
+      ["paymentMethod", t("inbox.fields.paymentMethod")],
+      ["category", t("inbox.fields.category")],
+    ],
+    insurance: [
+      ["provider", t("inbox.fields.provider")],
+      ["policyNumber", t("inbox.fields.policyNumber")],
+      ["insuranceType", t("inbox.fields.insuranceType")],
+      ["vehicleIdentifier", t("inbox.fields.vehicleIdentifier")],
+      ["vin", t("inbox.fields.vin")],
+      ["validFrom", t("inbox.fields.validFrom")],
+      ["validTo", t("inbox.fields.validTo")],
+      ["premiumAmount", t("inbox.fields.premiumAmount")],
+      ["currency", t("inbox.fields.currency")],
+    ],
+    service_document: [
+      ["provider", t("inbox.fields.serviceProvider")],
+      ["serviceDate", t("inbox.fields.serviceDate")],
+      ["vehicleOrMachineIdentifier", t("inbox.fields.vehicleOrMachineIdentifier")],
+      ["description", t("inbox.fields.description")],
+      ["cost", t("inbox.fields.cost")],
+      ["currency", t("inbox.fields.currency")],
+      ["nextServiceDate", t("inbox.fields.nextServiceDate")],
+    ],
+    vehicle_registration: [
+      ["spz", t("inbox.fields.spz")],
+      ["vin", t("inbox.fields.vin")],
+      ["znacka", t("inbox.fields.znacka")],
+      ["model", t("inbox.fields.model")],
+      ["rokVyroby", t("inbox.fields.rokVyroby")],
+      ["farba", t("inbox.fields.farba")],
+      ["cisloTechnickehoPreukazu", t("inbox.fields.cisloTechnickehoPreukazu")],
+    ],
+    other: [["summary", t("inbox.fields.summary")]],
+  };
+}
 
-function describeScanError(status: number, data: any): string {
+function describeScanError(
+  t: (key: string, vars?: Record<string, string | number>) => string,
+  status: number,
+  data: any
+): string {
   const serverMessage =
     (data && typeof data.message === "string" && data.message) ||
     (data &&
@@ -176,18 +193,18 @@ function describeScanError(status: number, data: any): string {
 
   switch (status) {
     case 401:
-      return "Prihlásenie vypršalo. Prihlás sa znova.";
+      return t("inbox.errors.sessionExpired");
     case 400:
     case 415:
-      return "Nepodporovaný alebo neplatný súbor. Skús JPEG, PNG alebo WebP obrázok.";
+      return t("inbox.errors.unsupportedFile");
     case 413:
-      return "Obrázok je príliš veľký (max. 10 MB).";
+      return t("inbox.errors.fileTooLarge");
     case 422:
-      return "AI nevrátila jednoznačný výsledok. Skús sken dokumentu zopakovať.";
+      return t("inbox.errors.aiInconsistent");
     case 500:
-      return "AI spracovanie dokumentu zlyhalo. Skús to znova o chvíľu.";
+      return t("inbox.errors.aiFailed");
     default:
-      return "Nastala neznáma chyba pri spracovaní dokumentu.";
+      return t("inbox.errors.unknown");
   }
 }
 
@@ -203,10 +220,11 @@ function buildFlatWeighTicketResult(
     confidenceScore: number | null;
     reviewStatus: string | null;
     documentLanguage: string | null;
-  }
+  },
+  documentTypeLabel: string
 ) {
   return {
-    documentType: DOCUMENT_TYPE_LABELS[documentType],
+    documentType: documentTypeLabel,
     movementType: fields.movementType ?? null,
     spz: fields.spz ?? null,
     supplier: fields.supplier ?? null,
@@ -431,15 +449,14 @@ async function resolveMachineIdByLabel(
   };
 }
 
-const WITHOUT_SPZ_GROUP = "BEZ ŠPZ";
-
-function getSpzGroupKey(value: unknown): string {
-  if (value === WITHOUT_SPZ_GROUP) return WITHOUT_SPZ_GROUP;
-  return normalizeSpz(value) || WITHOUT_SPZ_GROUP;
+function getSpzGroupKey(value: unknown, withoutSpzLabel: string): string {
+  if (value === withoutSpzLabel) return withoutSpzLabel;
+  return normalizeSpz(value) || withoutSpzLabel;
 }
 
 function formatRecordWeight(
-  record: Pick<AiEvidenceExcelRecord, "netto" | "quantity" | "unit">
+  record: Pick<AiEvidenceExcelRecord, "netto" | "quantity" | "unit">,
+  t: (key: string, vars?: Record<string, string | number>) => string
 ): string {
   const hasNetto =
     record.netto !== null &&
@@ -448,11 +465,11 @@ function formatRecordWeight(
   const value = hasNetto ? record.netto : record.quantity;
 
   if (value === null || value === undefined || value === "") {
-    return "Bez hmotnosti";
+    return t("inbox.noWeight");
   }
 
   const unit = normalizeWeightUnit(record.unit);
-  return unit ? `${value} ${unit}` : `${value} bez jednotky`;
+  return unit ? `${value} ${unit}` : `${value} ${t("inbox.withoutUnit")}`;
 }
 
 type EvidenceSummary = {
@@ -477,7 +494,8 @@ function createEmptySummary(): EvidenceSummary {
 
 function addRecordToSummary(
   summary: EvidenceSummary,
-  record: AiEvidenceExcelRecord
+  record: AiEvidenceExcelRecord,
+  otherMaterialLabel: string
 ) {
   const movementType = (record.movement_type || "")
     .normalize("NFD")
@@ -488,7 +506,7 @@ function addRecordToSummary(
     record.material_category ||
     record.material_original ||
     record.material ||
-    "iné";
+    otherMaterialLabel;
   const weightInTons = convertWeightToTons(
     getEffectiveNetto(record),
     record.unit
@@ -532,7 +550,10 @@ function normalizeRotation(value: number): number {
   return ((value % 360) + 360) % 360;
 }
 
-async function decodeImageWithOrientation(file: File): Promise<DecodedImage> {
+async function decodeImageWithOrientation(
+  file: File,
+  t: (key: string, vars?: Record<string, string | number>) => string
+): Promise<DecodedImage> {
   if (typeof createImageBitmap === "function") {
     try {
       const bitmap = await createImageBitmap(file, {
@@ -556,7 +577,7 @@ async function decodeImageWithOrientation(file: File): Promise<DecodedImage> {
     const image = await new Promise<HTMLImageElement>((resolve, reject) => {
       const img = new Image();
       img.onload = () => resolve(img);
-      img.onerror = () => reject(new Error("Obrázok sa nepodarilo načítať."));
+      img.onerror = () => reject(new Error(t("inbox.errors.imageLoadFailed")));
       img.src = imageUrl;
     });
 
@@ -572,8 +593,12 @@ async function decodeImageWithOrientation(file: File): Promise<DecodedImage> {
   }
 }
 
-async function compressImage(file: File, rotation: number): Promise<File> {
-  const decodedImage = await decodeImageWithOrientation(file);
+async function compressImage(
+  file: File,
+  rotation: number,
+  t: (key: string, vars?: Record<string, string | number>) => string
+): Promise<File> {
+  const decodedImage = await decodeImageWithOrientation(file, t);
 
   try {
     const normalizedRotation = normalizeRotation(rotation);
@@ -611,7 +636,7 @@ async function compressImage(file: File, rotation: number): Promise<File> {
 
     const context = canvas.getContext("2d");
     if (!context) {
-      throw new Error("Nepodarilo sa pripraviť kompresiu obrázka.");
+      throw new Error(t("inbox.errors.imageCompressPrepFailed"));
     }
 
     if (normalizedRotation === 90) {
@@ -639,7 +664,7 @@ async function compressImage(file: File, rotation: number): Promise<File> {
           if (result) {
             resolve(result);
           } else {
-            reject(new Error("Obrázok sa nepodarilo skomprimovať."));
+            reject(new Error(t("inbox.errors.imageCompressFailed")));
           }
         },
         "image/webp",
@@ -660,7 +685,7 @@ async function compressImage(file: File, rotation: number): Promise<File> {
     }
 
     const originalName =
-      file.name.replace(/\.[^/.]+$/, "") || "dokument";
+      file.name.replace(/\.[^/.]+$/, "") || t("inbox.documentGenericFallback");
 
     return new File([blob], `${originalName}.webp`, {
       type: blob.type || "image/webp",
@@ -671,6 +696,12 @@ async function compressImage(file: File, rotation: number): Promise<File> {
   }
 }
 export default function AiEvidenciaPage() {
+  const { locale, t, tCount } = useLocale();
+  const documentTypeLabels = getDocumentTypeLabels(t);
+  const attachmentTypeLabels = getAttachmentTypeLabels(t);
+  const reviewOnlyFieldLabels = getReviewOnlyFieldLabels(t);
+  const withoutSpzLabel = t("inbox.withoutSpzGroup");
+  const otherMaterialLabel = t("inbox.otherMaterial");
   const [companyId, setCompanyId] = useState("");
   const [role, setRole] = useState<CompanyMemberRole | null>(null);
   const [fileName, setFileName] = useState("");
@@ -804,7 +835,7 @@ export default function AiEvidenciaPage() {
   const isCreationBlocked = (!planUsageLoading && isPlanLimited) || legalHold;
 
 const groupedRecords = records.reduce((groups: any, record: any) => {
-  const spz = getSpzGroupKey(record.spz);
+  const spz = getSpzGroupKey(record.spz, withoutSpzLabel);
 
   if (!groups[spz]) {
     groups[spz] = [];
@@ -819,21 +850,21 @@ const visibleDocuments = records.filter((record) => {
     return true;
   }
 
-  const recordSpz = getSpzGroupKey(record.spz);
-  return recordSpz === getSpzGroupKey(selectedSpz);
+  const recordSpz = getSpzGroupKey(record.spz, withoutSpzLabel);
+  return recordSpz === getSpzGroupKey(selectedSpz, withoutSpzLabel);
 });
 const summary = records.reduce((accumulator, record) => {
-  addRecordToSummary(accumulator, record);
+  addRecordToSummary(accumulator, record, otherMaterialLabel);
   return accumulator;
 }, createEmptySummary());
 const summaryBySpz = records.reduce<Record<string, EvidenceSummary>>((groups, record) => {
-  const spz = getSpzGroupKey(record.spz);
+  const spz = getSpzGroupKey(record.spz, withoutSpzLabel);
 
   if (!groups[spz]) {
     groups[spz] = createEmptySummary();
   }
 
-  addRecordToSummary(groups[spz], record);
+  addRecordToSummary(groups[spz], record, otherMaterialLabel);
 
   return groups;
 }, {});
@@ -847,26 +878,17 @@ const unassignedReceipts = otherDocuments.filter(
 const unassignedInvoices = otherDocuments.filter(
   (doc) => doc.document_type === "invoice" && !isDocumentAssigned(doc)
 );
-// PZP a technický preukaz, ktoré už boli potvrdené a priradené k vozidlu/
-// stroju, sa v Inboxe NEMAJÚ zobrazovať ako samostatná archivovaná položka
-// (zadanie, bod 2/3) — dokument aj jeho súbor v Storage naďalej existujú
-// bezo zmeny (nič sa nemaže), iba sa v tomto zozname skryjú, pretože ich
-// "domovom" je od tejto chvíle detail príslušného vozidla/stroja (rovnaký
-// dopyt cez document_links, iba na inej stránke — pozri app/vozidla/[id]).
-// Ostatné typy dokumentov (faktúra, bloček, servisný doklad, iné) sa touto
-// zmenou nedotýkajú — ich flow ostáva presne taký, ako bol.
+// PZP a technický preukaz potvrdené a priradené k vozidlu už vôbec nie sú
+// súčasťou `otherDocuments` (loadOtherDocuments filtruje
+// archived_from_inbox_at IS NULL priamo v dopyte — dátovo definovaný stav,
+// pozri 20260820090000_add_documents_vehicle_archive.sql), takže tu už nie
+// je čo dodatočne skrývať. Jediný zvyšný klientský filter je pôvodný —
+// nepriradené bločky/faktúry sa zobrazujú iba v zložkách vyššie, nie
+// duplicitne aj v plochom zozname.
 const otherDocumentsFlatList = otherDocuments.filter((doc) => {
   if (
     (doc.document_type === "receipt" || doc.document_type === "invoice") &&
     !isDocumentAssigned(doc)
-  ) {
-    return false;
-  }
-
-  if (
-    (doc.document_type === "insurance" ||
-      doc.document_type === "vehicle_registration") &&
-    isDocumentAssigned(doc)
   ) {
     return false;
   }
@@ -913,7 +935,7 @@ const openFolderDocuments =
     if (visibleDocuments.length === 0) {
       setExportFeedback({
         type: "error",
-        text: "Nie sú dostupné žiadne dokumenty na export.",
+        text: t("inbox.errors.noDocumentsToExport"),
       });
       return;
     }
@@ -923,12 +945,14 @@ const openFolderDocuments =
 
     try {
       const { exportedCount, fileName } = await exportAiEvidenceToExcel(
-        visibleDocuments
+        visibleDocuments,
+        locale,
+        t
       );
 
       setExportFeedback({
         type: "success",
-        text: `Exportovaných ${exportedCount} záznamov do súboru ${fileName}.`,
+        text: t("inbox.exportedRecordsMessage", { count: exportedCount, fileName }),
       });
     } catch (exportError: unknown) {
       console.error("Chyba pri exporte Excelu:", exportError);
@@ -937,7 +961,7 @@ const openFolderDocuments =
         text:
           exportError instanceof Error
             ? exportError.message
-            : "Excel sa nepodarilo vygenerovať. Skús to znova.",
+            : t("inbox.errors.excelGenerateFailed"),
       });
     } finally {
       setExportLoading(false);
@@ -951,7 +975,7 @@ const openFolderDocuments =
     if (folderRecords.length === 0) {
       setFolderExportFeedback({
         type: "error",
-        text: "Nie sú dostupné žiadne dokumenty na export.",
+        text: t("inbox.errors.noDocumentsToExport"),
       });
       return;
     }
@@ -962,12 +986,13 @@ const openFolderDocuments =
     try {
       const { exportedCount, fileName } = await exportAiInboxFolderToExcel(
         kind,
-        folderRecords
+        folderRecords,
+        t
       );
 
       setFolderExportFeedback({
         type: "success",
-        text: `Exportovaných ${exportedCount} záznamov do súboru ${fileName}.`,
+        text: t("inbox.exportedRecordsMessage", { count: exportedCount, fileName }),
       });
     } catch (exportError: unknown) {
       console.error("Chyba pri exporte zložky:", exportError);
@@ -976,7 +1001,7 @@ const openFolderDocuments =
         text:
           exportError instanceof Error
             ? exportError.message
-            : "Export sa nepodaril. Skús to znova.",
+            : t("inbox.errors.exportFailed"),
       });
     } finally {
       setFolderExportLoading(false);
@@ -992,10 +1017,10 @@ const openFolderDocuments =
     if (planUsageLoading || isCreationBlocked) {
       setError(
         planUsageLoading
-          ? "Overujem dostupnosť limitu. Skús to znova o chvíľu."
+          ? t("inbox.errors.planLimitChecking")
           : legalHold
-            ? LEGAL_HOLD_MESSAGE
-            : PLAN_LIMIT_MESSAGE
+            ? t("common.legalHoldMessage")
+            : t("common.planLimitMessage")
       );
       return;
     }
@@ -1013,10 +1038,10 @@ const openFolderDocuments =
     if (planUsageLoading || isCreationBlocked) {
       setError(
         planUsageLoading
-          ? "Overujem dostupnosť limitu. Skús to znova o chvíľu."
+          ? t("inbox.errors.planLimitChecking")
           : legalHold
-            ? LEGAL_HOLD_MESSAGE
-            : PLAN_LIMIT_MESSAGE
+            ? t("common.legalHoldMessage")
+            : t("common.planLimitMessage")
       );
       return;
     }
@@ -1030,10 +1055,10 @@ const openFolderDocuments =
       } = await supabase.auth.getSession();
 
       if (!session) {
-        throw new Error("Na AI spracovanie musíš byť prihlásený.");
+        throw new Error(t("inbox.errors.aiProcessingLoginRequired"));
       }
 
-      const compressedFile = await compressImage(pendingImageFile, rotation);
+      const compressedFile = await compressImage(pendingImageFile, rotation, t);
       const formData = new FormData();
       formData.append("image", compressedFile);
 
@@ -1041,6 +1066,7 @@ const openFolderDocuments =
         method: "POST",
         headers: {
           Authorization: `Bearer ${session.access_token}`,
+          [REQUEST_LOCALE_HEADER]: locale,
         },
         body: formData,
       });
@@ -1048,7 +1074,7 @@ const openFolderDocuments =
       const data = await response.json();
 
       if (!response.ok || !data.success) {
-        throw new Error(describeScanError(response.status, data));
+        throw new Error(describeScanError(t, response.status, data));
       }
 
       const scanned = data.data;
@@ -1063,12 +1089,17 @@ const openFolderDocuments =
             ? scanned.weighTicketFields
             : scanned.deliveryNoteFields) ?? {};
 
-        const flatResult = buildFlatWeighTicketResult(documentType, fields, {
-          rawText: scanned.rawText,
-          confidenceScore: scanned.confidenceScore,
-          reviewStatus: scanned.reviewStatus,
-          documentLanguage: scanned.documentLanguage,
-        });
+        const flatResult = buildFlatWeighTicketResult(
+          documentType,
+          fields,
+          {
+            rawText: scanned.rawText,
+            confidenceScore: scanned.confidenceScore,
+            reviewStatus: scanned.reviewStatus,
+            documentLanguage: scanned.documentLanguage,
+          },
+          documentTypeLabels[documentType]
+        );
         const resolvedMovementType = resolveMovementType(flatResult);
         const normalizedSpz = normalizeSpz(flatResult.spz);
 
@@ -1205,7 +1236,7 @@ const openFolderDocuments =
       setError(
         processingError instanceof Error
           ? processingError.message
-          : "Nastala neznáma chyba."
+          : t("inbox.errors.unknownGeneric")
       );
     } finally {
       setIsProcessing(false);
@@ -1313,7 +1344,7 @@ function resolveMovementType(result: any): string | null {
     if (!result || saveInProgressRef.current) return;
 
     if (legalHold) {
-      setError(LEGAL_HOLD_MESSAGE);
+      setError(t("common.legalHoldMessage"));
       return;
     }
 
@@ -1334,21 +1365,21 @@ function resolveMovementType(result: any): string | null {
 
       if (validatedWeights.invalidFields.length > 0) {
         throw new Error(
-          `Skontrolujte číselný formát polí: ${validatedWeights.invalidFields.join(
-            ", "
-          )}. Nejednoznačné alebo neplatné hmotnosti sa nedajú uložiť.`
+          t("inbox.errors.invalidWeightFields", {
+            fields: validatedWeights.invalidFields.join(", "),
+          })
         );
       }
 
       const confidenceScore = parseWeightValue(result.confidenceScore);
       if (confidenceScore !== null && confidenceScore > 1) {
-        throw new Error("Miera istoty musí byť číslo od 0 do 1.");
+        throw new Error(t("inbox.errors.confidenceMustBeNumber"));
       }
 
       const latestUsage = await refreshPlanUsage();
 
       if (latestUsage?.isLimited) {
-        setError(PLAN_LIMIT_MESSAGE);
+        setError(t("common.planLimitMessage"));
         return;
       }
 
@@ -1357,7 +1388,7 @@ function resolveMovementType(result: any): string | null {
       } = await supabase.auth.getSession();
 
       if (!session) {
-        throw new Error("Nie si prihlásený.");
+        throw new Error(t("inbox.errors.notLoggedIn"));
       }
       // Vážny lístok / dodací list: priradenie k vozidlu je VÝHRADNE
       // automatické podľa ŠPZ, ktorú rozpoznala AI (žiadne ručné
@@ -1368,7 +1399,7 @@ function resolveMovementType(result: any): string | null {
       const activeMembership = await getMyActiveMembership();
 
       if (!activeMembership) {
-        throw new Error("Nie si prihlásený.");
+        throw new Error(t("inbox.errors.notLoggedIn"));
       }
 
       const { vehicleId, canonicalSpz } = await resolveVehicleIdBySpz(
@@ -1384,6 +1415,7 @@ function resolveMovementType(result: any): string | null {
 if (selectedFile) {
   const storageSpz = canonicalSpz || "BEZSPZ";
 
+  // eslint-disable-next-line react-hooks/purity -- event handler (saveEvidence), never runs during render
   const uniqueName = `${Date.now()}-${crypto.randomUUID()}.webp`;
 
   photoPath = `${session.user.id}/${storageSpz}/${uniqueName}`;
@@ -1397,7 +1429,7 @@ if (selectedFile) {
     });
 
   if (uploadError) {
-    throw new Error(`Fotku sa nepodarilo uložiť: ${uploadError.message}`);
+    throw new Error(t("inbox.errors.photoSaveFailed", { message: uploadError.message }));
   }
 
   uploadedPhotoPath = photoPath;
@@ -1444,7 +1476,7 @@ review_status: reviewStatus,
       setSelectedFile(null);
       setFileName("");
       await Promise.all([loadRecords(), refreshPlanUsage()]);
-      alert("Dokument bol uložený do Inboxu.");
+      alert(t("inbox.documentSavedToInbox"));
     } catch (saveError: unknown) {
       if (uploadedPhotoPath && !recordInserted) {
         const { error: cleanupError } = await supabase.storage
@@ -1460,11 +1492,11 @@ review_status: reviewStatus,
       }
 
       if (isPlanLimitReachedError(saveError, "ai_evidence")) {
-        setError(PLAN_LIMIT_MESSAGE);
+        setError(t("common.planLimitMessage"));
         await refreshPlanUsage();
       } else {
         setError(
-          saveError instanceof Error ? saveError.message : "Uloženie zlyhalo."
+          saveError instanceof Error ? saveError.message : t("inbox.errors.saveFailed")
         );
       }
     } finally {
@@ -1493,7 +1525,7 @@ review_status: reviewStatus,
     // duplicita pre prípad priameho volania mimo bežného UI stavu.
     if (scanDocumentType === "insurance" && assignmentTarget === "none") {
       setError(
-        "PZP musí byť priradené k existujúcemu vozidlu alebo stroju. Vyber vozidlo nižšie, alebo ak ešte v evidencii nie je, najprv ho pridaj (napr. cez technický preukaz)."
+        t("inbox.errors.pzpMustBeAssigned")
       );
       return;
     }
@@ -1501,24 +1533,24 @@ review_status: reviewStatus,
     if (!assignmentTarget) {
       setError(
         scanDocumentType === "insurance"
-          ? "Vyber vozidlo alebo stroj, ku ktorému PZP patrí."
-          : "Najprv zvoľ, či dokument priradiť k vozidlu, stroju, alebo bez priradenia."
+          ? t("inbox.errors.pzpChooseTarget")
+          : t("inbox.errors.chooseAssignment")
       );
       return;
     }
 
     if (assignmentTarget === "vehicle" && !selectedVehicleId) {
-      setError("Vyber vozidlo, ku ktorému chceš dokument priradiť.");
+      setError(t("inbox.errors.chooseVehicle"));
       return;
     }
 
     if (assignmentTarget === "machine" && !selectedMachineId) {
-      setError("Vyber stroj, ku ktorému chceš dokument priradiť.");
+      setError(t("inbox.errors.chooseMachine"));
       return;
     }
 
     if (legalHold) {
-      setError(LEGAL_HOLD_MESSAGE);
+      setError(t("common.legalHoldMessage"));
       return;
     }
 
@@ -1536,7 +1568,7 @@ review_status: reviewStatus,
       } = await supabase.auth.getSession();
 
       if (!session) {
-        throw new Error("Nie si prihlásený.");
+        throw new Error(t("inbox.errors.notLoggedIn"));
       }
 
       // Vozidlo/stroj sa vyberá výhradne z už načítaného zoznamu vlastných
@@ -1547,7 +1579,7 @@ review_status: reviewStatus,
         !vehicleOptions.some((vehicle) => vehicle.id === selectedVehicleId)
       ) {
         throw new Error(
-          "Vybrané vozidlo už nie je dostupné. Obnov stránku a skús výber zopakovať."
+          t("inbox.errors.vehicleNoLongerAvailable")
         );
       }
 
@@ -1556,7 +1588,7 @@ review_status: reviewStatus,
         !machineOptions.some((machine) => machine.id === selectedMachineId)
       ) {
         throw new Error(
-          "Vybraný stroj už nie je dostupný. Obnov stránku a skús výber zopakovať."
+          t("inbox.errors.machineNoLongerAvailable")
         );
       }
 
@@ -1564,6 +1596,7 @@ review_status: reviewStatus,
       let storagePath: string | null = null;
 
       if (selectedFile) {
+        // eslint-disable-next-line react-hooks/purity -- event handler (saveOtherDocument), never runs during render
         const uniqueName = `${Date.now()}-${crypto.randomUUID()}.webp`;
         storagePath = `${session.user.id}/${documentId}/${uniqueName}`;
 
@@ -1576,7 +1609,7 @@ review_status: reviewStatus,
           });
 
         if (uploadError) {
-          throw new Error(`Fotku sa nepodarilo uložiť: ${uploadError.message}`);
+          throw new Error(t("inbox.errors.photoSaveFailed", { message: uploadError.message }));
         }
 
         uploadedPath = storagePath;
@@ -1615,10 +1648,47 @@ review_status: reviewStatus,
 
       documentInserted = true;
 
-      // Priradenie k vozidlu/stroju — samostatný insert do document_links,
-      // aby zlyhanie priradenia (napr. medzičasom zmazaná entita) bolo
-      // odlíšiteľné od zlyhania uloženia samotného dokumentu.
-      if (assignmentTarget === "vehicle" || assignmentTarget === "machine") {
+      // Priradenie k vozidlu/stroju.
+      //
+      // PZP priradené k VOZIDLU (scanDocumentType === "insurance" &&
+      // assignmentTarget === "vehicle") ide cez
+      // esblu_finalize_vehicle_document() — jedno atomické RPC volanie,
+      // ktoré zároveň (a) upsertne primary document_links riadok a (b)
+      // reklasifikuje dokument mimo Inbox listingu
+      // (documents.archived_from_inbox_at), pozri
+      // 20260820090000_add_documents_vehicle_archive.sql. Dátovo definovaný
+      // výsledný stav, nie iba klientský filter — a jediná cesta, ako
+      // reklasifikáciu vôbec dosiahnuť, keďže documents UPDATE je bežne
+      // owner/admin only a funkcia beží ako SECURITY DEFINER presne pre
+      // tento úzky prípad.
+      //
+      // PZP priradené k STROJU zostáva nezmenené (plain document_links
+      // insert, dokument ostáva bežnou Inbox položkou) — táto oprava sa
+      // podľa zadania týka výhradne priradenia k VOZIDLU.
+      if (scanDocumentType === "insurance" && assignmentTarget === "vehicle") {
+        const { error: finalizeError } = await supabase.rpc(
+          "esblu_finalize_vehicle_document",
+          {
+            p_document_id: documentId,
+            p_vehicle_id: selectedVehicleId,
+          }
+        );
+
+        if (finalizeError) {
+          console.error(
+            "Priradenie PZP k vozidlu sa nepodarilo uložiť:",
+            finalizeError
+          );
+          resetScanReview();
+          setSelectedFile(null);
+          setFileName("");
+          await loadOtherDocuments();
+          setError(
+            t("inbox.errors.pzpLinkFailed")
+          );
+          return;
+        }
+      } else if (assignmentTarget === "vehicle" || assignmentTarget === "machine") {
         const { error: linkError } = await supabase
           .from("document_links")
           .insert({
@@ -1637,7 +1707,7 @@ review_status: reviewStatus,
           setFileName("");
           await loadOtherDocuments();
           setError(
-            "Dokument bol uložený, ale priradenie k vozidlu/stroju sa nepodarilo uložiť. Otvor dokument v zozname a priraď ho znova."
+            t("inbox.errors.linkSaveFailed")
           );
           return;
         }
@@ -1665,7 +1735,7 @@ review_status: reviewStatus,
       setSelectedFile(null);
       setFileName("");
       await loadOtherDocuments();
-      alert("Dokument bol uložený do Inboxu.");
+      alert(t("inbox.documentSavedToInbox"));
     } catch (saveError: unknown) {
       if (uploadedPath && !documentInserted) {
         const { error: cleanupError } = await supabase.storage
@@ -1681,7 +1751,7 @@ review_status: reviewStatus,
       }
 
       setError(
-        saveError instanceof Error ? saveError.message : "Uloženie zlyhalo."
+        saveError instanceof Error ? saveError.message : t("inbox.errors.saveFailed")
       );
     } finally {
       saveOtherDocumentInProgressRef.current = false;
@@ -1702,7 +1772,7 @@ review_status: reviewStatus,
 
     if (
       !confirm(
-        "Naozaj chceš natrvalo vymazať tento dokument? Vrátane originálneho súboru a prípadných príloh."
+        t("inbox.errors.confirmDeleteDocument")
       )
     ) {
       return;
@@ -1717,13 +1787,13 @@ review_status: reviewStatus,
       } = await supabase.auth.getSession();
 
       if (!session) {
-        throw new Error("Nie si prihlásený.");
+        throw new Error(t("inbox.errors.notLoggedIn"));
       }
 
       const membership = await getMyActiveMembership();
 
       if (!membership) {
-        throw new Error("Nie si prihlásený.");
+        throw new Error(t("inbox.errors.notLoggedIn"));
       }
 
       const { data: docAttachments, error: attachmentsError } = await supabase
@@ -1734,7 +1804,7 @@ review_status: reviewStatus,
 
       if (attachmentsError) {
         throw new Error(
-          `Prílohy dokumentu sa nepodarilo načítať: ${attachmentsError.message}`
+          t("inbox.errors.documentAttachmentsLoadFailed", { message: attachmentsError.message })
         );
       }
 
@@ -1758,7 +1828,7 @@ review_status: reviewStatus,
 
         if (removeError) {
           throw new Error(
-            `Súbory dokumentu sa nepodarilo odstrániť zo Storage: ${removeError.message}`
+            t("inbox.errors.documentFilesDeleteFailed", { message: removeError.message })
           );
         }
       }
@@ -1779,7 +1849,7 @@ review_status: reviewStatus,
       alert(
         deleteError instanceof Error
           ? deleteError.message
-          : "Vymazanie dokumentu zlyhalo."
+          : t("inbox.errors.deleteDocumentFailed")
       );
     } finally {
       setDeletingDocumentId(null);
@@ -1823,7 +1893,7 @@ review_status: reviewStatus,
     clearRegistrationResult();
 
     try {
-      const compressedFile = await compressImage(file, 0);
+      const compressedFile = await compressImage(file, 0, t);
       const previewUrl = URL.createObjectURL(compressedFile);
 
       if (side === "front") {
@@ -1837,7 +1907,7 @@ review_status: reviewStatus,
       setRegistrationError(
         fileError instanceof Error
           ? fileError.message
-          : "Fotografiu sa nepodarilo spracovať."
+          : t("inbox.errors.photoProcessFailed")
       );
     } finally {
       setPreparing(false);
@@ -1863,13 +1933,13 @@ review_status: reviewStatus,
   async function handleProcessRegistration() {
     if (!regFrontFile) {
       setRegistrationError(
-        "Najprv pridaj prednú stranu technického preukazu."
+        t("inbox.errors.addFrontFirst")
       );
       return;
     }
 
     if (legalHold) {
-      setRegistrationError(LEGAL_HOLD_MESSAGE);
+      setRegistrationError(t("common.legalHoldMessage"));
       return;
     }
 
@@ -1882,13 +1952,13 @@ review_status: reviewStatus,
       } = await supabase.auth.getSession();
 
       if (!session) {
-        throw new Error("Na AI načítanie musíš byť prihlásený.");
+        throw new Error(t("inbox.errors.aiLoginRequired"));
       }
 
       const membership = await getMyActiveMembership();
 
       if (!membership) {
-        throw new Error("Nie si prihlásený.");
+        throw new Error(t("inbox.errors.notLoggedIn"));
       }
 
       const formData = new FormData();
@@ -1902,6 +1972,7 @@ review_status: reviewStatus,
         method: "POST",
         headers: {
           Authorization: `Bearer ${session.access_token}`,
+          [REQUEST_LOCALE_HEADER]: locale,
         },
         body: formData,
       });
@@ -1909,7 +1980,7 @@ review_status: reviewStatus,
 
       if (!response.ok || !data.success) {
         throw new Error(
-          data.error || "AI spracovanie technického preukazu zlyhalo."
+          data.error || t("inbox.errors.registrationAiFailed")
         );
       }
 
@@ -1934,7 +2005,7 @@ review_status: reviewStatus,
       setRegistrationError(
         processingError instanceof Error
           ? processingError.message
-          : "AI načítanie technického preukazu zlyhalo."
+          : t("inbox.errors.registrationAiFailedGeneric")
       );
     } finally {
       setIsProcessingRegistration(false);
@@ -1967,7 +2038,7 @@ review_status: reviewStatus,
     if (!registrationFields || saveRegistrationInProgressRef.current) return;
 
     if (legalHold) {
-      setRegistrationError(LEGAL_HOLD_MESSAGE);
+      setRegistrationError(t("common.legalHoldMessage"));
       return;
     }
 
@@ -1977,7 +2048,7 @@ review_status: reviewStatus,
       const latestVehicleUsage = await refreshVehiclePlanUsage();
 
       if (latestVehicleUsage?.isLimited) {
-        setRegistrationError(PLAN_LIMIT_MESSAGE);
+        setRegistrationError(t("common.planLimitMessage"));
         return;
       }
     }
@@ -1998,17 +2069,18 @@ review_status: reviewStatus,
       } = await supabase.auth.getSession();
 
       if (!session) {
-        throw new Error("Nie si prihlásený.");
+        throw new Error(t("inbox.errors.notLoggedIn"));
       }
 
       const membership = await getMyActiveMembership();
 
       if (!membership) {
-        throw new Error("Nie si prihlásený.");
+        throw new Error(t("inbox.errors.notLoggedIn"));
       }
 
       documentId = crypto.randomUUID();
 
+      // eslint-disable-next-line react-hooks/purity -- event handler (saveRegistrationDocument), never runs during render
       const frontUniqueName = `${Date.now()}-${crypto.randomUUID()}.webp`;
       const frontPath = `${session.user.id}/${documentId}/${frontUniqueName}`;
 
@@ -2022,7 +2094,7 @@ review_status: reviewStatus,
 
       if (frontUploadError) {
         throw new Error(
-          `Prednú stranu sa nepodarilo uložiť: ${frontUploadError.message}`
+          t("inbox.errors.frontSaveFailed", { message: frontUploadError.message })
         );
       }
 
@@ -2031,6 +2103,7 @@ review_status: reviewStatus,
       let backPath: string | null = null;
 
       if (regBackFile) {
+        // eslint-disable-next-line react-hooks/purity -- event handler (saveRegistrationDocument), never runs during render
         const backUniqueName = `${Date.now()}-${crypto.randomUUID()}.webp`;
         backPath = `${session.user.id}/${documentId}/${backUniqueName}`;
 
@@ -2044,7 +2117,7 @@ review_status: reviewStatus,
 
         if (backUploadError) {
           throw new Error(
-            `Zadnú stranu sa nepodarilo uložiť: ${backUploadError.message}`
+            t("inbox.errors.backSaveFailed", { message: backUploadError.message })
           );
         }
 
@@ -2129,21 +2202,30 @@ review_status: reviewStatus,
         }
       }
 
-      const { error: linkError } = await supabase
-        .from("document_links")
-        .insert({
-          user_id: session.user.id,
-          document_id: documentId,
-          vehicle_id: vehicleId,
-          machine_id: null,
-          link_type: "primary",
-          confirmed_by_user: true,
-        });
+      // esblu_finalize_vehicle_document() — rovnaké atomické RPC ako pri PZP
+      // (pozri saveOtherDocument vyššie a
+      // 20260820090000_add_documents_vehicle_archive.sql): upsertne primary
+      // document_links riadok A ZÁROVEŇ nastaví
+      // documents.archived_from_inbox_at, takže TP po úspešnom uložení
+      // vozidla už NIE JE súčasťou Inbox listingu (loadOtherDocuments
+      // filtruje archived_from_inbox_at IS NULL) — jeden canonical
+      // documents riadok, teraz dostupný z detailu vozidla. Vozidlo aj
+      // samotný dokument sú v tomto bode už bezpečne uložené (vehicleWritten
+      // && documentInserted) — zlyhanie tohto volania preto NIKDY nestratí
+      // vozidlo ani dokument, iba TP dočasne ostane viditeľné aj v Inboxe
+      // (bezpečný, opraviteľný stav, nie strata dát).
+      const { error: finalizeError } = await supabase.rpc(
+        "esblu_finalize_vehicle_document",
+        {
+          p_document_id: documentId,
+          p_vehicle_id: vehicleId,
+        }
+      );
 
-      if (linkError) {
+      if (finalizeError) {
         console.error(
-          "Priradenie technického preukazu k vozidlu sa nepodarilo uložiť:",
-          linkError
+          "Priradenie technického preukazu k vozidlu sa nepodarilo dokončiť:",
+          finalizeError
         );
       }
 
@@ -2174,8 +2256,8 @@ review_status: reviewStatus,
 
       alert(
         wasUpdate
-          ? "Existujúce vozidlo bolo aktualizované podľa technického preukazu."
-          : "Nové vozidlo bolo vytvorené a priradené k technickému preukazu."
+          ? t("inbox.errors.vehicleUpdatedWithRegistration")
+          : t("inbox.errors.vehicleCreatedWithRegistration")
       );
     } catch (saveError: unknown) {
       if (uploadedFrontPath && !documentInserted) {
@@ -2196,10 +2278,10 @@ review_status: reviewStatus,
       }
 
       const message =
-        saveError instanceof Error ? saveError.message : "Uloženie zlyhalo.";
+        saveError instanceof Error ? saveError.message : t("inbox.errors.saveFailed");
 
       if (isPlanLimitReachedError(saveError, "vehicles")) {
-        setRegistrationError(PLAN_LIMIT_MESSAGE);
+        setRegistrationError(t("common.planLimitMessage"));
         await refreshVehiclePlanUsage();
       } else if (vehicleWritten && !documentInserted) {
         // Vozidlo sa už uložilo, ale fotografie technického preukazu sa
@@ -2207,7 +2289,7 @@ review_status: reviewStatus,
         // nechať používateľa dokument nahrať znova (vozidlo v module
         // Vozidlá pritom zostáva bezpečne použiteľné).
         setRegistrationError(
-          `Vozidlo bolo uložené, ale fotografie technického preukazu sa nepodarilo priradiť: ${message}. Skús dokument nahrať znova.`
+          t("inbox.errors.vehicleSavedButPhotosFailed", { message })
         );
         await Promise.all([
           loadVehicleAndMachineOptions(),
@@ -2252,7 +2334,7 @@ review_status: reviewStatus,
     if (!file || !selectedOtherDocument) return;
 
     if (legalHold) {
-      setError(LEGAL_HOLD_MESSAGE);
+      setError(t("common.legalHoldMessage"));
       return;
     }
 
@@ -2267,7 +2349,7 @@ review_status: reviewStatus,
       } = await supabase.auth.getSession();
 
       if (!session) {
-        throw new Error("Nie si prihlásený.");
+        throw new Error(t("inbox.errors.notLoggedIn"));
       }
 
       const uniqueName = `${Date.now()}-${crypto.randomUUID()}-${file.name}`;
@@ -2282,7 +2364,7 @@ review_status: reviewStatus,
         });
 
       if (uploadError) {
-        throw new Error(`Prílohu sa nepodarilo nahrať: ${uploadError.message}`);
+        throw new Error(t("inbox.errors.attachmentUploadFailed", { message: uploadError.message }));
       }
 
       uploadedPath = storagePath;
@@ -2322,7 +2404,7 @@ review_status: reviewStatus,
       alert(
         uploadError instanceof Error
           ? uploadError.message
-          : "Prílohu sa nepodarilo uložiť."
+          : t("inbox.errors.attachmentSaveFailed")
       );
     } finally {
       setIsUploadingAttachment(false);
@@ -2331,7 +2413,7 @@ review_status: reviewStatus,
 
   async function deleteAttachment(attachment: AttachmentRow) {
     if (deletingAttachmentId) return;
-    if (!confirm("Naozaj chceš vymazať túto prílohu?")) return;
+    if (!confirm(t("inbox.errors.confirmDeleteAttachment"))) return;
 
     setDeletingAttachmentId(attachment.id);
 
@@ -2342,7 +2424,7 @@ review_status: reviewStatus,
 
       if (removeError) {
         throw new Error(
-          `Súbor prílohy sa nepodarilo odstrániť zo Storage: ${removeError.message}`
+          t("inbox.errors.attachmentStorageDeleteFailed", { message: removeError.message })
         );
       }
 
@@ -2358,7 +2440,7 @@ review_status: reviewStatus,
       alert(
         deleteError instanceof Error
           ? deleteError.message
-          : "Vymazanie prílohy zlyhalo."
+          : t("inbox.errors.attachmentDeleteFailed")
       );
     } finally {
       setDeletingAttachmentId(null);
@@ -2371,7 +2453,7 @@ review_status: reviewStatus,
       .createSignedUrl(attachment.storage_path, 300);
 
     if (error || !data) {
-      alert("Prílohu sa nepodarilo otvoriť.");
+      alert(t("inbox.errors.attachmentOpenFailed"));
       return;
     }
 
@@ -2390,12 +2472,12 @@ review_status: reviewStatus,
         .createSignedUrl(doc.storage_path, 60);
 
       if (error || !data) {
-        throw new Error("Originál sa nepodarilo pripraviť na stiahnutie.");
+        throw new Error(t("inbox.errors.originalPrepareFailed"));
       }
 
       const response = await fetch(data.signedUrl);
       if (!response.ok) {
-        throw new Error("Originál sa nepodarilo stiahnuť.");
+        throw new Error(t("inbox.errors.originalDownloadFailed"));
       }
 
       const blob = await response.blob();
@@ -2413,7 +2495,7 @@ review_status: reviewStatus,
       alert(
         downloadError instanceof Error
           ? downloadError.message
-          : "Originál sa nepodarilo stiahnuť."
+          : t("inbox.errors.originalDownloadFailed")
       );
     }
   }
@@ -2429,7 +2511,7 @@ review_status: reviewStatus,
       .createSignedUrl(doc.storage_path, 300);
 
     if (error || !data) {
-      alert("Originál sa nepodarilo pripraviť na tlač.");
+      alert(t("inbox.errors.originalPrintPrepareFailed"));
       return;
     }
 
@@ -2447,21 +2529,21 @@ review_status: reviewStatus,
   // (Supabase Storage to považuje za úspešný no-op), takže opakovaný pokus
   // po čiastočnom zlyhaní je vždy bezpečný.
   async function deleteRecord(id: string) {
-    if (!confirm("Naozaj chceš vymazať tento záznam?")) return;
+    if (!confirm(t("inbox.errors.confirmDeleteRecord"))) return;
 
     const {
       data: { session },
     } = await supabase.auth.getSession();
 
     if (!session) {
-      alert("Nie si prihlásený.");
+      alert(t("inbox.errors.notLoggedIn"));
       return;
     }
 
     const membership = await getMyActiveMembership();
 
     if (!membership) {
-      alert("Nie si prihlásený.");
+      alert(t("inbox.errors.notLoggedIn"));
       return;
     }
 
@@ -2477,7 +2559,7 @@ review_status: reviewStatus,
 
     if (recordError) {
       console.error("Chyba pri načítaní záznamu:", recordError);
-      alert("Záznam sa nepodarilo načítať alebo ti nepatrí.");
+      alert(t("inbox.errors.recordLoadFailed"));
       return;
     }
 
@@ -2492,9 +2574,7 @@ review_status: reviewStatus,
           "Fotografiu sa nepodarilo odstrániť zo Storage, záznam nebol vymazaný:",
           photoDeleteError
         );
-        alert(
-          "Fotografiu sa nepodarilo odstrániť z úložiska. Záznam nebol vymazaný, skús to prosím znova."
-        );
+        alert(t("inbox.errors.recordDeletePhotoFailed"));
         return;
       }
     }
@@ -2509,9 +2589,7 @@ review_status: reviewStatus,
 
     if (deleteError) {
       console.error("Chyba pri mazaní záznamu:", deleteError);
-      alert(
-        "Fotografia bola odstránená z úložiska, ale záznam sa nepodarilo vymazať z databázy. Skús to prosím znova."
-      );
+      alert(t("inbox.errors.recordDeleteDbFailed"));
       return;
     }
 
@@ -2595,11 +2673,18 @@ async function loadOtherDocuments(currentCompanyId: string = companyId) {
     return;
   }
 
+  // archived_from_inbox_at IS NULL — dátovo definovaný filter (nie iba
+  // klientský), pozri 20260820090000_add_documents_vehicle_archive.sql.
+  // PZP/TP potvrdené a priradené k vozidlu (esblu_finalize_vehicle_document)
+  // majú tento stĺpec nastavený, a preto sa sem už vôbec nenačítajú — ich
+  // "domovom" je odteraz detail príslušného vozidla (document_links, pozri
+  // app/vozidla/[id]).
   const { data, error } = await supabase
     .from("documents")
     .select("*, document_links(*)")
     .eq("company_id", currentCompanyId)
     .is("deleted_at", null)
+    .is("archived_from_inbox_at", null)
     .order("created_at", { ascending: false });
 
   if (!error && data) {
@@ -2719,19 +2804,23 @@ const currentWeightValidation = result
 // takže nevyžaduje ďalší dotaz do DB.
 function describeDocumentAssignment(doc: OtherDocumentRow): string {
   const link = Array.isArray(doc?.document_links) ? doc.document_links[0] : null;
-  if (!link) return "Bez priradenia";
+  if (!link) return t("inbox.noAssignment");
 
   if (link.vehicle_id) {
     const vehicle = vehicleOptions.find((v) => v.id === link.vehicle_id);
-    return `Vozidlo — ${vehicle ? vehicle.spz : "neznáme vozidlo"}`;
+    return t("inbox.vehicleAssignment", {
+      value: vehicle ? vehicle.spz ?? "" : t("inbox.unknownVehicle"),
+    });
   }
 
   if (link.machine_id) {
     const machine = machineOptions.find((m) => m.id === link.machine_id);
-    return `Stroj — ${machine ? machine.name : "neznámy stroj"}`;
+    return t("inbox.machineAssignment", {
+      value: machine ? machine.name ?? "" : t("inbox.unknownMachine"),
+    });
   }
 
-  return "Bez priradenia";
+  return t("inbox.noAssignment");
 }
 
 // Krátke zhrnutie dokumentu pre kartu v zozname "Ostatné dokumenty" —
@@ -2761,34 +2850,34 @@ function summarizeDocument(doc: OtherDocumentRow): string {
 
   if (parts.length > 0) return parts.join(" • ");
 
-  return type ? DOCUMENT_TYPE_LABELS[type] : "Dokument";
+  return type ? documentTypeLabels[type] : t("inbox.documentGenericFallback");
 }
 
 function formatAmount(value: unknown, currency: unknown): string {
   if (value === null || value === undefined || value === "") {
-    return "Bez sumy";
+    return t("inbox.noAmount");
   }
   const currencyLabel = typeof currency === "string" && currency ? ` ${currency}` : "";
   return `${value}${currencyLabel}`;
 }
 
 function formatDocDate(value: unknown): string {
-  return typeof value === "string" && value ? value : "Bez dátumu";
+  return typeof value === "string" && value ? value : t("inbox.noDate");
 }
 
   return (
     <main className="app-shell-bg min-h-screen p-4 sm:p-6 lg:p-10">
       <div className="mx-auto max-w-3xl">
-        <BackLink href="/" label="Hlavné menu" className="mb-4" />
+        <BackLink href="/" label={t("inbox.backToMenu")} className="mb-4" />
 
         <div className="flex items-center gap-4">
   <img
     src="/images/ai-evidencia.png"
-    alt="Inbox"
+    alt={t("inbox.title")}
     className="h-16 w-16 object-contain"
   />
   <h1 className="text-4xl font-bold text-primary">
-    INBOX
+    {t("inbox.title")}
   </h1>
 </div>
 
@@ -2803,32 +2892,29 @@ function formatDocDate(value: unknown): string {
 
         {legalHold && (
           <p className="mt-6 rounded-2xl border border-amber-200/30 bg-warning-soft p-4 text-sm font-semibold text-amber-400">
-            {LEGAL_HOLD_MESSAGE}
+            {t("common.legalHoldMessage")}
           </p>
         )}
 
         {role !== "employee" && (
           <div className="mt-10 rounded-3xl border border-subtle bg-surface-1 p-6 shadow-lg backdrop-blur-xl">
             <h2 className="text-2xl font-bold text-primary">
-              🚘 Technický preukaz vozidla
+              {t("inbox.registration.sectionTitle")}
             </h2>
             <p className="mt-2 text-sm text-secondary">
-              Odfotografuj prednú a zadnú stranu technického preukazu. AI
-              údaje spracuje ako jeden dokument, po tvojej kontrole a
-              potvrdení sa vozidlo vytvorí alebo aktualizuje v module
-              Vozidlá. Fotografie sa uložia spolu s dokumentom v Inboxe.
+              {t("inbox.registration.sectionDescription")}
             </p>
 
             <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
               <section className="rounded-2xl bg-surface-2 p-5 shadow-sm">
-                <h3 className="text-lg font-bold">Predná strana</h3>
+                <h3 className="text-lg font-bold">{t("inbox.registration.frontTitle")}</h3>
                 <p className="mt-1 text-sm text-secondary">
-                  Povinná fotografia
+                  {t("inbox.registration.frontRequired")}
                 </p>
 
                 <div className="mt-4 flex flex-wrap gap-3">
                   <label className="cursor-pointer rounded-xl bg-blue-600 px-4 py-3 font-medium text-white hover:bg-blue-700">
-                    {isPreparingRegFront ? "Pripravujem..." : "📷 Odfotiť"}
+                    {isPreparingRegFront ? t("inbox.registration.preparing") : t("inbox.registration.takePhoto")}
                     <input
                       type="file"
                       accept="image/*"
@@ -2846,7 +2932,7 @@ function formatDocDate(value: unknown): string {
                   </label>
 
                   <label className="cursor-pointer rounded-xl border border-subtle bg-surface-1 px-4 py-3 font-medium text-secondary hover:bg-surface-2">
-                    🖼️ Vybrať z galérie
+                    {t("inbox.registration.chooseFromGallery")}
                     <input
                       type="file"
                       accept="image/*"
@@ -2867,12 +2953,12 @@ function formatDocDate(value: unknown): string {
                   <div className="mt-4">
                     <img
                       src={regFrontPreview}
-                      alt="Predná strana technického preukazu"
+                      alt={t("inbox.registration.frontAlt")}
                       className="h-64 w-full rounded-xl border border-subtle bg-surface-1 object-contain"
                     />
                     <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
                       <p className="text-xs text-muted-esblu">
-                        Novým výberom fotografiu vymeníš.
+                        {t("inbox.registration.replaceHint")}
                       </p>
                       <button
                         type="button"
@@ -2880,26 +2966,26 @@ function formatDocDate(value: unknown): string {
                         disabled={isProcessingRegistration}
                         className="rounded-lg bg-red-600 px-3 py-2 text-sm text-white hover:bg-red-700 disabled:bg-gray-400"
                       >
-                        Odstrániť
+                        {t("inbox.registration.remove")}
                       </button>
                     </div>
                   </div>
                 ) : (
                   <div className="mt-4 rounded-xl border border-dashed border-subtle p-8 text-center text-sm text-muted-esblu">
-                    Predná strana zatiaľ nie je vybraná.
+                    {t("inbox.registration.frontNotSelected")}
                   </div>
                 )}
               </section>
 
               <section className="rounded-2xl bg-surface-2 p-5 shadow-sm">
-                <h3 className="text-lg font-bold">Zadná strana</h3>
+                <h3 className="text-lg font-bold">{t("inbox.registration.backTitle")}</h3>
                 <p className="mt-1 text-sm text-secondary">
-                  Voliteľná fotografia
+                  {t("inbox.registration.backOptional")}
                 </p>
 
                 <div className="mt-4 flex flex-wrap gap-3">
                   <label className="cursor-pointer rounded-xl bg-blue-600 px-4 py-3 font-medium text-white hover:bg-blue-700">
-                    {isPreparingRegBack ? "Pripravujem..." : "📷 Odfotiť"}
+                    {isPreparingRegBack ? t("inbox.registration.preparing") : t("inbox.registration.takePhoto")}
                     <input
                       type="file"
                       accept="image/*"
@@ -2917,7 +3003,7 @@ function formatDocDate(value: unknown): string {
                   </label>
 
                   <label className="cursor-pointer rounded-xl border border-subtle bg-surface-1 px-4 py-3 font-medium text-secondary hover:bg-surface-2">
-                    🖼️ Vybrať z galérie
+                    {t("inbox.registration.chooseFromGallery")}
                     <input
                       type="file"
                       accept="image/*"
@@ -2938,12 +3024,12 @@ function formatDocDate(value: unknown): string {
                   <div className="mt-4">
                     <img
                       src={regBackPreview}
-                      alt="Zadná strana technického preukazu"
+                      alt={t("inbox.registration.backAlt")}
                       className="h-64 w-full rounded-xl border border-subtle bg-surface-1 object-contain"
                     />
                     <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
                       <p className="text-xs text-muted-esblu">
-                        Novým výberom fotografiu vymeníš.
+                        {t("inbox.registration.replaceHint")}
                       </p>
                       <button
                         type="button"
@@ -2951,13 +3037,13 @@ function formatDocDate(value: unknown): string {
                         disabled={isProcessingRegistration}
                         className="rounded-lg bg-red-600 px-3 py-2 text-sm text-white hover:bg-red-700 disabled:bg-gray-400"
                       >
-                        Odstrániť
+                        {t("inbox.registration.remove")}
                       </button>
                     </div>
                   </div>
                 ) : (
                   <div className="mt-4 rounded-xl border border-dashed border-subtle p-8 text-center text-sm text-muted-esblu">
-                    Zadná strana zatiaľ nie je vybraná.
+                    {t("inbox.registration.backNotSelected")}
                   </div>
                 )}
               </section>
@@ -2976,8 +3062,8 @@ function formatDocDate(value: unknown): string {
               className="mt-6 rounded-xl bg-green-600 px-6 py-3 font-medium text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:bg-gray-400"
             >
               {isProcessingRegistration
-                ? "Načítavam údaje..."
-                : "🤖 Načítať údaje pomocou AI"}
+                ? t("inbox.registration.loadingData")
+                : t("inbox.registration.loadDataWithAi")}
             </button>
 
             {registrationError && (
@@ -2990,42 +3076,41 @@ function formatDocDate(value: unknown): string {
               <div className="mt-6 space-y-4 rounded-2xl border border-subtle bg-surface-2 p-5">
                 {registrationDuplicateVehicle ? (
                   <p className="rounded-xl bg-warning-soft px-4 py-3 text-sm font-bold text-amber-400">
-                    ⚠️ Nájdené existujúce vozidlo (
-                    {registrationDuplicateVehicle.spz || "bez ŠPZ"}). Uložením
-                    sa AKTUALIZUJÚ jeho údaje — nevytvorí sa duplicita.
+                    {t("inbox.registration.duplicateFoundPrefix")}
+                    {registrationDuplicateVehicle.spz || t("inbox.noPlate")}
+                    {t("inbox.registration.duplicateFoundSuffix")}
                   </p>
                 ) : (
                   <p className="badge-success rounded-xl p-3 text-sm font-medium">
-                    Vozidlo s touto ŠPZ/VIN sa nenašlo — uložením sa vytvorí
-                    nové vozidlo.
+                    {t("inbox.registration.noDuplicateFound")}
                   </p>
                 )}
 
                 <h3 className="text-lg font-bold text-primary">
-                  Skontroluj údaje z technického preukazu
+                  {t("inbox.registration.reviewTitle")}
                 </h3>
 
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   {[
-                    ["spz", "ŠPZ"],
-                    ["vin", "VIN"],
-                    ["znacka", "Značka"],
-                    ["model", "Model"],
-                    ["rokVyroby", "Rok výroby"],
-                    ["datumPrvejEvidencie", "Dátum prvej evidencie"],
-                    ["palivo", "Palivo"],
-                    ["objemMotora", "Objem motora"],
-                    ["vykon", "Výkon"],
-                    ["farba", "Farba"],
-                    ["prevadzkovaHmotnost", "Prevádzková hmotnosť"],
-                    ["pocetMiest", "Počet miest"],
-                    ["kategoriaVozidla", "Kategória vozidla"],
-                    ["druhVozidla", "Druh vozidla"],
+                    ["spz", t("inbox.fields.spz")],
+                    ["vin", t("inbox.fields.vin")],
+                    ["znacka", t("inbox.fields.znacka")],
+                    ["model", t("inbox.fields.model")],
+                    ["rokVyroby", t("inbox.fields.rokVyroby")],
+                    ["datumPrvejEvidencie", t("inbox.fields.datumPrvejEvidencie")],
+                    ["palivo", t("inbox.fields.palivo")],
+                    ["objemMotora", t("inbox.fields.objemMotora")],
+                    ["vykon", t("inbox.fields.vykon")],
+                    ["farba", t("inbox.fields.farba")],
+                    ["prevadzkovaHmotnost", t("inbox.fields.prevadzkovaHmotnost")],
+                    ["pocetMiest", t("inbox.fields.pocetMiest")],
+                    ["kategoriaVozidla", t("inbox.fields.kategoriaVozidla")],
+                    ["druhVozidla", t("inbox.fields.druhVozidla")],
                     [
                       "najvacsiaPripustnaCelkovaHmotnost",
-                      "Najväčšia prípustná celková hmotnosť",
+                      t("inbox.fields.najvacsiaPripustnaCelkovaHmotnost"),
                     ],
-                    ["cisloTechnickehoPreukazu", "Číslo technického preukazu"],
+                    ["cisloTechnickehoPreukazu", t("inbox.fields.cisloTechnickehoPreukazu")],
                   ].map(([key, label]) => (
                     <label key={key} className="block">
                       <span className="text-sm font-medium text-secondary">
@@ -3054,17 +3139,17 @@ function formatDocDate(value: unknown): string {
                   className="w-full rounded-2xl bg-blue-600 px-5 py-4 text-lg font-black text-white disabled:opacity-60"
                 >
                   {isSavingRegistration
-                    ? "Ukladám..."
+                    ? t("common.buttons.saving")
                     : registrationDuplicateVehicle
-                      ? "💾 Aktualizovať vozidlo"
-                      : "💾 Vytvoriť vozidlo"}
+                      ? t("inbox.registration.updateVehicle")
+                      : t("inbox.registration.createVehicle")}
                 </button>
 
                 {!registrationDuplicateVehicle &&
                   !vehiclePlanUsageLoading &&
                   isVehiclePlanLimited && (
                     <p className="rounded-xl bg-danger-soft p-3 text-sm font-medium text-red-700">
-                      {PLAN_LIMIT_MESSAGE}
+                      {t("common.planLimitMessage")}
                     </p>
                   )}
               </div>
@@ -3076,11 +3161,11 @@ function formatDocDate(value: unknown): string {
   <span className="text-5xl">📄</span>
 
   <h2 className="mt-4 text-2xl font-bold text-primary">
-    PRIDAŤ DOKUMENT
+    {t("inbox.addDocument.title")}
   </h2>
 
   <p className="mt-2 text-secondary">
-    Odfotiť dokument alebo vybrať obrázok zo zariadenia
+    {t("inbox.addDocument.description")}
   </p>
 
   <div className="mt-6 grid grid-cols-2 gap-3">
@@ -3091,7 +3176,7 @@ function formatDocDate(value: unknown): string {
           : "cursor-pointer"
       }`}
     >
-      📷 Odfotiť
+      {t("inbox.addDocument.takePhoto")}
       <input
         type="file"
         accept="image/*"
@@ -3109,7 +3194,7 @@ function formatDocDate(value: unknown): string {
           : "cursor-pointer"
       }`}
     >
-      🖼️ Galéria
+      {t("inbox.addDocument.gallery")}
       <input
         type="file"
         accept="image/*"
@@ -3125,20 +3210,20 @@ function formatDocDate(value: unknown): string {
           <section className="mt-8 rounded-3xl bg-surface-2 p-5 sm:p-6">
             <div className="text-center">
               <h2 className="text-xl font-black text-primary">
-                Skontrolujte orientáciu dokumentu
+                {t("inbox.reviewOrientation.title")}
               </h2>
               <p className="mt-2 text-sm text-secondary">
-                Pred AI spracovaním otočte dokument tak, aby bol text čitateľný.
+                {t("inbox.reviewOrientation.description")}
               </p>
               <p className="mt-2 text-sm font-bold text-blue-700">
-                Rotácia: {rotation}°
+                {t("inbox.reviewOrientation.rotation", { degrees: rotation })}
               </p>
             </div>
 
             <div className="mx-auto mt-5 flex aspect-square w-full max-w-xl items-center justify-center overflow-hidden rounded-2xl bg-surface-2 p-3">
               <img
                 src={previewUrl}
-                alt="Náhľad dokumentu pred AI spracovaním"
+                alt={t("inbox.reviewOrientation.previewAlt")}
                 className="max-h-full max-w-full object-contain transition-transform duration-200"
                 style={{ transform: `rotate(${rotation}deg)` }}
               />
@@ -3153,7 +3238,7 @@ function formatDocDate(value: unknown): string {
                 disabled={isProcessing}
                 className="rounded-2xl bg-surface-1 px-4 py-3 font-bold text-primary shadow disabled:cursor-not-allowed disabled:opacity-60"
               >
-                ↺ Otočiť doľava
+                {t("inbox.reviewOrientation.rotateLeft")}
               </button>
               <button
                 type="button"
@@ -3163,7 +3248,7 @@ function formatDocDate(value: unknown): string {
                 disabled={isProcessing}
                 className="rounded-2xl bg-surface-1 px-4 py-3 font-bold text-primary shadow disabled:cursor-not-allowed disabled:opacity-60"
               >
-                ↻ Otočiť doprava
+                {t("inbox.reviewOrientation.rotateRight")}
               </button>
             </div>
 
@@ -3175,8 +3260,8 @@ function formatDocDate(value: unknown): string {
                 className="flex-1 rounded-2xl bg-blue-600 px-5 py-4 font-black text-white disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isProcessing
-                  ? "AI spracováva dokument..."
-                  : "Spracovať dokument"}
+                  ? t("inbox.reviewOrientation.processing")
+                  : t("inbox.reviewOrientation.processDocument")}
               </button>
               <button
                 type="button"
@@ -3184,7 +3269,7 @@ function formatDocDate(value: unknown): string {
                 disabled={isProcessing}
                 className="rounded-2xl bg-surface-2 px-5 py-4 font-bold text-primary disabled:cursor-not-allowed disabled:opacity-60 sm:min-w-32"
               >
-                Zrušiť
+                {t("inbox.reviewOrientation.cancel")}
               </button>
             </div>
           </section>
@@ -3192,17 +3277,17 @@ function formatDocDate(value: unknown): string {
 
         {fileName && (
           <div className="mt-8 rounded-2xl bg-surface-2 p-5">
-            <p className="font-bold text-primary">Vybraný dokument:</p>
+            <p className="font-bold text-primary">{t("inbox.selectedDocument")}</p>
             <p className="mt-1 text-secondary">{fileName}</p>
 
             {isProcessing && (
               <p className="mt-4 font-semibold text-blue-600">
-                🤖 AI spracováva dokument...
+                {t("inbox.aiProcessing")}
               </p>
             )}
 
             {error && (
-              <p className="mt-4 font-semibold text-red-400">Chyba: {error}</p>
+              <p className="mt-4 font-semibold text-red-400">{t("inbox.errorPrefix", { message: error })}</p>
             )}
           </div>
         )}
@@ -3210,32 +3295,31 @@ function formatDocDate(value: unknown): string {
         {result && (
           <div className="mt-8 space-y-4 rounded-3xl bg-surface-2 p-6">
             <h2 className="text-2xl font-black text-primary">
-              Načítané údaje — {DOCUMENT_TYPE_LABELS[scanDocumentType ?? "weigh_ticket"]}
+              {t("inbox.loadedData", { type: documentTypeLabels[scanDocumentType ?? "weigh_ticket"] })}
             </h2>
 
             {result.reviewStatus === "needs_review" && (
               <p className="rounded-xl bg-amber-100 px-4 py-3 text-sm font-bold text-amber-900">
-                ⚠️ AI si nie je istá niektorými údajmi. Pred uložením ich
-                skontroluj.
+                {t("inbox.aiUnsureWarning")}
               </p>
             )}
 
             {[
-              ["documentType", "Typ dokumentu"],
-              ["movementType", "Dovoz / vývoz"],
-              ["spz", "ŠPZ"],
-              ["supplier", "Dodávateľ"],
-              ["customer", "Zákazník"],
-              ["constructionSite", "Stavba / Herkunft"],
-              ["documentNumber", "Číslo dokladu"],
-              ["material", "Materiál"],
-              ["quantity", "Množstvo"],
-              ["unit", "Jednotka"],
-              ["brutto", "Brutto"],
-              ["tara", "Tara"],
-              ["netto", "Netto"],
-              ["documentDate", "Dátum"],
-              ["documentTime", "Čas"],
+              ["documentType", t("inbox.fields.documentType")],
+              ["movementType", t("inbox.fields.movementType")],
+              ["spz", t("inbox.fields.spz")],
+              ["supplier", t("inbox.fields.supplier")],
+              ["customer", t("inbox.fields.customer")],
+              ["constructionSite", t("inbox.fields.constructionSite")],
+              ["documentNumber", t("inbox.fields.documentNumber")],
+              ["material", t("inbox.fields.material")],
+              ["quantity", t("inbox.fields.quantity")],
+              ["unit", t("inbox.fields.unit")],
+              ["brutto", t("inbox.fields.brutto")],
+              ["tara", t("inbox.fields.tara")],
+              ["netto", t("inbox.fields.netto")],
+              ["documentDate", t("inbox.fields.documentDate")],
+              ["documentTime", t("inbox.fields.documentTime")],
             ].map(([field, label]) => (
               <div key={field}>
                 <label className="text-sm font-bold text-secondary">
@@ -3251,18 +3335,17 @@ function formatDocDate(value: unknown): string {
 
             {currentWeightValidation?.invalidFields.length ? (
               <p className="rounded-xl bg-danger-soft px-4 py-3 text-sm font-semibold text-red-700">
-                Skontrolujte číselný formát polí: {" "}
-                {currentWeightValidation.invalidFields.join(", ")}.
+                {t("inbox.invalidNumberFields", {
+                  fields: currentWeightValidation.invalidFields.join(", "),
+                })}
               </p>
             ) : currentWeightValidation?.hasMathMismatch ? (
               <p className="rounded-xl bg-warning-soft px-4 py-3 text-sm font-semibold text-amber-400">
-                Brutto, tara a netto si matematicky nezodpovedajú. Hodnoty sa
-                automaticky neopravili a záznam bude označený na kontrolu.
+                {t("inbox.weightMismatchWarning")}
               </p>
             ) : currentWeightValidation?.isUnitMissing ? (
               <p className="rounded-xl bg-warning-soft px-4 py-3 text-sm font-semibold text-amber-400">
-                Pri hmotnosti chýba rozpoznaná jednotka. Záznam bude označený
-                na kontrolu.
+                {t("inbox.weightUnitMissingWarning")}
               </p>
             ) : null}
 
@@ -3278,7 +3361,7 @@ function formatDocDate(value: unknown): string {
               }
               className="mt-4 w-full rounded-2xl bg-blue-600 px-5 py-4 text-lg font-black text-white disabled:opacity-60"
             >
-              {isSaving ? "Ukladám..." : "💾 Uložiť do evidencie"}
+              {isSaving ? t("common.buttons.saving") : t("inbox.saveToEvidence")}
             </button>
           </div>
           )}
@@ -3289,17 +3372,16 @@ function formatDocDate(value: unknown): string {
           scanDocumentType !== "delivery_note" && (
           <div className="mt-8 space-y-4 rounded-3xl bg-surface-2 p-6">
             <h2 className="text-2xl font-black text-primary">
-              Načítané údaje — {DOCUMENT_TYPE_LABELS[scanDocumentType]}
+              {t("inbox.loadedData", { type: documentTypeLabels[scanDocumentType] })}
             </h2>
 
             {otherResult.reviewStatus === "needs_review" && (
               <p className="rounded-xl bg-amber-100 px-4 py-3 text-sm font-bold text-amber-900">
-                ⚠️ Tento dokument potrebuje kontrolu — AI si nie je istá
-                niektorými údajmi.
+                {t("inbox.aiUnsureWarningGeneric")}
               </p>
             )}
 
-            {REVIEW_ONLY_FIELD_LABELS[scanDocumentType].map(
+            {reviewOnlyFieldLabels[scanDocumentType].map(
               ([field, label]) => (
                 <div key={field}>
                   <label className="text-sm font-bold text-secondary">
@@ -3319,13 +3401,13 @@ function formatDocDate(value: unknown): string {
               scanDocumentType === "receipt") && (
               <div>
                 <label className="text-sm font-bold text-secondary">
-                  Poznámka (nepovinné)
+                  {t("inbox.noteOptionalLabel")}
                 </label>
                 <textarea
                   value={documentNote}
                   onChange={(e) => setDocumentNote(e.target.value)}
                   rows={3}
-                  placeholder="Napr. na čo bol nákup, kto ho schválil..."
+                  placeholder={t("inbox.notePlaceholder")}
                   className="mt-1 w-full rounded-xl border border-subtle bg-surface-1 px-4 py-3 outline-none"
                 />
               </div>
@@ -3337,15 +3419,13 @@ function formatDocDate(value: unknown): string {
             <div className="space-y-4 rounded-2xl border border-subtle bg-surface-1 p-5">
               <h3 className="text-lg font-black text-primary">
                 {scanDocumentType === "insurance"
-                  ? "Ku ktorému vozidlu/stroju PZP patrí?"
-                  : "Chcete dokument priradiť?"}
+                  ? t("inbox.assignmentQuestionPzp")
+                  : t("inbox.assignmentQuestionGeneric")}
               </h3>
 
               {scanDocumentType === "insurance" && insuranceMatchAmbiguous && (
                 <p className="rounded-xl bg-amber-500/10 p-3 text-sm font-semibold text-amber-400">
-                  ⚠️ Identifikátor z dokumentu (VIN/ŠPZ) zodpovedá viacerým
-                  vozidlám naraz — automaticky sme nič nevybrali. Vyber
-                  správne vozidlo ručne nižšie.
+                  {t("inbox.pzpAmbiguousWarning")}
                 </p>
               )}
 
@@ -3353,8 +3433,7 @@ function formatDocDate(value: unknown): string {
                 !insuranceMatchAmbiguous &&
                 assignmentTarget === null && (
                   <p className="rounded-xl bg-surface-2 p-3 text-sm text-muted-esblu">
-                    Vozidlo podľa VIN/ŠPZ z dokumentu sa nenašlo. Vyber ho
-                    ručne, alebo ak v evidencii ešte nie je, najprv ho pridaj.
+                    {t("inbox.pzpNoMatchHint")}
                   </p>
                 )}
 
@@ -3374,7 +3453,7 @@ function formatDocDate(value: unknown): string {
                       : "bg-surface-2 text-secondary"
                   }`}
                 >
-                  🚛 Vozidlo
+                  {t("inbox.assignVehicle")}
                 </button>
                 <button
                   type="button"
@@ -3385,7 +3464,7 @@ function formatDocDate(value: unknown): string {
                       : "bg-surface-2 text-secondary"
                   }`}
                 >
-                  🚜 Stroj
+                  {t("inbox.assignMachine")}
                 </button>
                 {scanDocumentType !== "insurance" && (
                   <button
@@ -3397,7 +3476,7 @@ function formatDocDate(value: unknown): string {
                         : "bg-surface-2 text-secondary"
                     }`}
                   >
-                    Bez priradenia
+                    {t("inbox.assignNone")}
                   </button>
                 )}
               </div>
@@ -3405,23 +3484,23 @@ function formatDocDate(value: unknown): string {
               {assignmentTarget === "vehicle" && (
                 <div>
                   <label className="text-sm font-bold text-secondary">
-                    Vozidlo
+                    {t("inbox.vehicleLabel")}
                   </label>
                   <select
                     value={selectedVehicleId}
                     onChange={(e) => setSelectedVehicleId(e.target.value)}
                     className="mt-1 w-full rounded-xl border border-subtle bg-surface-1 px-4 py-3 outline-none"
                   >
-                    <option value="">— vyber vozidlo —</option>
+                    <option value="">{t("inbox.chooseVehiclePlaceholder")}</option>
                     {vehicleOptions.map((vehicle) => (
                       <option key={vehicle.id} value={vehicle.id}>
-                        {vehicle.spz || "Bez ŠPZ"}
+                        {vehicle.spz || t("inbox.noPlateCapitalized")}
                       </option>
                     ))}
                   </select>
                   {vehicleOptions.length === 0 && (
                     <p className="mt-1 text-xs text-muted-esblu">
-                      Zatiaľ nemáš pridané žiadne vozidlo v module Vozidlá.
+                      {t("inbox.noVehiclesYet")}
                     </p>
                   )}
                 </div>
@@ -3430,23 +3509,23 @@ function formatDocDate(value: unknown): string {
               {assignmentTarget === "machine" && (
                 <div>
                   <label className="text-sm font-bold text-secondary">
-                    Stroj
+                    {t("inbox.machineLabel")}
                   </label>
                   <select
                     value={selectedMachineId}
                     onChange={(e) => setSelectedMachineId(e.target.value)}
                     className="mt-1 w-full rounded-xl border border-subtle bg-surface-1 px-4 py-3 outline-none"
                   >
-                    <option value="">— vyber stroj —</option>
+                    <option value="">{t("inbox.chooseMachinePlaceholder")}</option>
                     {machineOptions.map((machine) => (
                       <option key={machine.id} value={machine.id}>
-                        {machine.name || "Bez názvu"}
+                        {machine.name || t("inbox.noName")}
                       </option>
                     ))}
                   </select>
                   {machineOptions.length === 0 && (
                     <p className="mt-1 text-xs text-muted-esblu">
-                      Zatiaľ nemáš pridaný žiadny stroj v module Stroje.
+                      {t("inbox.noMachinesYet")}
                     </p>
                   )}
                 </div>
@@ -3467,28 +3546,28 @@ function formatDocDate(value: unknown): string {
               className="mt-4 w-full rounded-2xl bg-blue-600 px-5 py-4 text-lg font-black text-white disabled:opacity-60"
             >
               {isSavingOtherDocument
-                ? "Ukladám..."
+                ? t("common.buttons.saving")
                 : assignmentTarget === "vehicle"
-                  ? `💾 Uložiť k vozidlu${
-                      selectedVehicleId
+                  ? t("inbox.saveToVehicle", {
+                      suffix: selectedVehicleId
                         ? ` (${
                             vehicleOptions.find((v) => v.id === selectedVehicleId)
                               ?.spz || ""
                           })`
-                        : ""
-                    }`
+                        : "",
+                    })
                   : assignmentTarget === "machine"
-                    ? `💾 Uložiť k stroju${
-                        selectedMachineId
+                    ? t("inbox.saveToMachine", {
+                        suffix: selectedMachineId
                           ? ` (${
                               machineOptions.find((m) => m.id === selectedMachineId)
                                 ?.name || ""
                             })`
-                          : ""
-                      }`
+                          : "",
+                      })
                     : assignmentTarget === "none"
-                      ? "💾 Uložiť bez priradenia"
-                      : "💾 Najprv zvoľ priradenie"}
+                      ? t("inbox.saveWithoutAssignment")
+                      : t("inbox.chooseAssignmentFirst")}
             </button>
 
             <button
@@ -3497,7 +3576,7 @@ function formatDocDate(value: unknown): string {
               disabled={isSavingOtherDocument}
               className="mt-2 w-full rounded-2xl bg-surface-2 px-5 py-4 font-bold text-primary disabled:cursor-not-allowed disabled:opacity-60"
             >
-              Nahrať iný dokument
+              {t("inbox.uploadDifferentDocument")}
             </button>
           </div>
         )}
@@ -3505,13 +3584,13 @@ function formatDocDate(value: unknown): string {
          {records.length > 0 && (
   <div className="mt-10">
     <h2 className="mb-4 text-2xl font-bold text-primary">
-      Prehľad materiálu
+      {t("inbox.materialOverviewTitle")}
     </h2>
 
     <div className="grid gap-4 md:grid-cols-2">
       <div className="rounded-3xl border border-green-200 bg-surface-1 p-6 shadow-sm">
         <p className="text-sm font-bold uppercase tracking-wide text-green-400">
-          Dovoz
+          {t("inbox.importLabel")}
         </p>
 
         <p className="mt-2 text-4xl font-black text-primary">
@@ -3519,7 +3598,7 @@ function formatDocDate(value: unknown): string {
         </p>
 
         <p className="mt-1 text-sm text-secondary">
-          {summary.importCount} dokladov
+          {summary.importCount} {tCount("inbox.documentsCountSuffix", summary.importCount)}
         </p>
 
         <div className="mt-5 space-y-2">
@@ -3542,7 +3621,7 @@ function formatDocDate(value: unknown): string {
 
           {Object.keys(summary.importByMaterial).length === 0 && (
             <p className="text-sm text-muted-esblu">
-              Zatiaľ nie je evidovaný žiadny dovoz.
+              {t("inbox.noImportYet")}
             </p>
           )}
         </div>
@@ -3550,7 +3629,7 @@ function formatDocDate(value: unknown): string {
 
       <div className="rounded-3xl border border-orange-200 bg-surface-1 p-6 shadow-sm">
         <p className="text-sm font-bold uppercase tracking-wide text-orange-400">
-          Vývoz
+          {t("inbox.exportLabel")}
         </p>
 
         <p className="mt-2 text-4xl font-black text-primary">
@@ -3558,7 +3637,7 @@ function formatDocDate(value: unknown): string {
         </p>
 
         <p className="mt-1 text-sm text-secondary">
-          {summary.exportCount} dokladov
+          {summary.exportCount} {tCount("inbox.documentsCountSuffix", summary.exportCount)}
         </p>
 
         <div className="mt-5 space-y-2">
@@ -3581,7 +3660,7 @@ function formatDocDate(value: unknown): string {
 
           {Object.keys(summary.exportByMaterial).length === 0 && (
             <p className="text-sm text-muted-esblu">
-              Zatiaľ nie je evidovaný žiadny vývoz.
+              {t("inbox.noExportYet")}
             </p>
           )}
         </div>
@@ -3592,7 +3671,7 @@ function formatDocDate(value: unknown): string {
   {records.length > 0 && (
   <div className="mt-10">
     <h2 className="mb-4 text-2xl font-bold text-primary">
-      Prehľad podľa ŠPZ
+      {t("inbox.spzOverviewTitle")}
     </h2>
 
     <div className="space-y-5">
@@ -3605,7 +3684,7 @@ function formatDocDate(value: unknown): string {
             <div className="mb-5 flex items-center justify-between gap-4">
               <div>
                 <p className="text-xs font-bold uppercase tracking-wide text-blue-600">
-                  Vozidlo
+                  {t("inbox.vehicleGroupLabel")}
                 </p>
 
                 <h3 className="text-2xl font-black text-primary">
@@ -3614,16 +3693,18 @@ function formatDocDate(value: unknown): string {
               </div>
 
               <p className="text-sm text-muted-esblu">
-                {vehicleSummary.importCount +
-                  vehicleSummary.exportCount}{" "}
-                dokladov
+                {vehicleSummary.importCount + vehicleSummary.exportCount}{" "}
+                {tCount(
+                  "inbox.documentsCountSuffix",
+                  vehicleSummary.importCount + vehicleSummary.exportCount
+                )}
               </p>
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
               <div className="rounded-2xl bg-success-soft p-5">
                 <p className="text-sm font-bold uppercase text-green-400">
-                  Dovoz
+                  {t("inbox.importLabel")}
                 </p>
 
                 <p className="mt-2 text-3xl font-black text-primary">
@@ -3652,7 +3733,7 @@ function formatDocDate(value: unknown): string {
                     vehicleSummary.importByMaterial
                   ).length === 0 && (
                     <p className="text-sm text-muted-esblu">
-                      Žiadny dovoz.
+                      {t("inbox.noImportShort")}
                     </p>
                   )}
                 </div>
@@ -3660,7 +3741,7 @@ function formatDocDate(value: unknown): string {
 
               <div className="rounded-2xl bg-warning-soft p-5">
                 <p className="text-sm font-bold uppercase text-orange-400">
-                  Vývoz
+                  {t("inbox.exportLabel")}
                 </p>
 
                 <p className="mt-2 text-3xl font-black text-primary">
@@ -3689,7 +3770,7 @@ function formatDocDate(value: unknown): string {
                     vehicleSummary.exportByMaterial
                   ).length === 0 && (
                     <p className="text-sm text-muted-esblu">
-                      Žiadny vývoz.
+                      {t("inbox.noExportShort")}
                     </p>
                   )}
                 </div>
@@ -3704,7 +3785,7 @@ function formatDocDate(value: unknown): string {
     {records.length > 0 && (
       <div className="mt-10">
     <h2 className="mb-4 text-2xl font-bold text-primary">
-      Uložené doklady
+      {t("inbox.savedDocumentsTitle")}
     </h2>
 
     <div className="mt-5 space-y-3">
@@ -3717,7 +3798,7 @@ function formatDocDate(value: unknown): string {
       <div className="flex items-center justify-between gap-4">
         <div>
           <p className="text-xs font-black uppercase tracking-wide text-blue-600">
-            🚛 Vozidlo
+            {t("inbox.assignVehicle")}
           </p>
 
           <h3 className="mt-2 text-2xl font-black text-primary">
@@ -3725,7 +3806,7 @@ function formatDocDate(value: unknown): string {
           </h3>
 
           <p className="mt-1 text-sm text-secondary">
-            {items.length} {items.length === 1 ? "doklad" : "dokladov"}
+            {items.length} {tCount("inbox.documentsCountSuffix", items.length)}
           </p>
         </div>
 
@@ -3733,7 +3814,7 @@ function formatDocDate(value: unknown): string {
           onClick={() => setSelectedSpz(spz)}
           className="rounded-2xl bg-blue-600 px-4 py-3 font-bold text-white"
         >
-          Otvoriť
+          {t("inbox.open")}
         </button>
       </div>
     </div>
@@ -3745,7 +3826,7 @@ function formatDocDate(value: unknown): string {
       onClick={() => setSelectedSpz(null)}
       className="mb-4 rounded-2xl bg-surface-2 px-4 py-3 font-bold text-secondary"
     >
-      ← Späť na všetky ŠPZ
+      {t("inbox.backToAllPlates")}
     </button>
 
     <h3 className="mb-4 text-2xl font-bold text-primary">
@@ -3761,30 +3842,30 @@ function formatDocDate(value: unknown): string {
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="text-xs font-black uppercase tracking-wide text-blue-600">
-                📄 {record.document_type || "Doklad"}
+                📄 {record.document_type || t("inbox.documentFallback")}
               </p>
 
               <h3 className="mt-2 text-xl font-black text-primary">
-                {record.spz || "Bez ŠPZ"}
+                {record.spz || t("inbox.noPlateCapitalized")}
               </h3>
             </div>
 
             <span className="rounded-full bg-info-soft px-3 py-1 text-xs font-bold text-blue-700">
-              {record.movement_type || "nezaradené"}
+              {record.movement_type || t("inbox.unclassified")}
             </span>
           </div>
 
           <div className="mt-4 space-y-2 text-sm text-secondary">
-            <p>🏗️ {record.construction_site || "Bez stavby"}</p>
-            <p>🏢 {record.supplier || "Bez dodávateľa"}</p>
-            <p>👤 {record.customer || "Bez zákazníka"}</p>
-            <p>📦 {record.material || "Bez materiálu"}</p>
+            <p>🏗️ {record.construction_site || t("inbox.noConstructionSite")}</p>
+            <p>🏢 {record.supplier || t("inbox.noSupplier")}</p>
+            <p>👤 {record.customer || t("inbox.noCustomer")}</p>
+            <p>📦 {record.material || t("inbox.noMaterial")}</p>
             <p>
               ⚖️{" "}
-              {formatRecordWeight(record)}
+              {formatRecordWeight(record, t)}
             </p>
             <p>
-              📅 {record.document_date || "Bez dátumu"}{" "}
+              📅 {record.document_date || t("inbox.noDate")}{" "}
               {record.document_time || ""}
             </p>
           </div>
@@ -3793,7 +3874,7 @@ function formatDocDate(value: unknown): string {
             onClick={() => setSelectedRecord(record)}
             className="mt-5 w-full rounded-2xl bg-blue-600 px-4 py-3 font-bold text-white hover:bg-blue-700"
           >
-            📄 Otvoriť detail
+            {t("inbox.openDetail")}
           </button>
         </div>
       ))}
@@ -3808,10 +3889,10 @@ function formatDocDate(value: unknown): string {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-2xl font-black text-primary">
-            Export dokumentov
+            {t("inbox.exportDocumentsTitle")}
           </h2>
           <p className="mt-1 text-sm text-secondary">
-            Exportuje všetky načítané dokumenty rozdelené podľa ŠPZ.
+            {t("inbox.exportDocumentsDescription")}
           </p>
         </div>
 
@@ -3822,13 +3903,13 @@ function formatDocDate(value: unknown): string {
           aria-busy={exportLoading}
           className="rounded-2xl bg-emerald-600 px-5 py-4 font-black text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {exportLoading ? "Generujem Excel..." : "Exportovať dokumenty"}
+          {exportLoading ? t("inbox.generatingExcel") : t("inbox.exportDocuments")}
         </button>
       </div>
 
       {visibleDocuments.length === 0 && (
         <p className="mt-4 rounded-xl bg-warning-soft px-4 py-3 text-sm font-semibold text-amber-400">
-          Nie sú dostupné žiadne dokumenty na export.
+          {t("inbox.errors.noDocumentsToExport")}
         </p>
       )}
 
@@ -3850,7 +3931,7 @@ function formatDocDate(value: unknown): string {
     {!openFolder && (
       <div className="mt-10">
         <h2 className="text-2xl font-black text-primary">
-          Zložky
+          {t("inbox.foldersTitle")}
         </h2>
 
         <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -3860,10 +3941,10 @@ function formatDocDate(value: unknown): string {
             className="rounded-3xl border border-subtle bg-surface-1 p-5 text-left shadow-sm transition hover:border-blue-300"
           >
             <p className="text-3xl">🧾</p>
-            <h3 className="mt-2 text-xl font-black text-primary">Bločky</h3>
+            <h3 className="mt-2 text-xl font-black text-primary">{t("inbox.receiptsFolderTitle")}</h3>
             <p className="mt-1 text-sm text-secondary">
               {unassignedReceipts.length}{" "}
-              {unassignedReceipts.length === 1 ? "nepriradený bloček" : "nepriradených bločkov"}
+              {tCount("inbox.unassignedReceiptsCount", unassignedReceipts.length)}
             </p>
           </button>
 
@@ -3873,10 +3954,10 @@ function formatDocDate(value: unknown): string {
             className="rounded-3xl border border-subtle bg-surface-1 p-5 text-left shadow-sm transition hover:border-blue-300"
           >
             <p className="text-3xl">📃</p>
-            <h3 className="mt-2 text-xl font-black text-primary">Faktúry</h3>
+            <h3 className="mt-2 text-xl font-black text-primary">{t("inbox.invoicesFolderTitle")}</h3>
             <p className="mt-1 text-sm text-secondary">
               {unassignedInvoices.length}{" "}
-              {unassignedInvoices.length === 1 ? "nepriradená faktúra" : "nepriradených faktúr"}
+              {tCount("inbox.unassignedInvoicesCount", unassignedInvoices.length)}
             </p>
           </button>
         </div>
@@ -3892,17 +3973,19 @@ function formatDocDate(value: unknown): string {
           }}
           className="mb-4 rounded-2xl bg-surface-2 px-4 py-3 font-bold text-secondary"
         >
-          ← Späť na zložky
+          {t("inbox.backToFolders")}
         </button>
 
         <div className="flex flex-col gap-4 rounded-3xl border border-subtle bg-surface-1 p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:p-6">
           <div>
             <h2 className="text-2xl font-black text-primary">
-              {openFolder === "receipt" ? "🧾 Bločky" : "📃 Faktúry"}
+              {openFolder === "receipt"
+                ? `🧾 ${t("inbox.receiptsFolderTitle")}`
+                : `📃 ${t("inbox.invoicesFolderTitle")}`}
             </h2>
             <p className="mt-1 text-sm text-secondary">
               {openFolderDocuments.length}{" "}
-              {openFolderDocuments.length === 1 ? "nepriradený dokument" : "nepriradených dokumentov"}
+              {tCount("inbox.unassignedDocumentsCount", openFolderDocuments.length)}
             </p>
           </div>
 
@@ -3914,7 +3997,7 @@ function formatDocDate(value: unknown): string {
             aria-busy={folderExportLoading}
             className="rounded-2xl bg-emerald-600 px-5 py-4 font-black text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {folderExportLoading ? "Generujem Excel..." : "Exportovať zložku"}
+            {folderExportLoading ? t("inbox.generatingExcel") : t("inbox.exportFolder")}
           </button>
           )}
         </div>
@@ -3933,7 +4016,7 @@ function formatDocDate(value: unknown): string {
 
         {openFolderDocuments.length === 0 ? (
           <p className="mt-4 rounded-xl bg-surface-2 px-4 py-3 text-sm text-secondary">
-            Zatiaľ tu nie sú žiadne nepriradené dokumenty.
+            {t("inbox.noUnassignedDocuments")}
           </p>
         ) : (
           <div className="mt-4 space-y-3">
@@ -3948,11 +4031,11 @@ function formatDocDate(value: unknown): string {
                     <div>
                       {openFolder === "receipt" ? (
                         <h3 className="text-lg font-black text-primary">
-                          {(fields.merchant as string) || "Bez obchodníka"}
+                          {(fields.merchant as string) || t("inbox.noMerchant")}
                         </h3>
                       ) : (
                         <h3 className="text-lg font-black text-primary">
-                          {(fields.supplier as string) || "Bez dodávateľa"}
+                          {(fields.supplier as string) || t("inbox.noSupplier")}
                         </h3>
                       )}
                       <p className="mt-1 text-sm text-secondary">
@@ -3967,7 +4050,7 @@ function formatDocDate(value: unknown): string {
 
                     {doc.status === "needs_review" && (
                       <span className="rounded-full bg-warning-soft px-3 py-1 text-xs font-bold text-amber-400">
-                        na kontrolu
+                        {t("inbox.needsReview")}
                       </span>
                     )}
                   </div>
@@ -3977,7 +4060,7 @@ function formatDocDate(value: unknown): string {
                     {openFolder === "invoice" && (
                       <p>
                         🔢{" "}
-                        {(fields.invoiceNumber as string) || "Bez čísla faktúry"}
+                        {(fields.invoiceNumber as string) || t("inbox.noInvoiceNumber")}
                       </p>
                     )}
                     {doc.note && <p>📝 {doc.note}</p>}
@@ -3987,7 +4070,7 @@ function formatDocDate(value: unknown): string {
                     onClick={() => setSelectedOtherDocument(doc)}
                     className="mt-5 w-full rounded-2xl bg-blue-600 px-4 py-3 font-bold text-white hover:bg-blue-700"
                   >
-                    📄 Otvoriť detail
+                    {t("inbox.openDetail")}
                   </button>
                 </div>
               );
@@ -3999,15 +4082,15 @@ function formatDocDate(value: unknown): string {
 
     <div className="mt-10">
       <h2 className="text-2xl font-black text-primary">
-        Ostatné dokumenty
+        {t("inbox.otherDocumentsTitle")}
       </h2>
       <p className="mt-1 text-sm text-secondary">
-        PZP, servisné doklady, ostatné dokumenty a priradené faktúry/bločky uložené cez Inbox.
+        {t("inbox.otherDocumentsDescription")}
       </p>
 
       {otherDocumentsFlatList.length === 0 ? (
         <p className="mt-4 rounded-xl bg-surface-2 px-4 py-3 text-sm text-secondary">
-          Zatiaľ tu nie sú žiadne uložené dokumenty.
+          {t("inbox.noSavedDocuments")}
         </p>
       ) : (
         <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -4020,9 +4103,9 @@ function formatDocDate(value: unknown): string {
                 <div>
                   <p className="text-xs font-black uppercase tracking-wide text-blue-600">
                     📄{" "}
-                    {DOCUMENT_TYPE_LABELS[doc.document_type as ScanDocumentType] ||
+                    {documentTypeLabels[doc.document_type as ScanDocumentType] ||
                       doc.document_type ||
-                      "Doklad"}
+                      t("inbox.documentFallback")}
                   </p>
 
                   <h3 className="mt-2 text-lg font-black text-primary">
@@ -4032,7 +4115,7 @@ function formatDocDate(value: unknown): string {
 
                 {doc.status === "needs_review" && (
                   <span className="rounded-full bg-warning-soft px-3 py-1 text-xs font-bold text-amber-400">
-                    na kontrolu
+                    {t("inbox.needsReview")}
                   </span>
                 )}
               </div>
@@ -4042,8 +4125,8 @@ function formatDocDate(value: unknown): string {
                 <p>
                   📅{" "}
                   {doc.created_at
-                    ? new Date(doc.created_at).toLocaleDateString("sk-SK")
-                    : "Bez dátumu"}
+                    ? formatDate(doc.created_at, locale)
+                    : t("inbox.noDate")}
                 </p>
               </div>
 
@@ -4051,7 +4134,7 @@ function formatDocDate(value: unknown): string {
                 onClick={() => setSelectedOtherDocument(doc)}
                 className="mt-5 w-full rounded-2xl bg-blue-600 px-4 py-3 font-bold text-white hover:bg-blue-700"
               >
-                📄 Otvoriť detail
+                {t("inbox.openDetail")}
               </button>
             </div>
           ))}
@@ -4065,7 +4148,7 @@ function formatDocDate(value: unknown): string {
 
       <div className="flex items-center justify-between">
         <h2 className="text-3xl font-black">
-          📄 Detail dokumentu
+          {t("inbox.documentDetailTitle")}
         </h2>
 
         <button
@@ -4078,39 +4161,43 @@ function formatDocDate(value: unknown): string {
 
       <div className="mt-8 grid grid-cols-2 gap-4">
 
-        <Info title="Typ" value={selectedRecord.document_type} />
-        <Info title="Pohyb" value={selectedRecord.movement_type} />
+        <Info title={t("inbox.typeLabel")} value={selectedRecord.document_type} />
+        <Info title={t("inbox.movementLabel")} value={selectedRecord.movement_type} />
         <Info
-          title="Priradenie"
+          title={t("inbox.assignmentLabel")}
           value={
             selectedRecord.vehicle_id
-              ? `Vozidlo${selectedRecord.spz ? ` — ${selectedRecord.spz}` : ""}`
+              ? selectedRecord.spz
+                ? t("inbox.vehicleAssignment", { value: selectedRecord.spz })
+                : t("inbox.vehicleGroupLabel")
               : selectedRecord.machine_id
-                ? `Stroj${selectedRecord.machine_label ? ` — ${selectedRecord.machine_label}` : ""}`
-                : "Bez priradenia"
+                ? selectedRecord.machine_label
+                  ? t("inbox.machineAssignment", { value: selectedRecord.machine_label })
+                  : t("inbox.machineLabel")
+                : t("inbox.noAssignment")
           }
         />
-        <Info title="SPZ" value={selectedRecord.spz} />
-        <Info title="Dodávateľ" value={selectedRecord.supplier} />
-        <Info title="Zákazník" value={selectedRecord.customer} />
-        <Info title="Stavba" value={selectedRecord.construction_site} />
-        <Info title="Materiál" value={selectedRecord.material} />
-        <Info title="Množstvo" value={selectedRecord.quantity} />
-        <Info title="Brutto" value={selectedRecord.brutto} />
-        <Info title="Tara" value={selectedRecord.tara} />
-        <Info title="Netto" value={selectedRecord.netto} />
+        <Info title={t("inbox.plateLabel")} value={selectedRecord.spz} />
+        <Info title={t("inbox.supplierLabel")} value={selectedRecord.supplier} />
+        <Info title={t("inbox.customerLabel")} value={selectedRecord.customer} />
+        <Info title={t("inbox.constructionSiteLabel")} value={selectedRecord.construction_site} />
+        <Info title={t("inbox.materialLabel")} value={selectedRecord.material} />
+        <Info title={t("inbox.quantityLabel")} value={selectedRecord.quantity} />
+        <Info title={t("inbox.bruttoLabel")} value={selectedRecord.brutto} />
+        <Info title={t("inbox.taraLabel")} value={selectedRecord.tara} />
+        <Info title={t("inbox.nettoLabel")} value={selectedRecord.netto} />
         <Info
-          title="Jednotka"
-          value={normalizeWeightUnit(selectedRecord.unit) || "bez jednotky"}
+          title={t("inbox.unitLabel")}
+          value={normalizeWeightUnit(selectedRecord.unit) || t("inbox.withoutUnit")}
         />
-        <Info title="Dátum" value={selectedRecord.document_date} />
-        <Info title="Čas" value={selectedRecord.document_time} />
+        <Info title={t("inbox.dateLabel")} value={selectedRecord.document_date} />
+        <Info title={t("inbox.timeLabel")} value={selectedRecord.document_time} />
 
       </div>
       {selectedRecord.photo_url && (
   <div className="mt-5">
     <p className="mb-2 text-sm font-bold text-secondary">
-      Originálny dokument
+      {t("inbox.originalDocument")}
     </p>
 
     {documentPhotoUrl ? (
@@ -4121,13 +4208,13 @@ function formatDocDate(value: unknown): string {
       >
         <img
           src={documentPhotoUrl}
-          alt="Originálny dokument"
+          alt={t("inbox.originalDocument")}
           className="max-h-[500px] w-full rounded-2xl border border-subtle object-contain"
         />
       </a>
     ) : (
       <p className="text-sm text-muted-esblu">
-        Načítavam fotografiu...
+        {t("inbox.loadingPhoto")}
       </p>
     )}
   </div>
@@ -4136,14 +4223,14 @@ function formatDocDate(value: unknown): string {
         onClick={() => setSelectedRecord(null)}
         className="mt-8 w-full rounded-2xl bg-blue-600 py-4 font-bold text-white"
       > 
-        Zavrieť
+        {t("inbox.close")}
       </button>
 {isOwnerOrAdmin(role) && (
 <button
   onClick={() => deleteRecord(selectedRecord.id)}
   className="mt-3 w-full rounded-2xl bg-red-600 py-4 font-bold text-white"
 >
-  🗑 Vymazať záznam
+  {t("inbox.deleteRecord")}
 </button>
 )}
     </div>
@@ -4155,7 +4242,7 @@ function formatDocDate(value: unknown): string {
 
       <div className="flex items-center justify-between">
         <h2 className="text-3xl font-black">
-          📄 Detail dokumentu
+          {t("inbox.documentDetailTitle")}
         </h2>
 
         <button
@@ -4169,20 +4256,20 @@ function formatDocDate(value: unknown): string {
       <div className="mt-8 grid grid-cols-2 gap-4">
 
         <Info
-          title="Typ"
+          title={t("inbox.typeLabel")}
           value={
-            DOCUMENT_TYPE_LABELS[
+            documentTypeLabels[
               selectedOtherDocument.document_type as ScanDocumentType
             ] || selectedOtherDocument.document_type
           }
         />
         <Info
-          title="Priradenie"
+          title={t("inbox.assignmentLabel")}
           value={describeDocumentAssignment(selectedOtherDocument)}
         />
 
         {(
-          REVIEW_ONLY_FIELD_LABELS[
+          reviewOnlyFieldLabels[
             selectedOtherDocument.document_type as OtherDocumentType
           ] || []
         ).map(([field, label]) => (
@@ -4194,10 +4281,10 @@ function formatDocDate(value: unknown): string {
         ))}
 
         <Info
-          title="Vytvorené"
+          title={t("inbox.createdLabel")}
           value={
             selectedOtherDocument.created_at
-              ? new Date(selectedOtherDocument.created_at).toLocaleString("sk-SK")
+              ? formatDateTime(selectedOtherDocument.created_at, locale)
               : null
           }
         />
@@ -4206,7 +4293,7 @@ function formatDocDate(value: unknown): string {
 
       {selectedOtherDocument.note && (
         <div className="mt-5 rounded-2xl bg-warning-soft p-4">
-          <p className="text-sm font-bold text-amber-400">📝 Poznámka</p>
+          <p className="text-sm font-bold text-amber-400">{t("inbox.noteLabel")}</p>
           <p className="mt-1 whitespace-pre-wrap text-sm text-amber-400">
             {selectedOtherDocument.note}
           </p>
@@ -4216,7 +4303,7 @@ function formatDocDate(value: unknown): string {
       {selectedOtherDocument.storage_path && (
         <div className="mt-5">
           <p className="mb-2 text-sm font-bold text-secondary">
-            Originálny dokument
+            {t("inbox.originalDocument")}
           </p>
 
           {otherDocumentPhotoUrl ? (
@@ -4227,13 +4314,13 @@ function formatDocDate(value: unknown): string {
             >
               <img
                 src={otherDocumentPhotoUrl}
-                alt="Originálny dokument"
+                alt={t("inbox.originalDocument")}
                 className="max-h-[500px] w-full rounded-2xl border border-subtle object-contain"
               />
             </a>
           ) : (
             <p className="text-sm text-muted-esblu">
-              Načítavam fotografiu...
+              {t("inbox.loadingPhoto")}
             </p>
           )}
 
@@ -4243,14 +4330,14 @@ function formatDocDate(value: unknown): string {
               onClick={() => downloadOriginal(selectedOtherDocument)}
               className="rounded-2xl bg-surface-2 px-4 py-3 font-bold text-primary"
             >
-              ⬇️ Stiahnuť
+              {t("inbox.download")}
             </button>
             <button
               type="button"
               onClick={() => printOriginal(selectedOtherDocument)}
               className="rounded-2xl bg-surface-2 px-4 py-3 font-bold text-primary"
             >
-              🖨️ Tlačiť
+              {t("inbox.print")}
             </button>
           </div>
         </div>
@@ -4258,17 +4345,16 @@ function formatDocDate(value: unknown): string {
 
       {selectedOtherDocument.document_type === "insurance" && (
         <div className="mt-6 rounded-2xl border border-subtle p-4">
-          <p className="text-sm font-black text-primary">📎 Prílohy</p>
+          <p className="text-sm font-black text-primary">{t("inbox.attachmentsTitle")}</p>
           <p className="mt-1 text-xs text-muted-esblu">
-            Biela karta, zelená karta, záznam o poistnej udalosti alebo iný
-            súvisiaci dokument k tomuto PZP.
+            {t("inbox.attachmentsDescription")}
           </p>
 
           {attachmentsLoading ? (
-            <p className="mt-3 text-sm text-muted-esblu">Načítavam prílohy...</p>
+            <p className="mt-3 text-sm text-muted-esblu">{t("inbox.loadingAttachments")}</p>
           ) : attachments.length === 0 ? (
             <p className="mt-3 text-sm text-muted-esblu">
-              Zatiaľ tu nie sú žiadne prílohy.
+              {t("inbox.noAttachmentsYet")}
             </p>
           ) : (
             <div className="mt-3 space-y-2">
@@ -4279,11 +4365,11 @@ function formatDocDate(value: unknown): string {
                 >
                   <div className="min-w-0">
                     <p className="truncate text-sm font-bold text-primary">
-                      {ATTACHMENT_TYPE_LABELS[attachment.attachment_type] ||
-                        "Iný súvisiaci dokument"}
+                      {attachmentTypeLabels[attachment.attachment_type] ||
+                        t("inbox.attachmentTypes.other")}
                     </p>
                     <p className="truncate text-xs text-muted-esblu">
-                      {attachment.original_filename || "bez názvu"}
+                      {attachment.original_filename || t("inbox.noAttachmentName")}
                     </p>
                   </div>
 
@@ -4293,7 +4379,7 @@ function formatDocDate(value: unknown): string {
                       onClick={() => openAttachment(attachment)}
                       className="rounded-xl bg-blue-600 px-3 py-2 text-xs font-bold text-white"
                     >
-                      Otvoriť
+                      {t("inbox.open")}
                     </button>
                     {isOwnerOrAdmin(role) && (
                       <button
@@ -4303,8 +4389,8 @@ function formatDocDate(value: unknown): string {
                         className="rounded-xl bg-danger-soft px-3 py-2 text-xs font-bold text-red-700 disabled:opacity-50"
                       >
                         {deletingAttachmentId === attachment.id
-                          ? "Mažem..."
-                          : "Vymazať"}
+                          ? t("inbox.deleting")
+                          : t("inbox.delete")}
                       </button>
                     )}
                   </div>
@@ -4319,7 +4405,7 @@ function formatDocDate(value: unknown): string {
               onChange={(e) => setNewAttachmentType(e.target.value)}
               className="rounded-xl border border-subtle bg-surface-1 px-3 py-3 text-sm outline-none sm:flex-1"
             >
-              {Object.entries(ATTACHMENT_TYPE_LABELS).map(([value, label]) => (
+              {Object.entries(attachmentTypeLabels).map(([value, label]) => (
                 <option key={value} value={value}>
                   {label}
                 </option>
@@ -4333,7 +4419,7 @@ function formatDocDate(value: unknown): string {
                   : "cursor-pointer bg-blue-600 text-white"
               }`}
             >
-              {isUploadingAttachment ? "Nahrávam..." : "+ Pridať prílohu"}
+              {isUploadingAttachment ? t("inbox.uploading") : t("inbox.addAttachment")}
               <input
                 type="file"
                 accept="image/jpeg,image/png,image/webp,application/pdf"
@@ -4350,7 +4436,7 @@ function formatDocDate(value: unknown): string {
         onClick={() => setSelectedOtherDocument(null)}
         className="mt-8 w-full rounded-2xl bg-blue-600 py-4 font-bold text-white"
       >
-        Zavrieť
+        {t("inbox.close")}
       </button>
 
       {isOwnerOrAdmin(role) && (
@@ -4360,8 +4446,8 @@ function formatDocDate(value: unknown): string {
         className="mt-3 w-full rounded-2xl bg-red-600 py-4 font-bold text-white disabled:opacity-60"
       >
         {deletingDocumentId === selectedOtherDocument.id
-          ? "Mažem..."
-          : "🗑 Vymazať dokument"}
+          ? t("inbox.deleting")
+          : t("inbox.deleteDocument")}
       </button>
       )}
     </div>

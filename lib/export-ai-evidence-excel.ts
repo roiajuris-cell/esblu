@@ -5,6 +5,13 @@ import {
   getEffectiveNetto,
   parseWeightValue,
 } from "@/lib/weight-utils";
+import type { Locale } from "@/lib/i18n/locales";
+import { toIntlLocale } from "@/lib/i18n/format";
+
+type TranslateFn = (
+  key: string,
+  vars?: Record<string, string | number>
+) => string;
 
 export { normalizeWeightUnit } from "@/lib/normalize-weight-unit";
 
@@ -51,28 +58,31 @@ type VehicleNettoSummary = {
   unknownUnits: Map<string, UnknownUnitSummary>;
 };
 
-const DETAIL_HEADERS = [
-  "Typ dokumentu",
-  "Dátum dokumentu",
-  "Číslo dokumentu",
-  "ŠPZ",
-  "Dodávateľ",
-  "Zákazník",
-  "Materiál",
-  "Pôvodný názov materiálu",
-  "Kategória materiálu",
-  "Brutto",
-  "Tara",
-  "Netto",
-  "Jednotka",
-  "Smer pohybu",
-  "Stavba / miesto",
-  "Zdrojové miesto",
-  "Cieľové miesto",
-  "Cesta dokumentu",
-  "Rozpoznaný text",
-  "Dátum vytvorenia záznamu",
-] as const;
+function getDetailHeaders(t: TranslateFn): string[] {
+  const h = "xlsxExport.evidence.detailHeaders";
+  return [
+    t(`${h}.documentType`),
+    t(`${h}.documentDate`),
+    t(`${h}.documentNumber`),
+    t(`${h}.spz`),
+    t(`${h}.supplier`),
+    t(`${h}.customer`),
+    t(`${h}.material`),
+    t(`${h}.materialOriginal`),
+    t(`${h}.materialCategory`),
+    t(`${h}.brutto`),
+    t(`${h}.tara`),
+    t(`${h}.netto`),
+    t(`${h}.unit`),
+    t(`${h}.movementDirection`),
+    t(`${h}.constructionSite`),
+    t(`${h}.sourceLocation`),
+    t(`${h}.destinationLocation`),
+    t(`${h}.documentPath`),
+    t(`${h}.rawText`),
+    t(`${h}.recordCreatedAt`),
+  ];
+}
 
 const HEADER_FILL = "1D4ED8";
 const HEADER_TEXT = "FFFFFF";
@@ -191,18 +201,24 @@ function addSummaryTable(
   startRow: number,
   title: string,
   firstHeader: string,
-  values: ReadonlyMap<string, number>
+  values: ReadonlyMap<string, number>,
+  t: TranslateFn,
+  intlLocale: string
 ): number {
   worksheet.getCell(startRow, 1).value = title;
   worksheet.mergeCells(startRow, 1, startRow, 3);
   styleSectionTitle(worksheet, startRow);
 
   const headerRow = startRow + 1;
-  worksheet.getRow(headerRow).values = [firstHeader, "Netto", "Jednotka"];
+  worksheet.getRow(headerRow).values = [
+    firstHeader,
+    t("xlsxExport.evidence.detailHeaders.netto"),
+    t("xlsxExport.evidence.detailHeaders.unit"),
+  ];
   styleHeaderRow(worksheet, headerRow);
 
   const sortedValues = [...values.entries()].sort(([left], [right]) =>
-    left.localeCompare(right, "sk")
+    left.localeCompare(right, intlLocale)
   );
 
   sortedValues.forEach(([label, netto], index) => {
@@ -212,8 +228,9 @@ function addSummaryTable(
   });
 
   if (sortedValues.length === 0) {
-    worksheet.getCell(headerRow + 1, 1).value =
-      "Žiadne platné netto v kg alebo t";
+    worksheet.getCell(headerRow + 1, 1).value = t(
+      "xlsxExport.evidence.noValidNetto"
+    );
   }
 
   return headerRow + Math.max(sortedValues.length, 1) + 2;
@@ -222,23 +239,26 @@ function addSummaryTable(
 function addUnknownUnitsTable(
   worksheet: Worksheet,
   startRow: number,
-  values: ReadonlyMap<string, UnknownUnitSummary>
+  values: ReadonlyMap<string, UnknownUnitSummary>,
+  t: TranslateFn,
+  intlLocale: string
 ) {
-  worksheet.getCell(startRow, 1).value =
-    "Neznáme jednotky – nezahrnuté do súčtov v t";
+  worksheet.getCell(startRow, 1).value = t(
+    "xlsxExport.evidence.unknownUnitsTitle"
+  );
   worksheet.mergeCells(startRow, 1, startRow, 3);
   styleSectionTitle(worksheet, startRow);
 
   const headerRow = startRow + 1;
   worksheet.getRow(headerRow).values = [
-    "Pôvodná jednotka",
-    "Počet záznamov",
-    "Súčet netto v pôvodnej jednotke",
+    t("xlsxExport.evidence.unknownUnitsHeaders.originalUnit"),
+    t("xlsxExport.evidence.unknownUnitsHeaders.recordCount"),
+    t("xlsxExport.evidence.unknownUnitsHeaders.nettoSumOriginalUnit"),
   ];
   styleHeaderRow(worksheet, headerRow);
 
   const sortedValues = [...values.values()].sort((left, right) =>
-    left.label.localeCompare(right.label, "sk")
+    left.label.localeCompare(right.label, intlLocale)
   );
 
   sortedValues.forEach((summary, index) => {
@@ -249,12 +269,15 @@ function addUnknownUnitsTable(
   });
 
   if (sortedValues.length === 0) {
-    worksheet.getCell(headerRow + 1, 1).value = "Žiadne neznáme jednotky";
+    worksheet.getCell(headerRow + 1, 1).value = t(
+      "xlsxExport.evidence.noUnknownUnits"
+    );
   }
 }
 
 function calculateVehicleNettoSummary(
-  records: readonly AiEvidenceExcelRecord[]
+  records: readonly AiEvidenceExcelRecord[],
+  t: TranslateFn
 ): VehicleNettoSummary {
   const summary: VehicleNettoSummary = {
     totalImportTons: 0,
@@ -269,7 +292,8 @@ function calculateVehicleNettoSummary(
 
     const tons = convertWeightToTons(effectiveNetto, record.unit);
     if (tons === null) {
-      const unitLabel = record.unit?.trim() || "Bez jednotky";
+      const unitLabel =
+        record.unit?.trim() || t("xlsxExport.evidence.withoutUnit");
       const unitKey = normalizeText(unitLabel) || "bez jednotky";
       const current = summary.unknownUnits.get(unitKey) ?? {
         label: unitLabel,
@@ -299,18 +323,22 @@ function calculateVehicleNettoSummary(
 function addVehicleSummary(
   worksheet: Worksheet,
   startRow: number,
-  records: readonly AiEvidenceExcelRecord[]
+  records: readonly AiEvidenceExcelRecord[],
+  t: TranslateFn,
+  intlLocale: string
 ) {
-  const summary = calculateVehicleNettoSummary(records);
+  const summary = calculateVehicleNettoSummary(records, t);
 
-  worksheet.getCell(startRow, 1).value = "Súhrn vozidla";
+  worksheet.getCell(startRow, 1).value = t(
+    "xlsxExport.evidence.vehicleSummaryTitle"
+  );
   worksheet.mergeCells(startRow, 1, startRow, 3);
   styleSectionTitle(worksheet, startRow);
 
   const summaryRows = [
-    ["Celkový dovoz netto", summary.totalImportTons, "t"],
-    ["Celkový vývoz netto", summary.totalExportTons, "t"],
-    ["Celkové netto spolu", summary.totalTons, "t"],
+    [t("xlsxExport.evidence.totalImportNetto"), summary.totalImportTons, "t"],
+    [t("xlsxExport.evidence.totalExportNetto"), summary.totalExportTons, "t"],
+    [t("xlsxExport.evidence.totalNettoCombined"), summary.totalTons, "t"],
   ] as const;
 
   summaryRows.forEach((values, index) => {
@@ -320,47 +348,54 @@ function addVehicleSummary(
     row.getCell(2).numFmt = "#,##0.000";
   });
 
-  addUnknownUnitsTable(worksheet, startRow + 5, summary.unknownUnits);
+  addUnknownUnitsTable(worksheet, startRow + 5, summary.unknownUnits, t, intlLocale);
 }
 
-function getSpzGroupName(record: AiEvidenceExcelRecord): string {
-  return normalizeSpz(record.spz) || "Bez ŠPZ";
+function getSpzGroupName(record: AiEvidenceExcelRecord, t: TranslateFn): string {
+  return normalizeSpz(record.spz) || t("xlsxExport.evidence.withoutSpz");
 }
 
-function sanitizeWorksheetName(name: string): string {
+function sanitizeWorksheetName(name: string, t: TranslateFn): string {
   const sanitized = name
     .replace(/[\\/*?:[\]]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 
-  return (sanitized || "Bez ŠPZ").slice(0, 31);
+  return (sanitized || t("xlsxExport.evidence.withoutSpz")).slice(0, 31);
 }
 
-function getUniqueWorksheetName(baseName: string, usedNames: Set<string>) {
-  const sanitizedBase = sanitizeWorksheetName(baseName);
+function getUniqueWorksheetName(
+  baseName: string,
+  usedNames: Set<string>,
+  t: TranslateFn,
+  intlLocale: string
+) {
+  const sanitizedBase = sanitizeWorksheetName(baseName, t);
   let candidate = sanitizedBase;
   let suffixNumber = 2;
 
-  while (usedNames.has(candidate.toLocaleLowerCase("sk"))) {
+  while (usedNames.has(candidate.toLocaleLowerCase(intlLocale))) {
     const suffix = ` (${suffixNumber})`;
     candidate = `${sanitizedBase.slice(0, 31 - suffix.length)}${suffix}`;
     suffixNumber += 1;
   }
 
-  usedNames.add(candidate.toLocaleLowerCase("sk"));
+  usedNames.add(candidate.toLocaleLowerCase(intlLocale));
   return candidate;
 }
 
 function addDocumentSheet(
   workbook: Workbook,
   sheetName: string,
-  records: readonly AiEvidenceExcelRecord[]
+  records: readonly AiEvidenceExcelRecord[],
+  t: TranslateFn,
+  intlLocale: string
 ) {
   const detailSheet = workbook.addWorksheet(sheetName, {
     views: [{ state: "frozen", ySplit: 1 }],
   });
 
-  detailSheet.addRow([...DETAIL_HEADERS]);
+  detailSheet.addRow(getDetailHeaders(t));
   styleHeaderRow(detailSheet, 1);
   detailSheet.autoFilter = "A1:T1";
 
@@ -400,7 +435,7 @@ function addDocumentSheet(
   detailSheet.getColumn(2).numFmt = "dd.mm.yyyy";
   detailSheet.getColumn(19).alignment = { vertical: "top", wrapText: true };
   detailSheet.getColumn(20).numFmt = "dd.mm.yyyy hh:mm";
-  addVehicleSummary(detailSheet, detailSheet.rowCount + 2, records);
+  addVehicleSummary(detailSheet, detailSheet.rowCount + 2, records, t, intlLocale);
   setAutomaticColumnWidths(detailSheet, [
     30, 16, 20, 14, 30, 30, 30, 34, 24, 16, 16, 16, 14, 18, 30, 30, 30,
     45, 60, 24,
@@ -414,10 +449,14 @@ function addDocumentSheet(
 }
 
 export async function exportAiEvidenceToExcel(
-  records: readonly AiEvidenceExcelRecord[]
+  records: readonly AiEvidenceExcelRecord[],
+  locale: Locale,
+  t: TranslateFn
 ): Promise<ExportResult> {
+  const intlLocale = toIntlLocale(locale);
+
   if (records.length === 0) {
-    throw new Error("Nie sú dostupné žiadne dokumenty na export.");
+    throw new Error(t("xlsxExport.noDocumentsToExport"));
   }
 
   const excelJsModule = await import("exceljs");
@@ -443,8 +482,8 @@ export async function exportAiEvidenceToExcel(
       const material =
         record.material?.trim() ||
         record.material_original?.trim() ||
-        "Bez materiálu";
-      const spz = getSpzGroupName(record);
+        t("xlsxExport.evidence.withoutMaterial");
+      const spz = getSpzGroupName(record, t);
 
       totalNettoTons += tons;
       addToGroup(nettoByMaterial, material, tons);
@@ -452,7 +491,8 @@ export async function exportAiEvidenceToExcel(
       return;
     }
 
-    const unitLabel = record.unit?.trim() || "Bez jednotky";
+    const unitLabel =
+      record.unit?.trim() || t("xlsxExport.evidence.withoutUnit");
     const unitKey = normalizeText(unitLabel) || "bez jednotky";
     const current = unknownUnits.get(unitKey) ?? {
       label: unitLabel,
@@ -465,22 +505,26 @@ export async function exportAiEvidenceToExcel(
     unknownUnits.set(unitKey, current);
   });
 
-  const summarySheet = workbook.addWorksheet("Súhrn", {
-    views: [{ state: "frozen", ySplit: 1 }],
-  });
+  const summarySheet = workbook.addWorksheet(
+    t("xlsxExport.evidence.summarySheetName"),
+    {
+      views: [{ state: "frozen", ySplit: 1 }],
+    }
+  );
 
   summarySheet.mergeCells("A1:C1");
-  summarySheet.getCell("A1").value = "Súhrn Inbox";
+  summarySheet.getCell("A1").value = t("xlsxExport.evidence.summaryTitle");
   styleHeaderRow(summarySheet, 1);
-  summarySheet.getCell("A3").value = "Počet exportovaných dokumentov";
+  summarySheet.getCell("A3").value = t(
+    "xlsxExport.evidence.exportedDocumentCount"
+  );
   summarySheet.getCell("B3").value = records.length;
   summarySheet.getCell("B3").numFmt = "#,##0";
-  summarySheet.getCell("A4").value = "Celkové netto";
+  summarySheet.getCell("A4").value = t("xlsxExport.evidence.totalNetto");
   summarySheet.getCell("B4").value = totalNettoTons;
   summarySheet.getCell("B4").numFmt = "#,##0.000";
   summarySheet.getCell("C4").value = "t";
-  summarySheet.getCell("A5").value =
-    "Netto používa hodnotu netto, inak quantity; hodnoty v kg sú prepočítané na t a neznáme jednotky nie sú započítané.";
+  summarySheet.getCell("A5").value = t("xlsxExport.evidence.nettoNote");
   summarySheet.mergeCells("A5:C5");
   summarySheet.getCell("A5").font = { italic: true, color: { argb: "475569" } };
   summarySheet.getCell("A5").alignment = { wrapText: true };
@@ -488,18 +532,22 @@ export async function exportAiEvidenceToExcel(
   let nextRow = addSummaryTable(
     summarySheet,
     7,
-    "Netto podľa materiálu",
-    "Materiál",
-    nettoByMaterial
+    t("xlsxExport.evidence.nettoByMaterial"),
+    t("xlsxExport.evidence.detailHeaders.material"),
+    nettoByMaterial,
+    t,
+    intlLocale
   );
   nextRow = addSummaryTable(
     summarySheet,
     nextRow,
-    "Netto podľa ŠPZ",
-    "ŠPZ",
-    nettoBySpz
+    t("xlsxExport.evidence.nettoBySpz"),
+    t("xlsxExport.evidence.detailHeaders.spz"),
+    nettoBySpz,
+    t,
+    intlLocale
   );
-  addUnknownUnitsTable(summarySheet, nextRow, unknownUnits);
+  addUnknownUnitsTable(summarySheet, nextRow, unknownUnits, t, intlLocale);
 
   summarySheet.getColumn(1).alignment = { vertical: "top", wrapText: true };
   summarySheet.getColumn(2).alignment = {
@@ -511,18 +559,25 @@ export async function exportAiEvidenceToExcel(
 
   const recordsBySpz = new Map<string, AiEvidenceExcelRecord[]>();
   records.forEach((record) => {
-    const spz = getSpzGroupName(record);
+    const spz = getSpzGroupName(record, t);
     const group = recordsBySpz.get(spz) ?? [];
     group.push(record);
     recordsBySpz.set(spz, group);
   });
 
-  const usedSheetNames = new Set(["súhrn"]);
+  const usedSheetNames = new Set([
+    t("xlsxExport.evidence.summarySheetName").toLocaleLowerCase(intlLocale),
+  ]);
   [...recordsBySpz.entries()]
-    .sort(([left], [right]) => left.localeCompare(right, "sk"))
+    .sort(([left], [right]) => left.localeCompare(right, intlLocale))
     .forEach(([spz, group]) => {
-      const sheetName = getUniqueWorksheetName(spz, usedSheetNames);
-      addDocumentSheet(workbook, sheetName, group);
+      const sheetName = getUniqueWorksheetName(
+        spz,
+        usedSheetNames,
+        t,
+        intlLocale
+      );
+      addDocumentSheet(workbook, sheetName, group, t, intlLocale);
     });
 
   const buffer = await workbook.xlsx.writeBuffer();

@@ -110,7 +110,7 @@ export default function InviteAcceptPage() {
       }, 1200);
     } catch (error) {
       setState("ready");
-      setFormError(getInviteErrorMessage(error));
+      setFormError(getInviteErrorMessage(error, t));
     }
   }
 

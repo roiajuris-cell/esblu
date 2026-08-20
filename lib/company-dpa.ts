@@ -52,23 +52,24 @@ export async function acceptCompanyDpa(version: string): Promise<boolean> {
   return true;
 }
 
-const ACCEPT_COMPANY_DPA_ERROR_MESSAGES: Record<string, string> = {
-  ESBLU_NOT_ACTIVE_OWNER:
-    "DPA môže v mene firmy prijať iba jej vlastník (owner).",
-  ESBLU_NO_ACTIVE_MEMBERSHIP: "Nie ste aktívnym členom žiadnej firmy.",
-  // ESBLU_NOT_CURRENT_DPA_VERSION / ESBLU_NO_CURRENT_DPA: pridané v
-  // hardeningu esblu_accept_company_dpa() (piate kolo,
-  // supabase/migrations/20260816090000_add_company_dpa_acceptance.sql) —
-  // RPC si aktuálnu účinnú DPA verziu (effective_at <= now()) zisťuje
-  // sama, p_version musí byť presne táto verzia. Nahradili
-  // ESBLU_UNKNOWN_LEGAL_DOCUMENT_VERSION, ktorý RPC už nevracia a ktorý
-  // nikde inde v appke nebol používaný.
-  ESBLU_NOT_CURRENT_DPA_VERSION:
-    "Zobrazená verzia DPA už nie je aktuálna. Obnovte stránku a skúste to znova.",
-  ESBLU_NO_CURRENT_DPA:
-    "Aktuálne nie je publikovaná žiadna platná verzia DPA. Skúste to prosím neskôr alebo kontaktujte podporu.",
-  NOT_AUTHENTICATED: "Najprv sa prihláste.",
-};
+// Kódy chýb vracané esblu_accept_company_dpa() — texty pre používateľa
+// poskytuje volajúca stránka cez i18n kľúč
+// companyDpaGate.errors.<code> (pozri getAcceptCompanyDpaErrorMessage
+// nižšie), tento modul nesmie renderovať pevný slovenský text.
+// ESBLU_NOT_CURRENT_DPA_VERSION / ESBLU_NO_CURRENT_DPA: pridané v
+// hardeningu esblu_accept_company_dpa() (piate kolo,
+// supabase/migrations/20260816090000_add_company_dpa_acceptance.sql) —
+// RPC si aktuálnu účinnú DPA verziu (effective_at <= now()) zisťuje
+// sama, p_version musí byť presne táto verzia. Nahradili
+// ESBLU_UNKNOWN_LEGAL_DOCUMENT_VERSION, ktorý RPC už nevracia a ktorý
+// nikde inde v appke nebol používaný.
+const ACCEPT_COMPANY_DPA_ERROR_CODES = [
+  "ESBLU_NOT_ACTIVE_OWNER",
+  "ESBLU_NO_ACTIVE_MEMBERSHIP",
+  "ESBLU_NOT_CURRENT_DPA_VERSION",
+  "ESBLU_NO_CURRENT_DPA",
+  "NOT_AUTHENTICATED",
+] as const;
 
 /**
  * "Legal-hold" správa pre UI vrstvu (CompanyDpaGate.tsx exportuje
@@ -78,12 +79,13 @@ const ACCEPT_COMPANY_DPA_ERROR_MESSAGES: Record<string, string> = {
  * (esblu_require_company_dpa_before_insert,
  * 20260816090000_add_company_dpa_acceptance.sql) aj tak odmietol s
  * ESBLU_COMPANY_DPA_NOT_ACCEPTED. Táto UI vrstva je iba pomocná/UX —
- * hlavnou ochranou zostáva DB trigger.
+ * hlavnou ochranou zostáva DB trigger. Text poskytuje volajúca stránka
+ * cez i18n kľúč common.legalHoldMessage (t("common.legalHoldMessage")).
  */
-export const LEGAL_HOLD_MESSAGE =
-  "Vaša firma zatiaľ nemá platné prijatie DPA (Zmluvy o spracúvaní osobných údajov). Kým DPA neprijme vlastník firmy, nie je možné pridávať nové záznamy s osobnými údajmi.";
-
-export function getAcceptCompanyDpaErrorMessage(error: unknown): string {
+export function getAcceptCompanyDpaErrorMessage(
+  error: unknown,
+  t: (key: string) => string
+): string {
   const text =
     error instanceof Error
       ? error.message
@@ -91,13 +93,11 @@ export function getAcceptCompanyDpaErrorMessage(error: unknown): string {
         ? error
         : "";
 
-  for (const [code, message] of Object.entries(
-    ACCEPT_COMPANY_DPA_ERROR_MESSAGES
-  )) {
+  for (const code of ACCEPT_COMPANY_DPA_ERROR_CODES) {
     if (text.includes(code)) {
-      return message;
+      return t(`companyDpaGate.errors.${code}`);
     }
   }
 
-  return "DPA sa nepodarilo potvrdiť. Skúste to prosím znova.";
+  return t("companyDpaGate.errors.generic");
 }

@@ -1,8 +1,7 @@
-import {
-  PLAN_LIMIT_MESSAGE,
-  PLAN_RESOURCE_LABELS,
-  type PlanResource,
-} from "@/lib/plan-limits";
+"use client";
+
+import { type PlanResource } from "@/lib/plan-limits";
+import { useLocale } from "@/lib/i18n/LocaleProvider";
 
 type PlanLimitNoticeProps = {
   resource?: PlanResource;
@@ -17,8 +16,15 @@ export default function PlanLimitNotice({
   limit,
   className = "",
 }: PlanLimitNoticeProps) {
+  const { t } = useLocale();
   const hasUsage =
     typeof usage === "number" && typeof limit === "number" && limit >= 0;
+  const resourceLabels: Record<PlanResource, string> = {
+    ai_evidence: t("common.planResourceLabels.ai_evidence"),
+    vehicles: t("common.planResourceLabels.vehicles"),
+    inventory_items: t("common.planResourceLabels.inventory_items"),
+    machines: t("common.planResourceLabels.machines"),
+  };
 
   return (
     <aside
@@ -35,15 +41,19 @@ export default function PlanLimitNotice({
 
         <div className="min-w-0">
           <p className="font-bold">
-            {resource ? `Limit modulu ${PLAN_RESOURCE_LABELS[resource]}` : "Limit plánu"}
+            {resource
+              ? t("common.planLimitNotice.moduleLimit", {
+                  module: resourceLabels[resource],
+                })
+              : t("common.planLimitNotice.planLimit")}
           </p>
           {hasUsage && (
             <p className="mt-1 text-sm font-semibold">
-              Využitie: {usage} / {limit}
+              {t("common.planLimitNotice.usage", { usage, limit })}
             </p>
           )}
           <p className="mt-2 text-sm leading-6 text-secondary sm:text-base">
-            {PLAN_LIMIT_MESSAGE}
+            {t("common.planLimitMessage")}
           </p>
         </div>
       </div>

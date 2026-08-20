@@ -1,37 +1,29 @@
 import type { Metadata } from "next";
 import { PublicLegalLayout } from "@/app/components/PublicLegalLayout";
-import { LegalMarkdown } from "@/app/components/LegalMarkdown";
-import { readLegalMarkdown } from "@/lib/legal-content";
+import { LegalMarkdownLocalized } from "@/app/components/LegalMarkdownLocalized";
+import { readLegalMarkdownAllLocales } from "@/lib/legal-content";
 import { legalConfig } from "@/lib/legal-config";
-import { getServerLocale } from "@/lib/i18n/server-locale";
-import { translate } from "@/lib/i18n/translate";
 
 export const metadata: Metadata = {
   title: "Zásady ochrany osobných údajov | Esblu",
   description: "Informácie o spracúvaní osobných údajov v službe Esblu.",
 };
 
-// Rendering shell — právne záväzný text je nemenný súbor
-// legal/privacy/<version>.md (pozri lib/legal-content.ts), ktorého SHA-256
-// je uložený v legal_documents.content_hash. Úprava textu = nová verzia
-// (nový .md súbor + nová hodnota legalConfig.privacyPolicyVersion), nikdy
-// úprava existujúceho .md súboru. DE/EN preklad je čisto zobrazovacia vec
-// (pozri komentár v app/podmienky-pouzivania/page.tsx).
-export default async function PrivacyPolicyPage() {
-  const locale = await getServerLocale();
-  const markdown = readLegalMarkdown(
+// Rendering shell — pozri komentár v app/podmienky-pouzivania/page.tsx
+// (rovnaký vzor: žiadna cookie server-side, všetky 3 jazyky sa čítajú
+// naraz, výber rieši klientsky LegalMarkdownLocalized).
+export default function PrivacyPolicyPage() {
+  const markdownByLocale = readLegalMarkdownAllLocales(
     "privacy_policy",
-    legalConfig.privacyPolicyVersion,
-    locale
+    legalConfig.privacyPolicyVersion
   );
 
   return (
     <PublicLegalLayout
-      title={translate(locale, "legal.titles.privacy")}
+      titleKey="legal.titles.privacy"
       updatedAt={`16. augusta 2026 (verzia ${legalConfig.privacyPolicyVersion})`}
-      locale={locale}
     >
-      <LegalMarkdown markdown={markdown} />
+      <LegalMarkdownLocalized variants={markdownByLocale} />
     </PublicLegalLayout>
   );
 }

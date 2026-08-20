@@ -6,15 +6,15 @@ import { supabase } from "@/lib/supabase";
 import PlanLimitNotice from "@/app/components/PlanLimitNotice";
 import { usePlanUsage } from "@/hooks/use-plan-usage";
 import {
-  PLAN_LIMIT_MESSAGE,
   isPlanLimitReachedError,
 } from "@/lib/plan-limits";
 import BackLink from "@/app/components/BackLink";
 import { getMyActiveMembership } from "@/lib/company";
 import { useCompanyDpaLegalHold } from "@/app/components/CompanyDpaGate";
-import { LEGAL_HOLD_MESSAGE } from "@/lib/company-dpa";
+import { useLocale } from "@/lib/i18n/LocaleProvider";
 
 export default function StrojePage() {
+  const { t } = useLocale();
   const [userId, setUserId] = useState("");
   const [companyId, setCompanyId] = useState("");
   const [machines, setMachines] = useState<any[]>([]);
@@ -94,7 +94,7 @@ export default function StrojePage() {
       .order("created_at", { ascending: false });
 
     if (error) {
-      alert("Chyba pri načítaní strojov: " + error.message);
+      alert(t("machines.errors.loadFailedPrefix", { message: error.message }));
       return;
     }
 
@@ -138,17 +138,17 @@ export default function StrojePage() {
     if (saveInProgressRef.current) return;
 
     if (!machine.name) {
-      alert("Vyplň názov stroja.");
+      alert(t("machines.errors.nameRequired"));
       return;
     }
 
     if (!userId) {
-      alert("Nie si prihlásený.");
+      alert(t("inbox.errors.notLoggedIn"));
       return;
     }
 
     if (!editingId && legalHold) {
-      alert(LEGAL_HOLD_MESSAGE);
+      alert(t("common.legalHoldMessage"));
       return;
     }
 
@@ -188,7 +188,7 @@ export default function StrojePage() {
       const latestUsage = await refreshPlanUsage();
 
       if (latestUsage?.isLimited) {
-        alert(PLAN_LIMIT_MESSAGE);
+        alert(t("common.planLimitMessage"));
         return;
       }
 
@@ -201,12 +201,14 @@ export default function StrojePage() {
       await Promise.all([loadMachines(), refreshPlanUsage()]);
     } catch (saveError: unknown) {
       if (isPlanLimitReachedError(saveError, "machines")) {
-        alert(PLAN_LIMIT_MESSAGE);
+        alert(t("common.planLimitMessage"));
         await refreshPlanUsage();
       } else {
         const message =
-          saveError instanceof Error ? saveError.message : "Neznáma chyba.";
-        alert("Chyba pri ukladaní stroja: " + message);
+          saveError instanceof Error
+            ? saveError.message
+            : t("vehicles.errors.unknownError");
+        alert(t("machines.errors.saveFailedPrefix", { message }));
       }
     } finally {
       saveInProgressRef.current = false;
@@ -236,7 +238,7 @@ export default function StrojePage() {
   async function deleteMachine(machineId: string) {
     if (deletingMachineId) return;
 
-    const confirmed = confirm("Naozaj chceš vymazať tento stroj?");
+    const confirmed = confirm(t("machines.errors.deleteConfirm"));
     if (!confirmed) return;
 
     setDeletingMachineId(machineId);
@@ -245,7 +247,7 @@ export default function StrojePage() {
       const membership = await getMyActiveMembership();
 
       if (!membership) {
-        throw new Error("Nie ste prihlásený. Prihláste sa a skúste to znova.");
+        throw new Error(t("vehicles.errors.notLoggedInFormal"));
       }
 
       const activeCompanyId = membership.company_id;
@@ -300,9 +302,7 @@ export default function StrojePage() {
       if (deleteMachineError) throw deleteMachineError;
 
       if (deletedMachines?.length !== 1) {
-        throw new Error(
-          "Stroj sa v databáze nevymazal. Záznam neexistuje alebo na jeho vymazanie nemáte oprávnenie."
-        );
+        throw new Error(t("machines.errors.deleteDbMismatch"));
       }
 
       // Ak databáza nemá ON DELETE CASCADE, odstránime riadky fotografií
@@ -325,9 +325,7 @@ export default function StrojePage() {
       if (verifyPhotosError) throw verifyPhotosError;
 
       if ((remainingPhotos || []).length > 0) {
-        throw new Error(
-          "Stroj bol vymazaný, ale databázové záznamy fotografií sa nepodarilo odstrániť."
-        );
+        throw new Error(t("machines.errors.photosCleanupFailed"));
       }
 
       // UI obnovíme až po potvrdenom vymazaní databázových záznamov.
@@ -347,9 +345,7 @@ export default function StrojePage() {
             "Stroj bol vymazaný, ale fotografie sa nepodarilo odstrániť zo Storage:",
             storageError
           );
-          alert(
-            "Stroj bol vymazaný, ale niektoré súbory fotografií sa nepodarilo odstrániť z úložiska."
-          );
+          alert(t("machines.errors.photosStorageDeleteFailed"));
         }
       }
     } catch (deleteError: unknown) {
@@ -361,8 +357,8 @@ export default function StrojePage() {
               deleteError !== null &&
               "message" in deleteError
             ? String(deleteError.message)
-            : "Neznáma chyba.";
-      alert("Chyba pri mazaní stroja: " + message);
+            : t("vehicles.errors.unknownError");
+      alert(t("machines.errors.deleteFailedPrefix", { message }));
     } finally {
       setDeletingMachineId(null);
     }
@@ -376,19 +372,19 @@ export default function StrojePage() {
 
   return (
     <main className="app-shell-bg min-h-screen p-4 sm:p-6 lg:p-10">
-      <BackLink href="/" label="Hlavné menu" className="mb-4" />
+      <BackLink href="/" label={t("inbox.backToMenu")} className="mb-4" />
 
       <div className="flex items-center gap-4">
   <img
     src="/images/excavator.png"
-    alt="Stroje"
+    alt={t("nav.machines")}
     className="h-20 w-20 object-contain"
   />
-  <h1 className="text-4xl font-bold text-primary">Stroje</h1>
+  <h1 className="text-4xl font-bold text-primary">{t("nav.machines")}</h1>
 </div>
 
       <p className="mt-4 text-secondary">
-        Evidencia firemných strojov a techniky.
+        {t("machines.list.subtitle")}
       </p>
 
       {!planUsageLoading && isPlanLimited && (
@@ -409,50 +405,50 @@ export default function StrojePage() {
         disabled={isMachineCreationUnavailable}
         className="mt-8 rounded-xl bg-blue-600 px-6 py-3 text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-400"
       >
-        ➕ Pridať stroj
+        {t("machines.list.addMachine")}
       </button>
 
       {legalHold && (
-        <p className="mt-3 text-sm text-amber-400">{LEGAL_HOLD_MESSAGE}</p>
+        <p className="mt-3 text-sm text-amber-400">{t("common.legalHoldMessage")}</p>
       )}
 
       {showForm && (
         <div className="mt-8 rounded-2xl bg-surface-1 border border-subtle backdrop-blur-xl p-6 shadow-lg">
           <h2 className="mb-6 text-2xl font-bold">
-            {editingId ? "Upraviť stroj" : "Pridať nový stroj"}
+            {editingId ? t("machines.list.editMachineTitle") : t("machines.list.addMachineTitle")}
           </h2>
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <input
-              placeholder="Názov stroja"
+              placeholder={t("machines.list.namePlaceholder")}
               className="rounded-xl border p-3"
               value={machine.name}
               onChange={(e) => updateMachine("name", e.target.value)}
             />
 
             <input
-              placeholder="Kategória"
+              placeholder={t("machines.list.categoryPlaceholder")}
               className="rounded-xl border p-3"
               value={machine.category}
               onChange={(e) => updateMachine("category", e.target.value)}
             />
 
             <input
-              placeholder="Výrobca"
+              placeholder={t("machines.list.manufacturerPlaceholder")}
               className="rounded-xl border p-3"
               value={machine.manufacturer}
               onChange={(e) => updateMachine("manufacturer", e.target.value)}
             />
 
             <input
-              placeholder="Model"
+              placeholder={t("machines.list.modelPlaceholder")}
               className="rounded-xl border p-3"
               value={machine.model}
               onChange={(e) => updateMachine("model", e.target.value)}
             />
 
             <input
-              placeholder="Sériové číslo"
+              placeholder={t("machines.list.serialNumberPlaceholder")}
               className="rounded-xl border p-3"
               value={machine.serial_number}
               onChange={(e) => updateMachine("serial_number", e.target.value)}
@@ -460,7 +456,7 @@ export default function StrojePage() {
 
             <input
               type="number"
-              placeholder="Rok výroby"
+              placeholder={t("inbox.fields.rokVyroby")}
               className="rounded-xl border p-3"
               value={machine.year}
               onChange={(e) => updateMachine("year", e.target.value)}
@@ -474,7 +470,7 @@ export default function StrojePage() {
             />
 
             <input
-              placeholder="Stav / status"
+              placeholder={t("machines.list.statusPlaceholder")}
               className="rounded-xl border p-3"
               value={machine.status}
               onChange={(e) => updateMachine("status", e.target.value)}
@@ -482,7 +478,7 @@ export default function StrojePage() {
           </div>
 
           <textarea
-            placeholder="Poznámky"
+            placeholder={t("machines.list.notesPlaceholder")}
             className="mt-4 w-full rounded-xl border p-3"
             value={machine.notes}
             onChange={(e) => updateMachine("notes", e.target.value)}
@@ -497,10 +493,10 @@ export default function StrojePage() {
               className="rounded-xl bg-green-600 px-6 py-3 text-white hover:bg-green-700 disabled:bg-gray-400"
             >
               {isSaving
-                ? "Ukladám..."
+                ? t("common.buttons.saving")
                 : editingId
-                ? "💾 Uložiť zmeny"
-                : "💾 Uložiť stroj"}
+                ? t("vehicles.forms.saveChanges")
+                : t("machines.list.saveMachine")}
             </button>
 
             {editingId && (
@@ -508,7 +504,7 @@ export default function StrojePage() {
                 onClick={cancelEdit}
                 className="rounded-xl bg-surface-2 px-6 py-3 text-primary hover:bg-surface-hover"
               >
-                Zrušiť úpravu
+                {t("vehicles.forms.cancelEdit")}
               </button>
             )}
           </div>
@@ -517,13 +513,13 @@ export default function StrojePage() {
 
       <div className="mt-10">
         <h2 className="mb-4 text-2xl font-bold text-primary">
-  Uložené stroje
+  {t("machines.list.savedMachinesTitle")}
 </h2>
 
         {machines.length === 0 ? (
           <div className="rounded-2xl border border-subtle bg-surface-1 p-6 shadow-lg backdrop-blur-xl">
             <p className="font-medium text-secondary">
-  Zatiaľ nie je uložený žiadny stroj.
+  {t("machines.list.noneYet")}
 </p>
           </div>
           ) : (
@@ -536,37 +532,37 @@ export default function StrojePage() {
                 {item.first_photo_url ? (
                   <img
                     src={item.first_photo_url}
-                    alt={item.name || "Fotografia stroja"}
+                    alt={item.name || t("machines.photoAlt")}
                     className="h-56 w-full object-cover"
                   />
                 ) : (
                   <div className="flex h-56 w-full items-center justify-center bg-surface-2 text-muted-esblu">
-                    Bez fotografie
+                    {t("machines.list.noPhoto")}
                   </div>
                 )}
 
                 <div className="p-6">
                   <h3 className="text-2xl font-bold">
-                    {item.name || "Bez názvu"}
+                    {item.name || t("dashboard.noName")}
                   </h3>
 
                   <p className="mt-2 text-secondary">
-                    Kategória: {item.category || "—"}
+                    {t("machines.list.categoryLabel")}: {item.category || "—"}
                   </p>
                   <p className="text-secondary">
-                    Výrobca: {item.manufacturer || "—"}
+                    {t("machines.list.manufacturerLabel")}: {item.manufacturer || "—"}
                   </p>
                   <p className="text-secondary">
-                    Model: {item.model || "—"}
+                    {t("machines.list.modelLabel")}: {item.model || "—"}
                   </p>
                   <p className="text-secondary">
-                    Sériové číslo: {item.serial_number || "—"}
+                    {t("machines.list.serialNumberLabel")}: {item.serial_number || "—"}
                   </p>
                   <p className="text-secondary">
-                    Rok výroby: {item.year || "—"}
+                    {t("inbox.fields.rokVyroby")}: {item.year || "—"}
                   </p>
                   <p className="text-secondary">
-                    Stav: {item.status || "—"}
+                    {t("machines.list.statusLabel")}: {item.status || "—"}
                   </p>
 
                   <div className="mt-5 flex gap-3">
@@ -574,14 +570,14 @@ export default function StrojePage() {
                       href={`/stroje/${item.id}`}
                       className="btn-secondary px-4 py-2"
                     >
-                      Detail
+                      {t("machines.list.detailLink")}
                     </Link>
 
                     <button
                       onClick={() => editMachine(item)}
                       className="rounded-xl bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
                     >
-                      Upraviť
+                      {t("common.buttons.edit")}
                     </button>
 
                     <button
@@ -590,8 +586,8 @@ export default function StrojePage() {
                       className="rounded-xl bg-red-600 px-4 py-2 text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-gray-400"
                     >
                       {deletingMachineId === item.id
-                        ? "Mažem..."
-                        : "Vymazať"}
+                        ? t("inbox.deleting")
+                        : t("common.buttons.delete")}
                     </button>
                   </div>
                 </div>

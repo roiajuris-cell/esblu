@@ -6,7 +6,7 @@ import { supabase } from "@/lib/supabase";
 import BackLink from "@/app/components/BackLink";
 import { getMyActiveMembership } from "@/lib/company";
 import { useCompanyDpaLegalHold } from "@/app/components/CompanyDpaGate";
-import { LEGAL_HOLD_MESSAGE } from "@/lib/company-dpa";
+import { useLocale } from "@/lib/i18n/LocaleProvider";
 
 type MachineService = {
   id: string;
@@ -35,6 +35,7 @@ const emptyService = {
 function parseOptionalNonNegativeNumber(
   value: string,
   fieldName: string,
+  t: (key: string, vars?: Record<string, string | number>) => string,
   requireSafeInteger = false
 ): number | null {
   const trimmedValue = value.trim();
@@ -46,16 +47,19 @@ function parseOptionalNonNegativeNumber(
     !requireSafeInteger || Number.isSafeInteger(parsedValue);
 
   if (!Number.isFinite(parsedValue) || parsedValue < 0 || !isValidInteger) {
-    const expectedValue = requireSafeInteger
-      ? "platné nezáporné celé číslo"
-      : "platné nezáporné číslo";
-    throw new Error(`Pole „${fieldName}“ musí obsahovať ${expectedValue}.`);
+    const key = requireSafeInteger
+      ? "machines.errors.invalidNonNegativeInteger"
+      : "machines.errors.invalidNonNegativeNumber";
+    throw new Error(t(key, { field: fieldName }));
   }
 
   return parsedValue;
 }
 
-async function compressImage(file: File): Promise<File> {
+async function compressImage(
+  file: File,
+  t: (key: string) => string
+): Promise<File> {
   const imageUrl = URL.createObjectURL(file);
 
   try {
@@ -64,7 +68,7 @@ async function compressImage(file: File): Promise<File> {
 
       img.onload = () => resolve(img);
       img.onerror = () =>
-        reject(new Error("Fotografiu sa nepodarilo načítať."));
+        reject(new Error(t("vehicles.errors.photoLoadFailed")));
 
       img.src = imageUrl;
     });
@@ -86,7 +90,7 @@ async function compressImage(file: File): Promise<File> {
     const context = canvas.getContext("2d");
 
     if (!context) {
-      throw new Error("Nepodarilo sa pripraviť kompresiu fotografie.");
+      throw new Error(t("vehicles.errors.photoCompressPrepFailed"));
     }
 
     context.drawImage(image, 0, 0, width, height);
@@ -97,7 +101,7 @@ async function compressImage(file: File): Promise<File> {
           if (result) {
             resolve(result);
           } else {
-            reject(new Error("Fotografiu sa nepodarilo skomprimovať."));
+            reject(new Error(t("vehicles.errors.photoCompressFailed")));
           }
         },
         "image/webp",
@@ -134,6 +138,7 @@ export default function MachineDetailPage() {
   const serviceSaveInProgressRef = useRef(false);
   const serviceDeleteInProgressRef = useRef(false);
   const { legalHold } = useCompanyDpaLegalHold();
+  const { t } = useLocale();
 
   useEffect(() => {
     checkUser();
@@ -202,7 +207,7 @@ export default function MachineDetailPage() {
       .order("service_date", { ascending: false });
 
     if (error) {
-      alert("Chyba pri načítaní servisov stroja: " + error.message);
+      alert(t("machines.errors.loadServicesFailedPrefix", { message: error.message }));
       return;
     }
 
@@ -245,12 +250,12 @@ export default function MachineDetailPage() {
     }
 
     if (!service.service_date || !service.title.trim()) {
-      alert("Vyplňte dátum servisu a názov servisu.");
+      alert(t("machines.errors.serviceValidationRequired"));
       return;
     }
 
     if (!editingServiceId && legalHold) {
-      alert(LEGAL_HOLD_MESSAGE);
+      alert(t("common.legalHoldMessage"));
       return;
     }
 
@@ -260,10 +265,15 @@ export default function MachineDetailPage() {
     try {
       const mileage = parseOptionalNonNegativeNumber(
         service.mileage,
-        "Motohodiny",
+        t("machines.detail.mileageLabel"),
+        t,
         true
       );
-      const cost = parseOptionalNonNegativeNumber(service.cost, "Cena");
+      const cost = parseOptionalNonNegativeNumber(
+        service.cost,
+        t("machines.errors.costFieldName"),
+        t
+      );
 
       const {
         data: { user },
@@ -271,17 +281,13 @@ export default function MachineDetailPage() {
       } = await supabase.auth.getUser();
 
       if (userError || !user) {
-        throw new Error(
-          "Na uloženie servisného záznamu musíte byť prihlásený."
-        );
+        throw new Error(t("machines.errors.serviceSaveLoginRequired"));
       }
 
       const membership = await getMyActiveMembership();
 
       if (!membership) {
-        throw new Error(
-          "Na uloženie servisného záznamu musíte byť prihlásený."
-        );
+        throw new Error(t("machines.errors.serviceSaveLoginRequired"));
       }
 
       const payload = {
@@ -308,9 +314,7 @@ export default function MachineDetailPage() {
         if (updateError) throw updateError;
 
         if (updatedServices?.length !== 1) {
-          throw new Error(
-            "Servisný záznam sa nepodarilo upraviť alebo naň nemáte oprávnenie."
-          );
+          throw new Error(t("machines.errors.serviceUpdateFailedPermission"));
         }
       } else {
         const { data: insertedServices, error: insertError } = await supabase
@@ -321,7 +325,7 @@ export default function MachineDetailPage() {
         if (insertError) throw insertError;
 
         if (insertedServices?.length !== 1) {
-          throw new Error("Servisný záznam sa nepodarilo uložiť.");
+          throw new Error(t("machines.errors.serviceInsertFailed"));
         }
       }
 
@@ -331,8 +335,10 @@ export default function MachineDetailPage() {
       await loadServices(membership.company_id);
     } catch (saveError: unknown) {
       const message =
-        saveError instanceof Error ? saveError.message : "Neznáma chyba.";
-      alert("Chyba pri ukladaní servisu: " + message);
+        saveError instanceof Error
+          ? saveError.message
+          : t("vehicles.errors.unknownError");
+      alert(t("machines.errors.serviceSaveFailedPrefix", { message }));
     } finally {
       serviceSaveInProgressRef.current = false;
       setIsServiceSaving(false);
@@ -347,7 +353,7 @@ export default function MachineDetailPage() {
       return;
     }
 
-    const confirmed = confirm("Naozaj chcete vymazať tento servisný záznam?");
+    const confirmed = confirm(t("machines.errors.serviceDeleteConfirm"));
     if (!confirmed) return;
 
     serviceDeleteInProgressRef.current = true;
@@ -357,9 +363,7 @@ export default function MachineDetailPage() {
       const membership = await getMyActiveMembership();
 
       if (!membership) {
-        throw new Error(
-          "Na vymazanie servisného záznamu musíte byť prihlásený."
-        );
+        throw new Error(t("machines.errors.serviceDeleteLoginRequired"));
       }
 
       const { data: deletedServices, error: deleteError } = await supabase
@@ -373,9 +377,7 @@ export default function MachineDetailPage() {
       if (deleteError) throw deleteError;
 
       if (deletedServices?.length !== 1) {
-        throw new Error(
-          "Servisný záznam sa nevymazal alebo naň nemáte oprávnenie."
-        );
+        throw new Error(t("machines.errors.serviceDeleteFailedPermission"));
       }
 
       setServices((currentServices) =>
@@ -387,8 +389,10 @@ export default function MachineDetailPage() {
       }
     } catch (deleteError: unknown) {
       const message =
-        deleteError instanceof Error ? deleteError.message : "Neznáma chyba.";
-      alert("Chyba pri mazaní servisu: " + message);
+        deleteError instanceof Error
+          ? deleteError.message
+          : t("vehicles.errors.unknownError");
+      alert(t("machines.errors.serviceDeleteFailedPrefix", { message }));
     } finally {
       serviceDeleteInProgressRef.current = false;
       setDeletingServiceId(null);
@@ -404,14 +408,14 @@ export default function MachineDetailPage() {
 
   if (legalHold) {
     event.target.value = "";
-    alert(LEGAL_HOLD_MESSAGE);
+    alert(t("common.legalHoldMessage"));
     return;
   }
 
   setIsUploading(true);
 
   try {
-    const compressedFile = await compressImage(originalFile);
+    const compressedFile = await compressImage(originalFile, t);
 
     console.log(
       "Pôvodná veľkosť fotografie stroja:",
@@ -462,8 +466,9 @@ export default function MachineDetailPage() {
     console.error("Chyba pri nahrávaní fotografie stroja:", error);
 
     alert(
-      "Chyba pri nahrávaní fotky: " +
-        (error?.message || "Neznáma chyba")
+      t("machines.errors.photoUploadFailedPrefix", {
+        message: error?.message || t("vehicles.errors.unknownError"),
+      })
     );
   } finally {
     setIsUploading(false);
@@ -478,11 +483,11 @@ export default function MachineDetailPage() {
     const photoId = String(photo?.id || "");
 
     if (!photoId) {
-      alert("Fotografia nemá platné databázové ID.");
+      alert(t("machines.errors.photoNoValidId"));
       return;
     }
 
-    const confirmed = confirm("Naozaj chceš vymazať túto fotografiu?");
+    const confirmed = confirm(t("vehicles.gallery.confirmDeletePhoto"));
     if (!confirmed) return;
 
     setDeletingPhotoId(photoId);
@@ -491,7 +496,7 @@ export default function MachineDetailPage() {
       const membership = await getMyActiveMembership();
 
       if (!membership) {
-        throw new Error("Nie ste prihlásený. Prihláste sa a skúste to znova.");
+        throw new Error(t("vehicles.errors.notLoggedInFormal"));
       }
 
       const { data: deletedPhotos, error: deletePhotoError } = await supabase
@@ -505,9 +510,7 @@ export default function MachineDetailPage() {
       if (deletePhotoError) throw deletePhotoError;
 
       if (deletedPhotos?.length !== 1) {
-        throw new Error(
-          "Fotografia sa v databáze nevymazala. Záznam neexistuje alebo na jeho vymazanie nemáte oprávnenie."
-        );
+        throw new Error(t("vehicles.errors.photoDeleteDbMismatch"));
       }
 
       // UI aktualizujeme až po potvrdenom databázovom delete.
@@ -530,9 +533,7 @@ export default function MachineDetailPage() {
             "Databázový záznam fotografie bol vymazaný, ale Storage cleanup zlyhal:",
             storageError
           );
-          alert(
-            "Fotografia bola odstránená z evidencie, ale jej súbor sa nepodarilo odstrániť z úložiska."
-          );
+          alert(t("vehicles.errors.photoStorageDeleteFailed"));
         }
       }
     } catch (deleteError: unknown) {
@@ -544,8 +545,8 @@ export default function MachineDetailPage() {
               deleteError !== null &&
               "message" in deleteError
             ? String(deleteError.message)
-            : "Neznáma chyba.";
-      alert("Chyba pri mazaní fotografie: " + message);
+            : t("vehicles.errors.unknownError");
+      alert(t("vehicles.errors.deletePhotoFailedPrefix", { message }));
     } finally {
       setDeletingPhotoId(null);
     }
@@ -560,29 +561,29 @@ export default function MachineDetailPage() {
   }
 
   if (!machine) {
-    return <div className="p-10">Načítavam...</div>;
+    return <div className="p-10">{t("common.buttons.loading")}</div>;
   }
 
   return (
     <main className="app-shell-bg min-h-screen p-10">
-      <BackLink href="/stroje" label="Stroje" className="mb-4" />
+      <BackLink href="/stroje" label={t("nav.machines")} className="mb-4" />
 
       <h1 className="text-4xl font-bold">🚜 {machine.name}</h1>
 
       <div className="surface-card mt-8 p-8">
         <div className="grid grid-cols-2 gap-5">
-          <p><b>Kategória:</b> {machine.category || "—"}</p>
-          <p><b>Výrobca:</b> {machine.manufacturer || "—"}</p>
-          <p><b>Model:</b> {machine.model || "—"}</p>
-          <p><b>Sériové číslo:</b> {machine.serial_number || "—"}</p>
-          <p><b>Rok výroby:</b> {machine.year || "—"}</p>
-          <p><b>Dátum kúpy:</b> {machine.purchase_date || "—"}</p>
-          <p><b>Stav:</b> {machine.status || "—"}</p>
+          <p><b>{t("machines.list.categoryLabel")}:</b> {machine.category || "—"}</p>
+          <p><b>{t("machines.list.manufacturerLabel")}:</b> {machine.manufacturer || "—"}</p>
+          <p><b>{t("machines.list.modelLabel")}:</b> {machine.model || "—"}</p>
+          <p><b>{t("machines.list.serialNumberLabel")}:</b> {machine.serial_number || "—"}</p>
+          <p><b>{t("inbox.fields.rokVyroby")}:</b> {machine.year || "—"}</p>
+          <p><b>{t("machines.detail.purchaseDateLabel")}:</b> {machine.purchase_date || "—"}</p>
+          <p><b>{t("machines.list.statusLabel")}:</b> {machine.status || "—"}</p>
         </div>
 
         {machine.notes && (
           <div className="mt-6 rounded-xl bg-surface-2 p-4">
-            <b>Poznámky:</b>
+            <b>{t("machines.detail.notesLabel")}</b>
             <p className="mt-2">{machine.notes}</p>
           </div>
         )}
@@ -590,7 +591,7 @@ export default function MachineDetailPage() {
 
       <section className="mt-10 rounded-2xl bg-surface-1 p-5 shadow sm:p-8">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <h2 className="text-2xl font-bold">Servis</h2>
+          <h2 className="text-2xl font-bold">{t("machines.detail.servicesTitle")}</h2>
 
           <button
             type="button"
@@ -599,7 +600,7 @@ export default function MachineDetailPage() {
                 cancelServiceEdit();
               } else {
                 if (legalHold) {
-                  alert(LEGAL_HOLD_MESSAGE);
+                  alert(t("common.legalHoldMessage"));
                   return;
                 }
                 setService(emptyService);
@@ -614,23 +615,25 @@ export default function MachineDetailPage() {
             }
             className="w-full rounded-xl bg-blue-600 px-5 py-3 text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-400 sm:w-auto"
           >
-            {showServiceForm ? "Zavrieť formulár" : "➕ Pridať servis"}
+            {showServiceForm ? t("machines.detail.closeForm") : t("vehicles.services.addService")}
           </button>
         </div>
 
         {legalHold && !showServiceForm && (
-          <p className="mt-3 text-sm text-amber-400">{LEGAL_HOLD_MESSAGE}</p>
+          <p className="mt-3 text-sm text-amber-400">{t("common.legalHoldMessage")}</p>
         )}
 
         {showServiceForm && (
           <div className="mt-6 rounded-2xl border border-subtle bg-surface-2 p-4 sm:p-6">
             <h3 className="text-xl font-bold">
-              {editingServiceId ? "Upraviť servis" : "Pridať servis"}
+              {editingServiceId
+                ? t("vehicles.services.editServiceTitle")
+                : t("vehicles.services.addServiceTitle")}
             </h3>
 
             <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
               <label className="min-w-0 text-sm font-medium text-secondary">
-                Dátum servisu
+                {t("machines.detail.serviceDateLabel")}
                 <input
                   type="date"
                   value={service.service_date}
@@ -643,7 +646,7 @@ export default function MachineDetailPage() {
               </label>
 
               <label className="min-w-0 text-sm font-medium text-secondary">
-                Motohodiny
+                {t("machines.detail.mileageLabel")}
                 <input
                   type="number"
                   min="0"
@@ -659,7 +662,7 @@ export default function MachineDetailPage() {
               </label>
 
               <label className="min-w-0 text-sm font-medium text-secondary">
-                Názov servisu
+                {t("machines.detail.titleLabel")}
                 <input
                   value={service.title}
                   onChange={(event) =>
@@ -671,7 +674,7 @@ export default function MachineDetailPage() {
               </label>
 
               <label className="min-w-0 text-sm font-medium text-secondary">
-                Cena (€)
+                {t("machines.detail.costLabel")}
                 <input
                   type="number"
                   min="0"
@@ -687,7 +690,7 @@ export default function MachineDetailPage() {
               </label>
 
               <label className="min-w-0 text-sm font-medium text-secondary">
-                Servis / technik
+                {t("machines.detail.technicianLabel")}
                 <input
                   value={service.technician}
                   onChange={(event) =>
@@ -699,7 +702,7 @@ export default function MachineDetailPage() {
               </label>
 
               <label className="min-w-0 text-sm font-medium text-secondary">
-                Ďalší servis
+                {t("inbox.fields.nextServiceDate")}
                 <input
                   type="date"
                   value={service.next_service_date}
@@ -713,7 +716,7 @@ export default function MachineDetailPage() {
             </div>
 
             <label className="mt-4 block text-sm font-medium text-secondary">
-              Popis
+              {t("machines.detail.descriptionLabel")}
               <textarea
                 value={service.description}
                 onChange={(event) =>
@@ -733,10 +736,10 @@ export default function MachineDetailPage() {
                 className="w-full rounded-xl bg-green-600 px-5 py-3 text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:bg-gray-400 sm:w-auto"
               >
                 {isServiceSaving
-                  ? "Ukladám..."
+                  ? t("common.buttons.saving")
                   : editingServiceId
-                    ? "Uložiť zmeny"
-                    : "Uložiť servis"}
+                    ? t("machines.detail.saveChangesPlain")
+                    : t("machines.detail.saveServicePlain")}
               </button>
 
               <button
@@ -745,7 +748,7 @@ export default function MachineDetailPage() {
                 disabled={isServiceSaving}
                 className="w-full rounded-xl bg-surface-2 px-5 py-3 text-primary hover:bg-surface-hover disabled:cursor-not-allowed disabled:bg-surface-1 disabled:text-muted-esblu sm:w-auto"
               >
-                Zrušiť
+                {t("common.buttons.cancel")}
               </button>
             </div>
           </div>
@@ -753,7 +756,7 @@ export default function MachineDetailPage() {
 
         {services.length === 0 ? (
           <p className="mt-6 text-muted-esblu">
-            Zatiaľ nebol pridaný žiadny servisný záznam.
+            {t("machines.detail.noServicesYet")}
           </p>
         ) : (
           <div className="mt-6 space-y-4">
@@ -781,21 +784,21 @@ export default function MachineDetailPage() {
 
                 <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-3">
                   <div className="rounded-xl bg-surface-1 p-4">
-                    <p className="text-sm text-muted-esblu">Motohodiny</p>
+                    <p className="text-sm text-muted-esblu">{t("machines.detail.mileageLabel")}</p>
                     <p className="break-words text-lg font-bold">
                       {item.mileage != null ? item.mileage : "—"}
                     </p>
                   </div>
 
                   <div className="rounded-xl bg-surface-1 p-4">
-                    <p className="text-sm text-muted-esblu">Servis / technik</p>
+                    <p className="text-sm text-muted-esblu">{t("machines.detail.technicianLabel")}</p>
                     <p className="break-words text-lg font-bold">
                       {item.technician || "—"}
                     </p>
                   </div>
 
                   <div className="rounded-xl bg-surface-1 p-4">
-                    <p className="text-sm text-muted-esblu">Ďalší servis</p>
+                    <p className="text-sm text-muted-esblu">{t("inbox.fields.nextServiceDate")}</p>
                     <p className="break-words text-lg font-bold">
                       {item.next_service_date || "—"}
                     </p>
@@ -817,7 +820,7 @@ export default function MachineDetailPage() {
                     }
                     className="w-full rounded-xl bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-400 sm:w-auto"
                   >
-                    Upraviť
+                    {t("common.buttons.edit")}
                   </button>
 
                   <button
@@ -828,7 +831,7 @@ export default function MachineDetailPage() {
                     }
                     className="w-full rounded-xl bg-red-600 px-4 py-2 text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-gray-400 sm:w-auto"
                   >
-                    {deletingServiceId === item.id ? "Mažem..." : "Vymazať"}
+                    {deletingServiceId === item.id ? t("inbox.deleting") : t("common.buttons.delete")}
                   </button>
                 </div>
               </article>
@@ -839,11 +842,11 @@ export default function MachineDetailPage() {
 
       <div className="surface-card mt-10 p-8">
         <div className="flex items-center justify-between">
-          <h2 className="text-2xl font-bold">📷 Galéria</h2>
+          <h2 className="text-2xl font-bold">{t("machines.detail.galleryTitle")}</h2>
 
           <div className="flex gap-3">
   <label className="cursor-pointer rounded-xl bg-blue-600 px-5 py-3 text-white hover:bg-blue-700">
-    {isUploading ? "Nahrávam..." : "📷 Odfotiť"}
+    {isUploading ? t("inbox.uploading") : t("inbox.registration.takePhoto")}
     <input
       type="file"
       accept="image/*"
@@ -855,7 +858,7 @@ export default function MachineDetailPage() {
   </label>
 
   <label className="cursor-pointer rounded-xl border border-subtle bg-surface-1 px-5 py-3 text-secondary">
-    🖼️ Galéria
+    {t("machines.detail.galleryButton")}
     <input
       type="file"
       accept="image/*"
@@ -868,12 +871,12 @@ export default function MachineDetailPage() {
         </div>
 
         {legalHold && (
-          <p className="mt-3 text-sm text-amber-400">{LEGAL_HOLD_MESSAGE}</p>
+          <p className="mt-3 text-sm text-amber-400">{t("common.legalHoldMessage")}</p>
         )}
 
         {photos.length === 0 ? (
           <p className="mt-6 text-muted-esblu">
-            Zatiaľ nie sú pridané žiadne fotografie.
+            {t("machines.detail.noPhotosYet")}
           </p>
         ) : (
           <div className="mt-6 grid grid-cols-1 gap-5 md:grid-cols-3">
@@ -881,7 +884,7 @@ export default function MachineDetailPage() {
               <div key={photo.id} className="rounded-xl border border-subtle bg-surface-2 p-3">
                 <img
                   src={photoUrl(photo.file_path)}
-                  alt="Fotografia stroja"
+                  alt={t("machines.photoAlt")}
                   className="h-48 w-full rounded-xl object-cover"
                 />
 
@@ -891,8 +894,8 @@ export default function MachineDetailPage() {
                   className="mt-3 w-full rounded-xl bg-red-600 px-4 py-2 text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-gray-400"
                 >
                   {deletingPhotoId === String(photo.id)
-                    ? "Mažem..."
-                    : "🗑 Vymazať"}
+                    ? t("inbox.deleting")
+                    : t("vehicles.buttons.deleteWithIcon")}
                 </button>
               </div>
             ))}

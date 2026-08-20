@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Dashboard from "./components/Dashboard";
 import PublicLandingPage from "./components/PublicLandingPage";
 import { supabase } from "@/lib/supabase";
+import { useLocale } from "@/lib/i18n/LocaleProvider";
 
 // Poznámka: táto stránka zámerne NEVOLÁ esblu_ensure_my_owner_company().
 // Owner bootstrap sa spúšťa VÝHRADNE z explicitného owner-registration/
@@ -15,6 +16,7 @@ import { supabase } from "@/lib/supabase";
 // zmene pre detailný rozbor poradia volaní.
 
 export default function Home() {
+  const { t } = useLocale();
   const [hasSession, setHasSession] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -48,7 +50,7 @@ export default function Home() {
             aria-hidden="true"
             className="h-5 w-5 animate-spin rounded-full border-2 border-blue-400 border-t-transparent"
           />
-          Načítavam Esblu...
+          {t("common.misc.loadingEsblu")}
         </div>
       </main>
     );

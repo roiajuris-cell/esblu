@@ -9,6 +9,7 @@ import {
   getMyCompanyDpaStatus,
   type CompanyDpaStatus,
 } from "@/lib/company-dpa";
+import { useLocale } from "@/lib/i18n/LocaleProvider";
 
 // -----------------------------------------------------------------------
 // Legal-hold kontext: kým firma nemá platné company-level DPA acceptance,
@@ -69,6 +70,7 @@ export default function CompanyDpaGate({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const { t } = useLocale();
   const skip = SKIP_PATH_PREFIXES.some(
     (prefix) => pathname === prefix || pathname?.startsWith(prefix + "/")
   );
@@ -140,9 +142,7 @@ export default function CompanyDpaGate({
     const ok = await acceptCompanyDpa(status.current_dpa_version);
 
     if (!ok) {
-      setSubmitError(
-        "DPA sa nepodarilo potvrdiť. Skúste to prosím znova, alebo kontaktujte podporu, ak problém pretrváva."
-      );
+      setSubmitError(t("companyDpaGate.submitError"));
       setSubmitting(false);
       return;
     }
@@ -181,20 +181,11 @@ export default function CompanyDpaGate({
         >
           <div className="w-full max-w-lg rounded-2xl bg-surface-1 p-6 shadow-2xl sm:p-8">
             <h2 className="text-2xl font-bold text-primary">
-              Zmluva o spracúvaní osobných údajov (DPA)
+              {t("companyDpaGate.title")}
             </h2>
 
             <p className="mt-3 text-sm leading-6 text-secondary">
-              Aby vaša firma mohla v Esblu spracúvať osobné údaje tretích
-              osôb (napr. v dokumentoch, fotografiách alebo evidencii),
-              musíte ako vlastník firmy najprv prijať aktuálnu Zmluvu o
-              spracúvaní osobných údajov v jej mene. Toto potvrdenie je
-              potrebné iba raz za verziu dokumentu a je viazané na vašu
-              firmu (nie iba na váš osobný účet). Kým DPA neprijmete,
-              zostávajú akcie vytvárajúce nové záznamy s osobnými údajmi
-              (vozidlá, stroje, sklad, AI evidencia, dokumenty) v appke
-              dočasne nedostupné — bezpečné prezeranie a úprava
-              existujúcich dát tým nie sú dotknuté.
+              {t("companyDpaGate.description")}
             </p>
 
             <p className="mt-3 text-sm">
@@ -203,7 +194,9 @@ export default function CompanyDpaGate({
                 target="_blank"
                 className="font-semibold text-blue-700 hover:underline"
               >
-                Prečítať si aktuálnu DPA (verzia {status.current_dpa_version})
+                {t("companyDpaGate.readCurrentDpa", {
+                  version: status.current_dpa_version,
+                })}
               </Link>
             </p>
 
@@ -218,9 +211,9 @@ export default function CompanyDpaGate({
                 disabled={submitting}
               />
               <span>
-                Potvrdzujem, že som oprávnený/á konať za túto firmu a v
-                jej mene prijímam Zmluvu o spracúvaní osobných údajov
-                (DPA), verzia {status.current_dpa_version}.
+                {t("companyDpaGate.confirmAuthorityLabel", {
+                  version: status.current_dpa_version,
+                })}
               </span>
             </label>
 
@@ -236,7 +229,9 @@ export default function CompanyDpaGate({
               disabled={!confirmedAuthority || submitting}
               className="mt-6 w-full rounded-xl bg-blue-600 px-6 py-3 font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-400"
             >
-              {submitting ? "Ukladám..." : "Potvrdiť DPA v mene firmy"}
+              {submitting
+                ? t("legalGate.saving")
+                : t("companyDpaGate.confirmButton")}
             </button>
 
             <button
@@ -245,7 +240,7 @@ export default function CompanyDpaGate({
               disabled={submitting}
               className="mt-3 w-full text-center text-sm font-semibold text-muted-esblu hover:underline"
             >
-              Odhlásiť sa
+              {t("legalGate.logout")}
             </button>
           </div>
         </div>
@@ -258,16 +253,10 @@ export default function CompanyDpaGate({
         >
           <div className="w-full max-w-lg rounded-2xl border border-amber-200/30 bg-warning-soft p-5 shadow-2xl">
             <p className="text-sm font-semibold text-amber-300">
-              Účet vašej firmy čaká na potvrdenie DPA vlastníkom účtu.
+              {t("companyDpaGate.employeeNoticeTitle")}
             </p>
             <p className="mt-2 text-sm leading-6 text-amber-400">
-              Zmluvu o spracúvaní osobných údajov musí v mene firmy
-              potvrdiť jej vlastník (owner) — administrátorské ani iné
-              oprávnenia v appke na to nestačia. Kým sa tak nestane,
-              niektoré funkcie (napr. nahrávanie nových dokumentov, AI
-              evidencie, vozidiel, strojov alebo skladových položiek) sú
-              dočasne nedostupné; existujúce dáta si môžete naďalej
-              prezerať.
+              {t("companyDpaGate.employeeNoticeDescription")}
             </p>
             <div className="mt-4 flex flex-wrap gap-3">
               <button
@@ -275,14 +264,14 @@ export default function CompanyDpaGate({
                 onClick={() => setEmployeeNoticeDismissed(true)}
                 className="rounded-xl bg-amber-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-amber-800"
               >
-                Rozumiem
+                {t("companyDpaGate.employeeNoticeDismiss")}
               </button>
               <Link
                 href="/dpa"
                 target="_blank"
                 className="rounded-xl border border-amber-300/40 bg-surface-1 px-5 py-2.5 text-sm font-semibold text-amber-400 hover:bg-surface-hover"
               >
-                Zobraziť DPA
+                {t("companyDpaGate.viewDpa")}
               </Link>
             </div>
           </div>

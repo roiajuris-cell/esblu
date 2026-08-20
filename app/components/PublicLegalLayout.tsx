@@ -1,30 +1,32 @@
+"use client";
+
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { translate } from "@/lib/i18n/translate";
-import { normalizeLocale, type Locale } from "@/lib/i18n/locales";
+import { useLocale } from "@/lib/i18n/LocaleProvider";
 import LanguageSwitcher from "./LanguageSwitcher";
 
 type PublicLegalLayoutProps = {
-  title: string;
+  titleKey: string;
   updatedAt?: string;
-  locale?: Locale;
   children: ReactNode;
 };
 
-// Server Component — používa translate() priamo (rovnaká čistá funkcia ako
-// LocaleProvider na klientovi), locale prijíma ako prop od volajúcej
-// stránky (getServerLocale(), pozri app/podmienky-pouzivania/page.tsx a
-// pod.). LanguageSwitcher je vnorený Client Component — Next.js App Router
-// bežne podporuje kompozíciu client komponentov vnútri server komponentov.
+// "use client" Component — používa useLocale() (localStorage-driven Context,
+// pozri lib/i18n/LocaleProvider.tsx) namiesto server-side cookie/props, aby
+// appka nepotrebovala žiadnu cookie na určenie jazyka pred prvým
+// vykreslením (revidované — pôvodne Server Component s `locale` prop z
+// getServerLocale()). Volajúca stránka (napr.
+// app/podmienky-pouzivania/page.tsx) je Server Component, ktorý iba číta
+// nemenný .md obsah zo súborového systému pre všetky 3 jazyky naraz
+// (readLegalMarkdownAllLocales) a odovzdá ich ako deti — samotný výber
+// správneho jazyka pre nadpis/menu/obsah rieši tento klientsky komponent.
 export function PublicLegalLayout({
-  title,
+  titleKey,
   updatedAt,
-  locale: localeProp,
   children,
 }: PublicLegalLayoutProps) {
-  const locale = normalizeLocale(localeProp);
-  const t = (key: string, vars?: Record<string, string | number>) =>
-    translate(locale, key, vars);
+  const { t } = useLocale();
+  const title = t(titleKey);
 
   return (
     <main className="app-shell-bg min-h-screen px-4 py-6 sm:px-6 sm:py-10 lg:py-12">
@@ -57,7 +59,7 @@ export function PublicLegalLayout({
 
         <footer className="mt-10 border-t border-subtle pt-6">
           <nav
-            aria-label="Právne a kontaktné informácie"
+            aria-label={t("settings.legal.navAriaLabel")}
             className="flex flex-col gap-3 text-sm font-semibold sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-5"
           >
             <Link

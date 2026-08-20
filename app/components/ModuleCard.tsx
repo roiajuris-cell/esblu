@@ -1,6 +1,9 @@
+"use client";
+
 import Link from "next/link";
 import Image from "next/image";
 import type { ReactNode } from "react";
+import { useLocale } from "@/lib/i18n/LocaleProvider";
 
 export type ModuleAccent = "cyan" | "blue" | "orange" | "teal";
 
@@ -80,6 +83,7 @@ export default function ModuleCard({
   accent?: ModuleAccent;
   className?: string;
 }) {
+  const { t } = useLocale();
   const styles = ACCENT_STYLES[accent];
 
   return (
@@ -133,7 +137,7 @@ export default function ModuleCard({
         <>
           <p className="mt-2 text-xs leading-snug text-muted-esblu">{subtitle}</p>
           <span className="mt-2 inline-flex items-center gap-1 text-sm font-semibold text-accent-cyan opacity-0 transition group-hover:opacity-100">
-            Otvoriť
+            {t("inbox.open")}
             <span aria-hidden="true">→</span>
           </span>
         </>

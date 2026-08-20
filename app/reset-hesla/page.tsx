@@ -3,9 +3,11 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { useLocale } from "@/lib/i18n/LocaleProvider";
 
 export default function ResetHeslaPage() {
   const router = useRouter();
+  const { t } = useLocale();
 
   const [newPassword, setNewPassword] = useState("");
   const [confirmNewPassword, setConfirmNewPassword] = useState("");
@@ -38,19 +40,17 @@ export default function ResetHeslaPage() {
 
   async function updatePassword() {
     if (!recoveryReady) {
-      alert(
-        "Odkaz na obnovu hesla nie je platný alebo jeho platnosť vypršala."
-      );
+      alert(t("auth.resetPassword.linkInvalid"));
       return;
     }
 
     if (newPassword.length < 8) {
-      alert("Nové heslo musí mať minimálne 8 znakov.");
+      alert(t("settings.password.tooShort"));
       return;
     }
 
     if (newPassword !== confirmNewPassword) {
-      alert("Nové heslá sa nezhodujú.");
+      alert(t("settings.password.mismatch"));
       return;
     }
 
@@ -63,14 +63,14 @@ export default function ResetHeslaPage() {
     setLoading(false);
 
     if (error) {
-      alert("Heslo sa nepodarilo zmeniť: " + error.message);
+      alert(t("settings.password.changeFailedPrefix", { message: error.message }));
       return;
     }
 
     setNewPassword("");
     setConfirmNewPassword("");
 
-    alert("Heslo bolo úspešne zmenené. Teraz sa môžeš prihlásiť.");
+    alert(t("auth.resetPassword.updatedRedirect"));
 
     await supabase.auth.signOut();
 
@@ -82,18 +82,18 @@ export default function ResetHeslaPage() {
     <main className="app-shell-bg flex min-h-screen items-center justify-center p-6">
       <div className="surface-card w-full max-w-md p-8 shadow-xl">
         <h1 className="text-3xl font-bold text-primary">
-          Nové heslo
+          {t("auth.resetPassword.pageTitle")}
         </h1>
 
         <p className="mt-2 text-secondary">
-          Zadaj nové heslo pre svoj účet Esblu.
+          {t("auth.resetPassword.pageSubtitle")}
         </p>
 
         <div className="mt-6 space-y-4">
           <input
             type="password"
             autoComplete="new-password"
-            placeholder="Nové heslo"
+            placeholder={t("auth.resetPassword.newPassword")}
             className="input-dark w-full p-3"
             value={newPassword}
             onChange={(event) =>
@@ -105,7 +105,7 @@ export default function ResetHeslaPage() {
           <input
             type="password"
             autoComplete="new-password"
-            placeholder="Potvrdenie nového hesla"
+            placeholder={t("auth.resetPassword.confirmPassword")}
             className="input-dark w-full p-3"
             value={confirmNewPassword}
             onChange={(event) =>
@@ -121,12 +121,14 @@ export default function ResetHeslaPage() {
           disabled={loading || !recoveryReady}
           className="btn-primary mt-6 w-full px-6 py-3"
         >
-          {loading ? "Mením heslo..." : "Nastaviť nové heslo"}
+          {loading
+            ? t("settings.password.changing")
+            : t("auth.resetPassword.submitNew")}
         </button>
 
         {!recoveryReady && (
           <p className="mt-4 text-center text-sm text-muted-esblu">
-            Čakám na overenie odkazu na obnovu hesla...
+            {t("auth.resetPassword.waitingForLink")}
           </p>
         )}
       </div>

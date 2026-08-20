@@ -1,5 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import type { User } from "@supabase/supabase-js";
+import { translate } from "@/lib/i18n/translate";
+import { DEFAULT_LOCALE, type Locale } from "@/lib/i18n/locales";
 
 // -----------------------------------------------------------------------------
 // Zdieľaný helper na server-side overenie prihláseného používateľa z Bearer
@@ -27,7 +29,8 @@ export type VerifiedUserResult =
   | { user: null; error: string };
 
 export async function verifyRequestUser(
-  req: Request
+  req: Request,
+  locale: Locale = DEFAULT_LOCALE
 ): Promise<VerifiedUserResult> {
   const authorization = req.headers.get("authorization");
   const accessToken = authorization?.startsWith("Bearer ")
@@ -35,7 +38,7 @@ export async function verifyRequestUser(
     : "";
 
   if (!accessToken) {
-    return { user: null, error: "Nie si prihlásený." };
+    return { user: null, error: translate(locale, "inbox.errors.notLoggedIn") };
   }
 
   const {
@@ -44,7 +47,10 @@ export async function verifyRequestUser(
   } = await supabaseAuthClient.auth.getUser(accessToken);
 
   if (error || !user) {
-    return { user: null, error: "Prihlásenie vypršalo. Prihlás sa znova." };
+    return {
+      user: null,
+      error: translate(locale, "inbox.errors.sessionExpired"),
+    };
   }
 
   return { user, error: null };

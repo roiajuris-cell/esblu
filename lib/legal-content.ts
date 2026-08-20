@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import type { Locale } from "./i18n/locales";
+import { SUPPORTED_LOCALES, type Locale } from "./i18n/locales";
 
 // =============================================================================
 // Nemenný obsah publikovaných verzií právnych dokumentov žije v `legal/`
@@ -101,4 +101,29 @@ export function readLegalMarkdown(
   }
 
   return fs.readFileSync(legalContentFilePath(documentType, version), "utf8");
+}
+
+/**
+ * Prečíta VŠETKY tri jazykové mutácie naraz (sk/de/en, s fail-safe fallbackom
+ * na sk pri chýbajúcom preklade — rovnaká logika ako readLegalMarkdown()).
+ *
+ * Dôvod existencie: appka od revízie i18n architektúry (pozri
+ * lib/i18n/locales.ts) nepoužíva cookie na server-side detekciu jazyka —
+ * Server Component teda pri prvom renderi nevie, ktorý jazyk klient
+ * preferuje. Namiesto výberu JEDNÉHO súboru server-side preto stránka
+ * prečíta všetky tri varianty a odovzdá ich "use client" komponentu, ktorý
+ * si správny variant vyberie sám podľa localStorage (useLocale()) — bez
+ * ďalšieho sieťového/FS požiadavku a bez cookie.
+ */
+export function readLegalMarkdownAllLocales(
+  documentType: LegalDocumentType,
+  version: string
+): Record<Locale, string> {
+  const result = {} as Record<Locale, string>;
+
+  for (const locale of SUPPORTED_LOCALES) {
+    result[locale] = readLegalMarkdown(documentType, version, locale);
+  }
+
+  return result;
 }

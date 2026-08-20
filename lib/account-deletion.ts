@@ -1,4 +1,7 @@
 import { supabase } from "@/lib/supabase";
+import { REQUEST_LOCALE_HEADER } from "@/lib/i18n/request-locale";
+import { translate } from "@/lib/i18n/translate";
+import type { Locale } from "@/lib/i18n/locales";
 
 // -----------------------------------------------------------------------------
 // Klientske helpery pre samoobslužné "Zrušiť účet" v app/nastavenia.
@@ -49,45 +52,55 @@ export type AccountDeletionPreflight = {
   orphan: boolean;
 };
 
-async function getAccessToken(): Promise<string> {
+async function getAccessToken(locale: Locale): Promise<string> {
   const {
     data: { session },
   } = await supabase.auth.getSession();
 
   if (!session) {
-    throw new Error("Nie si prihlásený.");
+    throw new Error(translate(locale, "settings.errors.notLoggedIn"));
   }
 
   return session.access_token;
 }
 
-export async function fetchAccountDeletionPreflight(): Promise<AccountDeletionPreflight> {
-  const accessToken = await getAccessToken();
+export async function fetchAccountDeletionPreflight(
+  locale: Locale
+): Promise<AccountDeletionPreflight> {
+  const accessToken = await getAccessToken(locale);
 
   const response = await fetch("/api/account/preflight", {
     method: "GET",
     headers: {
       Authorization: `Bearer ${accessToken}`,
+      [REQUEST_LOCALE_HEADER]: locale,
     },
   });
 
   const body = await response.json();
 
   if (!response.ok) {
-    throw new Error(body.error || "Prípravu na zrušenie účtu sa nepodarilo načítať.");
+    throw new Error(
+      body.error ||
+        translate(locale, "settings.errors.deletionPreflightLoadFailedGeneric")
+    );
   }
 
   return body as AccountDeletionPreflight;
 }
 
-export async function deleteMyAccount(confirmPhrase?: string): Promise<void> {
-  const accessToken = await getAccessToken();
+export async function deleteMyAccount(
+  locale: Locale,
+  confirmPhrase?: string
+): Promise<void> {
+  const accessToken = await getAccessToken(locale);
 
   const response = await fetch("/api/account/delete", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json",
+      [REQUEST_LOCALE_HEADER]: locale,
     },
     body: JSON.stringify(
       confirmPhrase !== undefined ? { confirmPhrase } : {}
@@ -97,7 +110,8 @@ export async function deleteMyAccount(confirmPhrase?: string): Promise<void> {
   const body = await response.json();
 
   if (!response.ok || !body.success) {
-    const message = body.error || "Zrušenie účtu zlyhalo.";
+    const message =
+      body.error || translate(locale, "settings.errors.deletionFailedGeneric");
 
     // Server signalizuje čiastočne dokončené (nekonzistentné) zrušenie
     // účtu cez `partial: true` — pridaj rozpoznateľný prefix, aby ho
