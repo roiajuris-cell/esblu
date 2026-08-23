@@ -163,7 +163,12 @@ export default function Dashboard() {
     const next30Days = new Date();
     next30Days.setDate(today.getDate() + 30);
 
-    const result: { level: string; type: string; message: string }[] = [];
+    const result: {
+      level: string;
+      type: string;
+      message: string;
+      vehicleId: string;
+    }[] = [];
 
     vehicles.forEach((car) => {
       checkDate(result, car, t("dashboard.stkLabel"), car.stk, today, next30Days);
@@ -189,7 +194,12 @@ export default function Dashboard() {
   }
 
   function checkDate(
-    result: { level: string; type: string; message: string }[],
+    result: {
+      level: string;
+      type: string;
+      message: string;
+      vehicleId: string;
+    }[],
     car: any,
     type: string,
     value: string | null,
@@ -213,12 +223,14 @@ export default function Dashboard() {
         level: "red",
         type,
         message: t("dashboard.alertOverdue", { type, name, spz }),
+        vehicleId: car.id,
       });
     } else if (date <= next30Days) {
       result.push({
         level: "orange",
         type,
         message: t("dashboard.alertDueSoon", { type, name, spz, days: diffDays }),
+        vehicleId: car.id,
       });
     }
   }
@@ -563,7 +575,11 @@ export default function Dashboard() {
                   const isOverdue = alert.level === "red";
 
                   return (
-                    <div key={index} className="flex items-center gap-3 py-3">
+                    <Link
+                      key={index}
+                      href={`/vozidla/${alert.vehicleId}`}
+                      className="flex items-center gap-3 rounded-lg py-3 -mx-2 px-2 transition cursor-pointer hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-cyan"
+                    >
                       <span
                         className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
                           isOverdue
@@ -588,7 +604,7 @@ export default function Dashboard() {
                       >
                         {alert.type}
                       </span>
-                    </div>
+                    </Link>
                   );
                 })}
               </div>
