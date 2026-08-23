@@ -18,7 +18,8 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "ESBLU",
-  description: "Firemná evidencia vozidiel, strojov a skladu.",
+  description:
+    "Firemná evidencia dokumentov, vozidiel, strojov a skladu na jednom mieste.",
   manifest: "/manifest.json",
 };
 

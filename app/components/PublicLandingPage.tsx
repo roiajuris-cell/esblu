@@ -68,6 +68,11 @@ const featureCardDefs: {
       "landing.features.inboxExample1",
       "landing.features.inboxExample2",
       "landing.features.inboxExample3",
+      "landing.features.inboxExample4",
+      "landing.features.inboxExample5",
+      "landing.features.inboxExample6",
+      "landing.features.inboxExample7",
+      "landing.features.inboxExampleMore",
     ],
   },
   {
@@ -388,13 +393,13 @@ export default function PublicLandingPage() {
                     </p>
                     {feature.exampleKeys && (
                       <ul
-                        className="mt-5 flex flex-wrap gap-2"
+                        className="mt-5 flex flex-wrap gap-1.5 sm:gap-2"
                         aria-label={t("landing.features.examplesAriaLabel")}
                       >
                         {feature.exampleKeys.map((exampleKey) => (
                           <li
                             key={exampleKey}
-                            className={`rounded-full px-3 py-1 text-sm font-semibold ${styles.chip}`}
+                            className={`rounded-full px-2.5 py-1 text-xs font-semibold sm:px-3 sm:text-sm ${styles.chip}`}
                           >
                             {t(exampleKey)}
                           </li>
