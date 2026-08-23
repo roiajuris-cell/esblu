@@ -8,6 +8,10 @@ import { supabase } from "@/lib/supabase";
 import { getCompanyProfile, getMyActiveMembership } from "@/lib/company";
 import { useLocale } from "@/lib/i18n/LocaleProvider";
 import ModuleCard, { type ModuleAccent } from "./ModuleCard";
+import {
+  vignetteCountryLabel,
+  type VehicleVignette,
+} from "@/lib/vehicle-vignettes";
 
 function getGreeting(t: (key: string) => string) {
   const hour = new Date().getHours();
@@ -21,11 +25,16 @@ function getGreeting(t: (key: string) => string) {
 
 export default function Dashboard() {
   const router = useRouter();
-  const { t } = useLocale();
+  const { locale, t } = useLocale();
 
   const [vehicles, setVehicles] = useState<any[]>([]);
   const [machines, setMachines] = useState<any[]>([]);
   const [items, setItems] = useState<any[]>([]);
+  // Diaľničné známky (vehicle_vignettes) — jedno vozidlo môže mať viac
+  // riadkov (jeden na krajinu), pozri migráciu 20260823090000. Načítané
+  // raz pre celú firmu (rovnaký vzor ako vehicles/machines/items vyššie) a
+  // v createAlerts() nižšie priradené k vozidlu cez vehicle_id.
+  const [vignettes, setVignettes] = useState<VehicleVignette[]>([]);
   const [companyName, setCompanyName] = useState("ESBLU");
   const [companyLogoUrl, setCompanyLogoUrl] = useState("");
   const [search, setSearch] = useState("");
@@ -55,6 +64,7 @@ export default function Dashboard() {
       setVehicles([]);
       setMachines([]);
       setItems([]);
+      setVignettes([]);
       // Bez aktívneho membershipu niet "firmy", ktorej branding by sa dal
       // načítať (esblu_get_company_profile by aj tak nič nevrátila) —
       // ostáva dnešný generický fallback ("ESBLU", žiadne logo).
@@ -137,9 +147,15 @@ export default function Dashboard() {
       .select("*")
       .eq("company_id", currentCompanyId);
 
+    const { data: vignetteData } = await supabase
+      .from("vehicle_vignettes")
+      .select("*")
+      .eq("company_id", currentCompanyId);
+
     setVehicles(vehicleData || []);
     setMachines(machineData || []);
     setItems(itemData || []);
+    setVignettes(vignetteData || []);
   }
 
   function createAlerts() {
@@ -152,6 +168,21 @@ export default function Dashboard() {
     vehicles.forEach((car) => {
       checkDate(result, car, t("dashboard.stkLabel"), car.stk, today, next30Days);
       checkDate(result, car, t("dashboard.ekLabel"), car.ek, today, next30Days);
+
+      // Diaľničné známky — každá krajina/riadok sa sleduje SAMOSTATNE
+      // (rovnaká checkDate funkcia, rovnaký 30-dňový prah a rovnaké
+      // red/orange farby ako STK/EK vyššie — žiadny nový mechanizmus).
+      // NULL/chýbajúci riadok pre danú krajinu jednoducho nevygeneruje
+      // žiadny alert, presne ako pri STK/EK bez vyplneného dátumu.
+      vignettes
+        .filter((v) => v.vehicle_id === car.id)
+        .forEach((v) => {
+          const vignetteType = `${t("dashboard.vignetteLabel")} (${vignetteCountryLabel(
+            v.country_code,
+            locale
+          )})`;
+          checkDate(result, car, vignetteType, v.valid_until, today, next30Days);
+        });
     });
 
     return result;

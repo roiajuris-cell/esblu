@@ -33,6 +33,13 @@ import {
   parseWeightValue,
 } from "@/lib/weight-utils";
 import { useLocale } from "@/lib/i18n/LocaleProvider";
+import {
+  VIGNETTE_COUNTRIES,
+  VIGNETTE_OTHER_COUNTRY_OPTION,
+  isValidVignetteCountryCode,
+  vignetteCountryLabel,
+  type DraftVehicleVignette,
+} from "@/lib/vehicle-vignettes";
 
 type ScanDocumentType =
   | "weigh_ticket"
@@ -43,6 +50,16 @@ type ScanDocumentType =
   | "service_document"
   | "vehicle_registration"
   | "other";
+
+// Diaľničné známky v TP review formulári — zoznam krajín, typ a
+// lokalizovaný label sú zdieľané z lib/vehicle-vignettes.ts (rovnaký zdroj
+// pravdy ako app/vozidla/[id]/page.tsx a Dashboard.tsx), nie duplikované
+// natvrdo — pozri importy hore.
+type RegistrationVignetteRow = DraftVehicleVignette & {
+  // UI-only pole (neposiela sa na server) — riadi, či select zobrazuje
+  // krajinu zo zoznamu, alebo voľný ISO alpha-2 vstup ("Iná krajina").
+  countryMode: "list" | "custom";
+};
 
 function getDocumentTypeLabels(
   t: (key: string, vars?: Record<string, string | number>) => string
@@ -807,6 +824,16 @@ export default function AiEvidenciaPage() {
   // duplicity (bod 2 zadania).
   const [registrationDuplicateVehicle, setRegistrationDuplicateVehicle] =
     useState<any | null>(null);
+  // Diaľničné známky zadané RUČNE v review formulári (bod zadania: AI ich z
+  // technického preukazu neextrahuje, štandardne ho ani neobsahuje).
+  // Každý riadok je nezávislý {country_code, valid_until} — voliteľné,
+  // predvolene prázdny zoznam (žiadny riadok), pridávaný tlačidlom
+  // "+ Pridať ďalšiu známku". Uložené sú AŽ v saveRegistrationDocument(),
+  // rovnakým vehicle_vignettes upsertom (vehicle_id, country_code) ako v
+  // detaile vozidla — žiadny paralelný dátový model.
+  const [registrationVignettes, setRegistrationVignettes] = useState<
+    RegistrationVignetteRow[]
+  >([]);
   const saveOtherDocumentInProgressRef = useRef(false);
   const saveInProgressRef = useRef(false);
   const saveRegistrationInProgressRef = useRef(false);
@@ -1868,6 +1895,7 @@ review_status: reviewStatus,
     setRegistrationError("");
     setRegistrationFields(null);
     setRegistrationDuplicateVehicle(null);
+    setRegistrationVignettes([]);
   }
 
   function clearRegistrationImages() {
@@ -1928,6 +1956,56 @@ review_status: reviewStatus,
 
   function updateRegistrationField(key: string, value: string) {
     setRegistrationFields((prev) => ({ ...(prev || {}), [key]: value }));
+  }
+
+  function addRegistrationVignetteRow() {
+    setRegistrationVignettes((prev) => [
+      ...prev,
+      { country_code: "", valid_until: "", countryMode: "list" },
+    ]);
+  }
+
+  function updateRegistrationVignetteRow(
+    index: number,
+    key: "country_code" | "valid_until",
+    value: string
+  ) {
+    setRegistrationVignettes((prev) =>
+      prev.map((row, i) => (i === index ? { ...row, [key]: value } : row))
+    );
+  }
+
+  // Select nastaví buď priamo krajinu zo zoznamu, alebo (pri
+  // VIGNETTE_OTHER_COUNTRY_OPTION) prepne daný riadok na voľný ISO alpha-2
+  // vstup — rovnaký vzor ako v app/vozidla/[id]/page.tsx.
+  function handleRegistrationVignetteCountrySelect(
+    index: number,
+    value: string
+  ) {
+    setRegistrationVignettes((prev) =>
+      prev.map((row, i) =>
+        i === index
+          ? value === VIGNETTE_OTHER_COUNTRY_OPTION
+            ? { ...row, country_code: "", countryMode: "custom" }
+            : { ...row, country_code: value, countryMode: "list" }
+          : row
+      )
+    );
+  }
+
+  function handleRegistrationVignetteCustomCountryInput(
+    index: number,
+    value: string
+  ) {
+    updateRegistrationVignetteRow(
+      index,
+      "country_code",
+      value.toUpperCase().replace(/[^A-Z]/g, "").slice(0, 2)
+    );
+  }
+
+  function removeRegistrationVignetteRow(index: number) {
+    setRegistrationVignettes((prev) => prev.filter((_, i) => i !== index));
   }
 
   async function handleProcessRegistration() {
@@ -2039,6 +2117,34 @@ review_status: reviewStatus,
 
     if (legalHold) {
       setRegistrationError(t("common.legalHoldMessage"));
+      return;
+    }
+
+    // Riadok s vyplnenou iba jednou z dvoch hodnôt (krajina bez dátumu
+    // alebo naopak) by inak ticho zmizol pri uložení — radšej používateľa
+    // upozorniť, než mlčky zahodiť polovicu jeho vstupu. Úplne prázdny
+    // riadok (obe hodnoty prázdne) je v poriadku, iba sa neskôr preskočí.
+    const hasIncompleteVignetteRow = registrationVignettes.some(
+      (row) => Boolean(row.country_code) !== Boolean(row.valid_until)
+    );
+
+    if (hasIncompleteVignetteRow) {
+      setRegistrationError(t("inbox.errors.vignetteRowIncomplete"));
+      return;
+    }
+
+    // Riadok v custom režime ("Iná krajina") s vyplneným, ale neplatným
+    // ISO alpha-2 kódom — rovnaká kontrola ako v app/vozidla/[id]/page.tsx,
+    // server-side CHECK ostáva konečná autorita.
+    const hasInvalidVignetteCountryCode = registrationVignettes.some(
+      (row) =>
+        row.countryMode === "custom" &&
+        row.country_code &&
+        !isValidVignetteCountryCode(row.country_code)
+    );
+
+    if (hasInvalidVignetteCountryCode) {
+      setRegistrationError(t("vehicles.vignettes.invalidCountryCode"));
       return;
     }
 
@@ -2245,6 +2351,43 @@ review_status: reviewStatus,
         );
       }
 
+      // Diaľničné známky zadané v review formulári — ukladajú sa AŽ TERAZ,
+      // keď je vehicleId isté a vozidlo aj dokument sú už bezpečne uložené.
+      // Upsert na (vehicle_id, country_code) — pri obnove existujúcej
+      // krajiny sa iba aktualizuje valid_until, presne rovnaký model ako
+      // pri ručnom pridávaní/úprave známky v detaile vozidla (žiadny
+      // paralelný dátový model). AI tento údaj neextrahuje —
+      // registrationVignettes obsahuje výhradne ručne zadané riadky.
+      // Neúplné riadky boli odmietnuté vyššie ešte pred uploadom; úplne
+      // prázdny zoznam flow jednoducho nijako neovplyvní (voliteľné pole).
+      const vignetteRowsToSave = registrationVignettes.filter(
+        (row) => row.country_code && row.valid_until
+      );
+
+      let vignetteSaveFailed = false;
+
+      if (vignetteRowsToSave.length > 0) {
+        const { error: vignetteError } = await supabase
+          .from("vehicle_vignettes")
+          .upsert(
+            vignetteRowsToSave.map((row) => ({
+              vehicle_id: vehicleId,
+              country_code: row.country_code,
+              valid_until: row.valid_until,
+              updated_at: new Date().toISOString(),
+            })),
+            { onConflict: "vehicle_id,country_code" }
+          );
+
+        if (vignetteError) {
+          vignetteSaveFailed = true;
+          console.error(
+            "Diaľničné známky sa nepodarilo uložiť k vozidlu:",
+            vignetteError
+          );
+        }
+      }
+
       const wasUpdate = Boolean(registrationDuplicateVehicle);
 
       clearRegistrationImages();
@@ -2254,10 +2397,14 @@ review_status: reviewStatus,
         refreshVehiclePlanUsage(),
       ]);
 
+      const successMessage = wasUpdate
+        ? t("inbox.errors.vehicleUpdatedWithRegistration")
+        : t("inbox.errors.vehicleCreatedWithRegistration");
+
       alert(
-        wasUpdate
-          ? t("inbox.errors.vehicleUpdatedWithRegistration")
-          : t("inbox.errors.vehicleCreatedWithRegistration")
+        vignetteSaveFailed
+          ? `${successMessage} ${t("inbox.errors.vignetteSaveFailedAfterVehicle")}`
+          : successMessage
       );
     } catch (saveError: unknown) {
       if (uploadedFrontPath && !documentInserted) {
@@ -3125,6 +3272,116 @@ function formatDocDate(value: unknown): string {
                       />
                     </label>
                   ))}
+                </div>
+
+                {/* Diaľničné známky — ručné, voliteľné, predvolene prázdne
+                    (bod 2 zadania: AI ich z technického preukazu
+                    neextrahuje, štandardne ho ani neobsahuje). Podporuje
+                    viac riadkov naraz (jeden na krajinu) — presne rovnaký
+                    country/valid_until model ako sekcia "Diaľničné známky"
+                    v detaile vozidla, uložený AŽ pri potvrdení vytvorenia/
+                    aktualizácie vozidla nižšie. */}
+                <div className="mt-2 rounded-2xl border border-subtle bg-surface-1 p-5">
+                  <h4 className="text-sm font-bold text-primary">
+                    {t("inbox.registration.vignettesSectionTitle")}
+                  </h4>
+                  <p className="mt-1 text-xs text-muted-esblu">
+                    {t("inbox.registration.vignettesSectionDescription")}
+                  </p>
+
+                  {registrationVignettes.length > 0 && (
+                    <div className="mt-4 space-y-3">
+                      {registrationVignettes.map((row, index) => (
+                        <div
+                          key={index}
+                          className="grid grid-cols-1 gap-3 rounded-xl border border-subtle bg-surface-2 p-4 md:grid-cols-[1fr_1fr_auto]"
+                        >
+                          <label className="block">
+                            <span className="text-xs font-medium text-secondary">
+                              {t("vehicles.vignettes.country")}
+                            </span>
+                            <select
+                              className="mt-1 w-full rounded-xl border border-subtle bg-surface-1 p-3 outline-none"
+                              value={
+                                row.countryMode === "custom"
+                                  ? VIGNETTE_OTHER_COUNTRY_OPTION
+                                  : row.country_code
+                              }
+                              onChange={(e) =>
+                                handleRegistrationVignetteCountrySelect(
+                                  index,
+                                  e.target.value
+                                )
+                              }
+                            >
+                              <option value="">
+                                {t("vehicles.vignettes.selectCountryPlaceholder")}
+                              </option>
+                              {VIGNETTE_COUNTRIES.map((c) => (
+                                <option key={c.code} value={c.code}>
+                                  {vignetteCountryLabel(c.code, locale)}
+                                </option>
+                              ))}
+                              <option value={VIGNETTE_OTHER_COUNTRY_OPTION}>
+                                {t("vehicles.vignettes.otherCountry")}
+                              </option>
+                            </select>
+
+                            {row.countryMode === "custom" && (
+                              <input
+                                className="mt-2 w-full rounded-xl border border-subtle bg-surface-1 p-3 uppercase outline-none"
+                                maxLength={2}
+                                placeholder={t(
+                                  "vehicles.vignettes.otherCountryCodePlaceholder"
+                                )}
+                                value={row.country_code}
+                                onChange={(e) =>
+                                  handleRegistrationVignetteCustomCountryInput(
+                                    index,
+                                    e.target.value
+                                  )
+                                }
+                              />
+                            )}
+                          </label>
+
+                          <label className="block">
+                            <span className="text-xs font-medium text-secondary">
+                              {t("vehicles.vignettes.validUntil")}
+                            </span>
+                            <input
+                              type="date"
+                              className="mt-1 w-full rounded-xl border border-subtle bg-surface-1 p-3 outline-none"
+                              value={row.valid_until}
+                              onChange={(e) =>
+                                updateRegistrationVignetteRow(
+                                  index,
+                                  "valid_until",
+                                  e.target.value
+                                )
+                              }
+                            />
+                          </label>
+
+                          <button
+                            type="button"
+                            onClick={() => removeRegistrationVignetteRow(index)}
+                            className="self-end rounded-xl bg-surface-1 px-4 py-3 text-xs font-bold text-secondary hover:bg-surface-hover md:self-center"
+                          >
+                            {t("vehicles.vignettes.remove")}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={addRegistrationVignetteRow}
+                    className="mt-4 rounded-xl border border-subtle bg-surface-2 px-4 py-2 text-sm font-semibold text-secondary hover:bg-surface-hover"
+                  >
+                    {t("vehicles.vignettes.addAnother")}
+                  </button>
                 </div>
 
                 <button

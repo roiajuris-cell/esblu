@@ -12,6 +12,13 @@ import {
 import { useCompanyDpaLegalHold } from "@/app/components/CompanyDpaGate";
 import { useLocale } from "@/lib/i18n/LocaleProvider";
 import { formatDate } from "@/lib/i18n/format";
+import {
+  VIGNETTE_COUNTRIES,
+  VIGNETTE_OTHER_COUNTRY_OPTION,
+  isValidVignetteCountryCode,
+  vignetteCountryLabel,
+  type VehicleVignette,
+} from "@/lib/vehicle-vignettes";
 
 // Dokumenty priradené k vozidlu z AI Inboxu (PZP, technický preukaz) —
 // bod 2/3 zadania: po potvrdení v Inboxe majú tieto dokumenty "skončiť"
@@ -153,6 +160,30 @@ export default function VehicleDetailPage() {
   >([]);
   const [linkedDocumentsLoading, setLinkedDocumentsLoading] = useState(false);
 
+  // Diaľničné známky (vehicle_vignettes) — samostatná tabuľka, 1:N na
+  // vozidlo (pozri migráciu 20260823090000). owner/admin môžu pridávať/
+  // upravovať/mazať (rovnaké RLS ako vehicles), employee iba prezerá — UI
+  // nižšie preto formulár/tlačidlá vôbec nerenderuje pre role === "employee"
+  // (nielen disabled input), server-side to navyše vynucuje RLS.
+  const [vignettes, setVignettes] = useState<VehicleVignette[]>([]);
+  const [vignettesLoading, setVignettesLoading] = useState(false);
+  const [showVignetteForm, setShowVignetteForm] = useState(false);
+  const [editingVignetteId, setEditingVignetteId] = useState<string | null>(
+    null
+  );
+  const [isSavingVignette, setIsSavingVignette] = useState(false);
+  const [deletingVignetteId, setDeletingVignetteId] = useState<string | null>(
+    null
+  );
+  const emptyVignette = { country_code: "", valid_until: "" };
+  const [vignette, setVignette] = useState(emptyVignette);
+  // Select ponúka VIGNETTE_COUNTRIES + voľbu "Iná krajina" — pri jej výbere
+  // sa zobrazí voľný ISO alpha-2 vstup (pozri JSX nižšie). Appka teda nie je
+  // prakticky obmedzená na predpripravený zoznam krajín, iba naň
+  // optimalizovaná pre najbežnejšie prípady (bod zadania).
+  const [vignetteCountryIsCustom, setVignetteCountryIsCustom] =
+    useState(false);
+
   const emptyService = {
     service_date: "",
     mileage: "",
@@ -173,6 +204,7 @@ export default function VehicleDetailPage() {
     loadVehicle();
     loadServices();
     loadMembership();
+    loadVignettes();
   }, []);
 
   async function loadMembership() {
@@ -486,6 +518,160 @@ export default function VehicleDetailPage() {
     if (!error) setServices(data || []);
   }
 
+  async function loadVignettes() {
+    setVignettesLoading(true);
+
+    const { data, error } = await supabase
+      .from("vehicle_vignettes")
+      .select("*")
+      .eq("vehicle_id", vehicleId)
+      .order("valid_until", { ascending: true });
+
+    if (!error) setVignettes(data || []);
+    setVignettesLoading(false);
+  }
+
+  function updateVignetteField(key: string, value: string) {
+    setVignette((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function startAddVignette() {
+    setEditingVignetteId(null);
+    setVignette(emptyVignette);
+    setVignetteCountryIsCustom(false);
+    setShowVignetteForm(true);
+  }
+
+  // Select nastaví buď priamo krajinu zo zoznamu, alebo (pri
+  // VIGNETTE_OTHER_COUNTRY_OPTION) prepne na voľný ISO alpha-2 vstup —
+  // country_code sa v tom prípade vynuluje, kým používateľ kód nezadá sám.
+  function handleVignetteCountrySelect(value: string) {
+    if (value === VIGNETTE_OTHER_COUNTRY_OPTION) {
+      setVignetteCountryIsCustom(true);
+      updateVignetteField("country_code", "");
+    } else {
+      setVignetteCountryIsCustom(false);
+      updateVignetteField("country_code", value);
+    }
+  }
+
+  // Ručný ISO alpha-2 vstup — automaticky veľké písmená, iba A-Z, max 2
+  // znaky (rovnaký formát ako DB CHECK vehicle_vignettes_country_code_format).
+  function handleVignetteCustomCountryInput(value: string) {
+    updateVignetteField(
+      "country_code",
+      value.toUpperCase().replace(/[^A-Z]/g, "").slice(0, 2)
+    );
+  }
+
+  function startEditVignette(item: VehicleVignette) {
+    setEditingVignetteId(item.id);
+    setVignette({
+      country_code: item.country_code || "",
+      valid_until: item.valid_until || "",
+    });
+    // Ak už uložená krajina nie je v predpripravenom zozname (napr. bola
+    // pôvodne zadaná ako "Iná krajina"), formulár sa má rovno otvoriť v
+    // custom režime — inak by select ticho spadol na prázdny placeholder.
+    setVignetteCountryIsCustom(
+      !VIGNETTE_COUNTRIES.some((c) => c.code === item.country_code)
+    );
+    setShowVignetteForm(true);
+  }
+
+  function cancelVignetteEdit() {
+    setEditingVignetteId(null);
+    setVignette(emptyVignette);
+    setVignetteCountryIsCustom(false);
+    setShowVignetteForm(false);
+  }
+
+  async function saveVignette() {
+    if (!vignette.country_code || !vignette.valid_until) {
+      alert(t("vehicles.vignettes.selectCountryPlaceholder"));
+      return;
+    }
+
+    if (vignetteCountryIsCustom && !isValidVignetteCountryCode(vignette.country_code)) {
+      alert(t("vehicles.vignettes.invalidCountryCode"));
+      return;
+    }
+
+    // Rovnaká obranná legalHold kontrola ako pri servise vyššie — DB trigger
+    // esblu_require_company_dpa_before_insert by INSERT (nie UPDATE) aj tak
+    // odmietol, toto je iba včasná spätná väzba pre používateľa.
+    if (!editingVignetteId && legalHold) {
+      alert(t("common.legalHoldMessage"));
+      return;
+    }
+
+    // Klientská poistka proti duplicite krajiny pri PRIDÁVANÍ novej známky
+    // (DB unique(vehicle_id, country_code) je konečná autorita — toto iba
+    // ušetrí zbytočný request s jasnejšou správou). Pri úprave existujúcej
+    // známky (editingVignetteId) sa krajina zvyčajne nemení.
+    if (
+      !editingVignetteId &&
+      vignettes.some((v) => v.country_code === vignette.country_code)
+    ) {
+      alert(t("vehicles.vignettes.duplicateCountry"));
+      return;
+    }
+
+    setIsSavingVignette(true);
+
+    const payload = {
+      vehicle_id: vehicleId,
+      country_code: vignette.country_code,
+      valid_until: vignette.valid_until,
+      updated_at: new Date().toISOString(),
+    };
+
+    const { error } = editingVignetteId
+      ? await supabase
+          .from("vehicle_vignettes")
+          .update(payload)
+          .eq("id", editingVignetteId)
+      : await supabase.from("vehicle_vignettes").insert(payload);
+
+    setIsSavingVignette(false);
+
+    if (error) {
+      alert(
+        t("vehicles.errors.vignetteSaveFailedPrefix", { message: error.message })
+      );
+      return;
+    }
+
+    setVignette(emptyVignette);
+    setEditingVignetteId(null);
+    setVignetteCountryIsCustom(false);
+    setShowVignetteForm(false);
+    loadVignettes();
+  }
+
+  async function deleteVignette(vignetteId: string) {
+    const confirmed = confirm(t("vehicles.vignettes.confirmDelete"));
+    if (!confirmed) return;
+
+    setDeletingVignetteId(vignetteId);
+
+    const { error } = await supabase
+      .from("vehicle_vignettes")
+      .delete()
+      .eq("id", vignetteId);
+
+    setDeletingVignetteId(null);
+
+    if (error) {
+      alert(
+        t("vehicles.errors.vignetteDeleteFailedPrefix", { message: error.message })
+      );
+      return;
+    }
+
+    loadVignettes();
+  }
+
   function updateService(key: string, value: string) {
     setService((prev) => ({ ...prev, [key]: value }));
   }
@@ -618,7 +804,345 @@ export default function VehicleDetailPage() {
         </div>
       </div>
 
+      {/* Diaľničné známky (vehicle_vignettes) — v logickej blízkosti STK/EK
+          vyššie, ako samostatná sekcia (1 vozidlo môže mať viac známok pre
+          rôzne krajiny naraz). owner/admin vidia formulár a tlačidlá
+          upraviť/odstrániť, employee iba zoznam. */}
       <div className="surface-card mt-10 p-8">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-2xl font-bold">{t("vehicles.vignettes.title")}</h2>
+            <p className="mt-1 text-sm text-muted-esblu">
+              {t("vehicles.vignettes.description")}
+            </p>
+          </div>
+
+          {role !== "employee" && (
+            <button
+              onClick={() => {
+                if (!editingVignetteId && legalHold) {
+                  alert(t("common.legalHoldMessage"));
+                  return;
+                }
+                if (showVignetteForm) {
+                  cancelVignetteEdit();
+                } else {
+                  startAddVignette();
+                }
+              }}
+              disabled={!editingVignetteId && legalHold && !showVignetteForm}
+              className="shrink-0 rounded-xl bg-blue-600 px-5 py-3 text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-400"
+            >
+              {t("vehicles.vignettes.add")}
+            </button>
+          )}
+        </div>
+
+        {role !== "employee" && !editingVignetteId && legalHold && (
+          <p className="mt-3 text-sm text-amber-400">
+            {t("common.legalHoldMessage")}
+          </p>
+        )}
+
+        {role !== "employee" && showVignetteForm && (
+          <div className="mt-6 rounded-2xl border border-subtle bg-surface-2 p-6">
+            <h3 className="mb-4 text-xl font-bold">
+              {editingVignetteId
+                ? t("vehicles.vignettes.editTitle")
+                : t("vehicles.vignettes.addTitle")}
+            </h3>
+
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <label className="block">
+                <span className="text-sm font-medium text-secondary">
+                  {t("vehicles.vignettes.country")}
+                </span>
+                <select
+                  className="mt-1 w-full rounded-xl border p-3"
+                  value={
+                    vignetteCountryIsCustom
+                      ? VIGNETTE_OTHER_COUNTRY_OPTION
+                      : vignette.country_code
+                  }
+                  onChange={(e) => handleVignetteCountrySelect(e.target.value)}
+                >
+                  <option value="">
+                    {t("vehicles.vignettes.selectCountryPlaceholder")}
+                  </option>
+                  {VIGNETTE_COUNTRIES.map((c) => (
+                    <option key={c.code} value={c.code}>
+                      {vignetteCountryLabel(c.code, locale)}
+                    </option>
+                  ))}
+                  <option value={VIGNETTE_OTHER_COUNTRY_OPTION}>
+                    {t("vehicles.vignettes.otherCountry")}
+                  </option>
+                </select>
+
+                {/* "Iná krajina" — voľný ISO alpha-2 vstup, aby appka nebola
+                    prakticky obmedzená na VIGNETTE_COUNTRIES zoznam. */}
+                {vignetteCountryIsCustom && (
+                  <input
+                    className="mt-2 w-full rounded-xl border p-3 uppercase"
+                    maxLength={2}
+                    placeholder={t(
+                      "vehicles.vignettes.otherCountryCodePlaceholder"
+                    )}
+                    value={vignette.country_code}
+                    onChange={(e) =>
+                      handleVignetteCustomCountryInput(e.target.value)
+                    }
+                  />
+                )}
+              </label>
+
+              <label className="block">
+                <span className="text-sm font-medium text-secondary">
+                  {t("vehicles.vignettes.validUntil")}
+                </span>
+                <input
+                  type="date"
+                  className="mt-1 w-full rounded-xl border p-3"
+                  value={vignette.valid_until}
+                  onChange={(e) =>
+                    updateVignetteField("valid_until", e.target.value)
+                  }
+                />
+              </label>
+            </div>
+
+            <div className="mt-4 flex gap-3">
+              <button
+                onClick={saveVignette}
+                disabled={isSavingVignette}
+                className="rounded-xl bg-green-600 px-5 py-3 text-white hover:bg-green-700 disabled:bg-gray-400"
+              >
+                {isSavingVignette
+                  ? t("common.buttons.saving")
+                  : editingVignetteId
+                  ? t("vehicles.vignettes.saveChanges")
+                  : t("vehicles.vignettes.save")}
+              </button>
+
+              <button
+                onClick={cancelVignetteEdit}
+                className="rounded-xl bg-surface-2 px-5 py-3 text-primary hover:bg-surface-hover"
+              >
+                {t("vehicles.vignettes.cancelEdit")}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {vignettesLoading ? (
+          <p className="mt-6 text-muted-esblu">{t("common.buttons.loading")}</p>
+        ) : vignettes.length === 0 ? (
+          <p className="mt-6 text-muted-esblu">
+            {t("vehicles.vignettes.noneYet")}
+          </p>
+        ) : (
+          <ul className="mt-6 space-y-3">
+            {vignettes.map((item) => (
+              <li
+                key={item.id}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-subtle bg-surface-2 p-4"
+              >
+                <p className="font-medium text-primary">
+                  {t("vehicles.vignettes.validUntilLine", {
+                    country: vignetteCountryLabel(item.country_code, locale),
+                    date: formatDate(item.valid_until, locale),
+                  })}
+                </p>
+
+                {role !== "employee" && (
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => startEditVignette(item)}
+                      className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-700"
+                    >
+                      {t("vehicles.vignettes.edit")}
+                    </button>
+                    <button
+                      onClick={() => deleteVignette(item.id)}
+                      disabled={deletingVignetteId !== null}
+                      className="rounded-lg bg-red-600 px-3 py-2 text-xs font-bold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-gray-400"
+                    >
+                      {deletingVignetteId === String(item.id)
+                        ? t("inbox.deleting")
+                        : t("vehicles.vignettes.remove")}
+                    </button>
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <div className="surface-card mt-10 p-8">
+        <h2 className="text-2xl font-bold">{t("vehicles.detail.documentsTitle")}</h2>
+        <p className="mt-1 text-sm text-muted-esblu">
+          {t("vehicles.detail.documentsDescription")}
+        </p>
+
+        {linkedDocumentsLoading ? (
+          <p className="mt-6 text-muted-esblu">{t("vehicles.detail.loadingDocuments")}</p>
+        ) : linkedDocuments.length === 0 ? (
+          <p className="mt-6 text-muted-esblu">
+            {t("vehicles.detail.noDocumentsYet")}
+          </p>
+        ) : (
+          <div className="mt-6 space-y-4">
+            {linkedDocuments.map((doc) => (
+              <div
+                key={doc.id}
+                className="rounded-2xl border border-subtle bg-surface-2 p-6"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-lg font-bold text-primary">
+                      {linkedDocumentTypeLabels[doc.document_type || ""] ||
+                        t("vehicles.detail.documentFallback")}
+                    </h3>
+
+                    {doc.document_type === "insurance" && (
+                      <p className="mt-1 text-sm text-muted-esblu">
+                        {describeInsuranceSummary(doc.extracted_fields, t) ||
+                          t("vehicles.detail.noFurtherDetails")}
+                      </p>
+                    )}
+
+                    {doc.created_at && (
+                      <p className="mt-1 text-xs text-muted-esblu">
+                        {t("vehicles.detail.uploadedOn", {
+                          date: formatDate(doc.created_at, locale),
+                        })}
+                      </p>
+                    )}
+                  </div>
+
+                  {doc.signedUrl && (
+                    <a
+                      href={doc.signedUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700"
+                    >
+                      {t("inbox.open")}
+                    </a>
+                  )}
+                </div>
+
+                {doc.attachments.length > 0 && (
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {doc.attachments.map((attachment) =>
+                      attachment.signedUrl ? (
+                        <a
+                          key={attachment.id}
+                          href={attachment.signedUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="rounded-lg border border-subtle bg-surface-1 px-3 py-2 text-xs font-semibold text-secondary hover:bg-surface-hover"
+                        >
+                          {linkedAttachmentTypeLabels[
+                            attachment.attachment_type
+                          ] || t("vehicles.detail.attachmentFallback")}
+                        </a>
+                      ) : null
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="surface-card mt-10 p-8">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <h2 className="text-2xl font-bold">{t("vehicles.gallery.title")}</h2>
+
+          {/* Pridávanie fotografií smie aj employee (rovnaké oprávnenie ako
+              SELECT/INSERT na vehicle_photos) — vymazanie fotografie ostáva
+              iba owner/admin nižšie. Toto sa netýka samotného vozidla
+              (vehicles) — employee ho naďalej nemôže editovať ani mazať. */}
+          <div className="flex gap-3">
+            <label className="cursor-pointer rounded-xl bg-blue-600 px-5 py-3 text-white hover:bg-blue-700">
+              {isUploadingPhotos ? t("inbox.uploading") : t("vehicles.gallery.takeOrUploadPhotos")}
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                multiple
+                className="hidden"
+                onChange={uploadVehiclePhotos}
+                disabled={isUploadingPhotos || legalHold}
+              />
+            </label>
+
+            <label className="cursor-pointer rounded-xl border border-subtle bg-surface-1 px-5 py-3 text-secondary">
+              {t("vehicles.gallery.addPhotos")}
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={uploadVehiclePhotos}
+                disabled={isUploadingPhotos || legalHold}
+              />
+            </label>
+          </div>
+        </div>
+
+        {legalHold && (
+          <p className="mt-3 text-sm text-amber-400">{t("common.legalHoldMessage")}</p>
+        )}
+
+        {photos.length === 0 ? (
+          <p className="mt-6 text-muted-esblu">
+            {t("vehicles.gallery.noneYet")}
+          </p>
+        ) : (
+          <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+            {photos.map((photo) => (
+              <div
+                key={photo.id}
+                className="rounded-xl border border-subtle bg-surface-2 p-2"
+              >
+                <button
+                  type="button"
+                  onClick={() => setLightboxPhoto(photo)}
+                  className="block w-full"
+                >
+                  <img
+                    src={photoUrl(photo.storage_path)}
+                    alt={t("vehicles.gallery.photoAlt")}
+                    className="h-32 w-full rounded-lg object-cover sm:h-36"
+                  />
+                </button>
+
+                {isOwnerOrAdmin(role) && (
+                  <button
+                    onClick={() => deletePhoto(photo)}
+                    disabled={deletingPhotoId !== null}
+                    className="mt-2 w-full rounded-lg bg-red-600 px-3 py-2 text-xs font-bold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-gray-400"
+                  >
+                    {deletingPhotoId === String(photo.id)
+                      ? t("inbox.deleting")
+                      : t("vehicles.buttons.deleteWithIcon")}
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* "Pridať servis" — presunuté úplne na spodok detailu vozidla
+          (posledná sekcia pred lightbox modálom), presne podľa zadania.
+          Žiadna zmena servisnej logiky/dát/formulára/validácie/oprávnení —
+          iba UI poradie. */}
+      <div className="surface-card mt-10 mb-10 p-8">
         <div className="flex items-center justify-between">
           <h2 className="text-2xl font-bold">{t("vehicles.services.title")}</h2>
 
@@ -806,165 +1330,6 @@ export default function VehicleDetailPage() {
                     </button>
                   )}
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div className="surface-card mt-10 p-8">
-        <h2 className="text-2xl font-bold">{t("vehicles.detail.documentsTitle")}</h2>
-        <p className="mt-1 text-sm text-muted-esblu">
-          {t("vehicles.detail.documentsDescription")}
-        </p>
-
-        {linkedDocumentsLoading ? (
-          <p className="mt-6 text-muted-esblu">{t("vehicles.detail.loadingDocuments")}</p>
-        ) : linkedDocuments.length === 0 ? (
-          <p className="mt-6 text-muted-esblu">
-            {t("vehicles.detail.noDocumentsYet")}
-          </p>
-        ) : (
-          <div className="mt-6 space-y-4">
-            {linkedDocuments.map((doc) => (
-              <div
-                key={doc.id}
-                className="rounded-2xl border border-subtle bg-surface-2 p-6"
-              >
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <h3 className="text-lg font-bold text-primary">
-                      {linkedDocumentTypeLabels[doc.document_type || ""] ||
-                        t("vehicles.detail.documentFallback")}
-                    </h3>
-
-                    {doc.document_type === "insurance" && (
-                      <p className="mt-1 text-sm text-muted-esblu">
-                        {describeInsuranceSummary(doc.extracted_fields, t) ||
-                          t("vehicles.detail.noFurtherDetails")}
-                      </p>
-                    )}
-
-                    {doc.created_at && (
-                      <p className="mt-1 text-xs text-muted-esblu">
-                        {t("vehicles.detail.uploadedOn", {
-                          date: formatDate(doc.created_at, locale),
-                        })}
-                      </p>
-                    )}
-                  </div>
-
-                  {doc.signedUrl && (
-                    <a
-                      href={doc.signedUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700"
-                    >
-                      {t("inbox.open")}
-                    </a>
-                  )}
-                </div>
-
-                {doc.attachments.length > 0 && (
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    {doc.attachments.map((attachment) =>
-                      attachment.signedUrl ? (
-                        <a
-                          key={attachment.id}
-                          href={attachment.signedUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="rounded-lg border border-subtle bg-surface-1 px-3 py-2 text-xs font-semibold text-secondary hover:bg-surface-hover"
-                        >
-                          {linkedAttachmentTypeLabels[
-                            attachment.attachment_type
-                          ] || t("vehicles.detail.attachmentFallback")}
-                        </a>
-                      ) : null
-                    )}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div className="surface-card mt-10 p-8">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <h2 className="text-2xl font-bold">{t("vehicles.gallery.title")}</h2>
-
-          {/* Pridávanie fotografií smie aj employee (rovnaké oprávnenie ako
-              SELECT/INSERT na vehicle_photos) — vymazanie fotografie ostáva
-              iba owner/admin nižšie. Toto sa netýka samotného vozidla
-              (vehicles) — employee ho naďalej nemôže editovať ani mazať. */}
-          <div className="flex gap-3">
-            <label className="cursor-pointer rounded-xl bg-blue-600 px-5 py-3 text-white hover:bg-blue-700">
-              {isUploadingPhotos ? t("inbox.uploading") : t("vehicles.gallery.takeOrUploadPhotos")}
-              <input
-                type="file"
-                accept="image/*"
-                capture="environment"
-                multiple
-                className="hidden"
-                onChange={uploadVehiclePhotos}
-                disabled={isUploadingPhotos || legalHold}
-              />
-            </label>
-
-            <label className="cursor-pointer rounded-xl border border-subtle bg-surface-1 px-5 py-3 text-secondary">
-              {t("vehicles.gallery.addPhotos")}
-              <input
-                type="file"
-                accept="image/*"
-                multiple
-                className="hidden"
-                onChange={uploadVehiclePhotos}
-                disabled={isUploadingPhotos || legalHold}
-              />
-            </label>
-          </div>
-        </div>
-
-        {legalHold && (
-          <p className="mt-3 text-sm text-amber-400">{t("common.legalHoldMessage")}</p>
-        )}
-
-        {photos.length === 0 ? (
-          <p className="mt-6 text-muted-esblu">
-            {t("vehicles.gallery.noneYet")}
-          </p>
-        ) : (
-          <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-            {photos.map((photo) => (
-              <div
-                key={photo.id}
-                className="rounded-xl border border-subtle bg-surface-2 p-2"
-              >
-                <button
-                  type="button"
-                  onClick={() => setLightboxPhoto(photo)}
-                  className="block w-full"
-                >
-                  <img
-                    src={photoUrl(photo.storage_path)}
-                    alt={t("vehicles.gallery.photoAlt")}
-                    className="h-32 w-full rounded-lg object-cover sm:h-36"
-                  />
-                </button>
-
-                {isOwnerOrAdmin(role) && (
-                  <button
-                    onClick={() => deletePhoto(photo)}
-                    disabled={deletingPhotoId !== null}
-                    className="mt-2 w-full rounded-lg bg-red-600 px-3 py-2 text-xs font-bold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-gray-400"
-                  >
-                    {deletingPhotoId === String(photo.id)
-                      ? t("inbox.deleting")
-                      : t("vehicles.buttons.deleteWithIcon")}
-                  </button>
-                )}
               </div>
             ))}
           </div>
