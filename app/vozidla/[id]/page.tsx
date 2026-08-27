@@ -159,6 +159,9 @@ export default function VehicleDetailPage() {
     LinkedVehicleDocument[]
   >([]);
   const [linkedDocumentsLoading, setLinkedDocumentsLoading] = useState(false);
+  const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(
+    null
+  );
 
   // Diaľničné známky (vehicle_vignettes) — samostatná tabuľka, 1:N na
   // vozidlo (pozri migráciu 20260823090000). owner/admin môžu pridávať/
@@ -342,6 +345,100 @@ export default function VehicleDetailPage() {
       setLinkedDocuments(enriched);
     } finally {
       setLinkedDocumentsLoading(false);
+    }
+  }
+
+  // Vymazanie finalizovanej PZP (documents.document_type === "insurance")
+  // priradenej k tomuto vozidlu — owner/admin. UI tlačidlo nižšie sa
+  // renderuje iba pre isOwnerOrAdmin(role) a iba pre PZP (nie technický
+  // preukaz — ten si zachováva iba existujúci náhľad, zámerne mimo scope).
+  // Skutočné vynútenie prístupu je ale na DB strane (RLS
+  // documents_delete_owner_admin/document_attachments_delete_owner_admin/
+  // document_links_delete_owner_admin, 20260814160000) — toto tlačidlo je
+  // iba pohodlie, nie bezpečnostná hranica. Poradie zámerne rovnaké ako
+  // osvedčený vzor deleteOtherDocument() v app/ai-evidencia/page.tsx:
+  // najprv Storage (hlavný súbor aj všetky prílohy — biela/zelená karta,
+  // záznam o nehode), až potom DB riadok documents, aby nikdy nevznikol
+  // osirotený súbor v Storage bez zodpovedajúceho DB záznamu (aj preto, že
+  // Storage DELETE policy pre finalizovaný objekt vyžaduje, aby matching
+  // documents riadok v čase mazania ešte existoval). document_links aj
+  // document_attachments majú FK ON DELETE CASCADE, takže sa v DB odstránia
+  // automaticky spolu s dokumentom — žiadny orphan link/attachment záznam.
+  // storage_path je pre documents aj document_attachments UNIQUE (bucket,
+  // path), takže tento konkrétny súbor nemôže byť zdieľaný s iným
+  // dokumentom — bezpečné zmazať bez ďalšieho overovania referencií.
+  async function deleteLinkedDocument(doc: LinkedVehicleDocument) {
+    if (deletingDocumentId) return;
+
+    if (!confirm(t("inbox.errors.confirmDeleteDocument"))) return;
+
+    setDeletingDocumentId(doc.id);
+
+    try {
+      const membership = await getMyActiveMembership();
+
+      if (!membership) {
+        throw new Error(t("vehicles.errors.notLoggedInFormal"));
+      }
+
+      const { data: docAttachments, error: attachmentsError } = await supabase
+        .from("document_attachments")
+        .select("storage_bucket, storage_path")
+        .eq("document_id", doc.id)
+        .eq("company_id", membership.company_id);
+
+      if (attachmentsError) {
+        throw new Error(
+          t("inbox.errors.documentAttachmentsLoadFailed", {
+            message: attachmentsError.message,
+          })
+        );
+      }
+
+      const pathsByBucket = new Map<string, string[]>();
+      const addPath = (bucket: string | null, path: string | null) => {
+        if (!bucket || !path) return;
+        const existing = pathsByBucket.get(bucket) ?? [];
+        existing.push(path);
+        pathsByBucket.set(bucket, existing);
+      };
+
+      addPath(doc.storage_bucket, doc.storage_path);
+      (docAttachments || []).forEach((attachment) =>
+        addPath(attachment.storage_bucket, attachment.storage_path)
+      );
+
+      for (const [bucket, paths] of pathsByBucket.entries()) {
+        const { error: removeError } = await supabase.storage
+          .from(bucket)
+          .remove(paths);
+
+        if (removeError) {
+          throw new Error(
+            t("inbox.errors.documentFilesDeleteFailed", {
+              message: removeError.message,
+            })
+          );
+        }
+      }
+
+      const { error: deleteError } = await supabase
+        .from("documents")
+        .delete()
+        .eq("id", doc.id)
+        .eq("company_id", membership.company_id);
+
+      if (deleteError) throw deleteError;
+
+      setLinkedDocuments((current) => current.filter((d) => d.id !== doc.id));
+    } catch (deleteError: unknown) {
+      alert(
+        deleteError instanceof Error
+          ? deleteError.message
+          : t("inbox.errors.deleteDocumentFailed")
+      );
+    } finally {
+      setDeletingDocumentId(null);
     }
   }
 
@@ -1021,16 +1118,38 @@ export default function VehicleDetailPage() {
                     )}
                   </div>
 
-                  {doc.signedUrl && (
-                    <a
-                      href={doc.signedUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700"
-                    >
-                      {t("inbox.open")}
-                    </a>
-                  )}
+                  <div className="flex shrink-0 items-center gap-2">
+                    {doc.signedUrl && (
+                      <a
+                        href={doc.signedUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700"
+                      >
+                        {t("inbox.open")}
+                      </a>
+                    )}
+
+                    {/* Zmazať — iba PZP (nie technický preukaz, mimo scope)
+                        a iba owner/admin. Employee tlačidlo vôbec nevidí
+                        (nie iba disabled) — rovnaký vzor ako pri fotkách
+                        vozidla a diaľničných známkach vyššie v tomto
+                        súbore. Skutočné vynútenie je DB-side RLS, toto je
+                        iba UI pohodlie. */}
+                    {doc.document_type === "insurance" &&
+                      isOwnerOrAdmin(role) && (
+                        <button
+                          type="button"
+                          onClick={() => deleteLinkedDocument(doc)}
+                          disabled={deletingDocumentId !== null}
+                          className="rounded-xl bg-red-600 px-4 py-2 text-sm font-bold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-gray-400"
+                        >
+                          {deletingDocumentId === doc.id
+                            ? t("inbox.deleting")
+                            : t("vehicles.buttons.deleteWithIcon")}
+                        </button>
+                      )}
+                  </div>
                 </div>
 
                 {doc.attachments.length > 0 && (
