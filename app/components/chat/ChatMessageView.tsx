@@ -23,6 +23,14 @@ import EntityPickerModal from "./EntityPickerModal";
 
 const PAGE_SIZE = 50;
 
+// Auto-grow composer textarea — v prázdnom/krátkom stave kompaktné (~1-2
+// riadky), rastie s obsahom po riadkoch až po ~5-6 riadkov, potom sa zapne
+// vnútorný scroll namiesto ďalšieho rastu. Hodnoty v px zodpovedajú
+// text-sm (14px, line-height ~21px) + vertikálny padding composera
+// (px-3.5 py-2.5 → 2×10px), zaokrúhlené na rozumné minimum/maximum.
+const COMPOSER_MIN_HEIGHT_PX = 44;
+const COMPOSER_MAX_HEIGHT_PX = 144;
+
 type PendingEntity = { entityType: ChatEntityType; entityId: string; label: string };
 
 export default function ChatMessageView({ conversationId }: { conversationId: string }) {
@@ -57,10 +65,31 @@ export default function ChatMessageView({ conversationId }: { conversationId: st
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const scrollBottomRef = useRef<HTMLDivElement | null>(null);
   const messageIdsRef = useRef<Set<string>>(new Set());
+  const composerTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
     messageIdsRef.current = new Set(messages.map((m) => m.id));
   }, [messages]);
+
+  // Auto-grow composera podľa obsahu — riadené priamo cez `text` (nie iba
+  // cez onChange), takže rovnaká logika zároveň zabezpečí zmenšenie späť na
+  // minimálnu výšku po odoslaní správy (sendMessage() volá setText("")).
+  // Neriadené (uncontrolled) nastavovanie výšky cez ref — nepridáva žiadny
+  // ďalší render. Rovnaký komponent sa používa na /chat/[conversationId] aj
+  // vo FloatingChatWidget paneli (desktop aj mobilný bottom-sheet), takže
+  // sa správa identicky na oboch miestach bez duplicitnej implementácie.
+  useEffect(() => {
+    const el = composerTextareaRef.current;
+    if (!el) return;
+
+    el.style.height = "auto";
+    const nextHeight = Math.min(
+      Math.max(el.scrollHeight, COMPOSER_MIN_HEIGHT_PX),
+      COMPOSER_MAX_HEIGHT_PX
+    );
+    el.style.height = `${nextHeight}px`;
+    el.style.overflowY = el.scrollHeight > COMPOSER_MAX_HEIGHT_PX ? "auto" : "hidden";
+  }, [text]);
 
   // Zámerne PLAIN funkcie (nie useCallback) — pozri odôvodnenie v
   // ChatConversationList.tsx (react-hooks/set-state-in-effect pravidlo
@@ -560,6 +589,7 @@ export default function ChatMessageView({ conversationId }: { conversationId: st
           </button>
 
           <textarea
+            ref={composerTextareaRef}
             value={text}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => {
@@ -570,7 +600,13 @@ export default function ChatMessageView({ conversationId }: { conversationId: st
             }}
             placeholder={t("chat.composerPlaceholder")}
             rows={1}
-            className="min-h-[44px] flex-1 resize-none rounded-xl border border-subtle bg-surface-1/60 px-3.5 py-2.5 text-sm text-primary outline-none placeholder:text-muted-esblu"
+            // Výška riadená JS efektom vyššie (auto-grow podľa obsahu,
+            // min ~1-2 riadky až max ~5-6 riadkov, potom vnútorný scroll) —
+            // min-h-[44px] ostáva ako CSS fallback pred prvým behom efektu.
+            // overflow-x-hidden vylučuje horizontálny scroll aj pri veľmi
+            // dlhom jednom "slove" bez medzery (wrap už rieši resize-none
+            // textarea samo, toto je len istota).
+            className="min-h-[44px] flex-1 resize-none overflow-x-hidden rounded-xl border border-subtle bg-surface-1/60 px-3.5 py-2.5 text-sm text-primary outline-none placeholder:text-muted-esblu"
           />
 
           <button
