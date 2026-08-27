@@ -15,6 +15,30 @@ import {
   type CompanyMemberForChat,
 } from "@/lib/chat";
 
+// =============================================================================
+// DOČASNÁ DIAGNOSTIKA (produkčné ladenie "Načítanie správ zlyhalo") —
+// vypíše do browser console PRESNE ktorá operácia v loadAll() zlyhala a
+// Postgres/PostgREST chybové polia (code/message/details/hint). Zámerne
+// BEZ akýchkoľvek citlivých dát — žiadny obsah správ, emaily, tokeny a
+// pod., iba technické chybové metadáta. Odstrániť po diagnostikovaní
+// produkčného problému (pozri sprievodnú komunikáciu).
+// =============================================================================
+function logChatDiagnostic(operation: string, error: unknown) {
+  const e = error as {
+    code?: string;
+    message?: string;
+    details?: string;
+    hint?: string;
+  } | null;
+
+  console.error(`[ESBLU_CHAT_DIAG] zlyhalo: ${operation}`, {
+    code: e?.code ?? null,
+    message: e?.message ?? (error instanceof Error ? error.message : String(error)),
+    details: e?.details ?? null,
+    hint: e?.hint ?? null,
+  });
+}
+
 type DirectConversationRow = {
   conversation: ChatConversation;
   // null, ak druhý účastník medzičasom zrušil svoj účet — direct_user_low/
@@ -83,17 +107,47 @@ export default function ChatConversationList({
 
       setMyUserId(session.user.id);
 
-      const membership = await getMyActiveMembership();
+      // DOČASNE: každá operácia samostatne (nie Promise.all) + vlastný
+      // try/catch s logChatDiagnostic — aby bolo v console jednoznačne
+      // vidno, KTORÁ konkrétna operácia padá, vrátane Postgres/PostgREST
+      // code/message/details/hint. Po diagnostikovaní sa dá vrátiť späť na
+      // Promise.all (čisto výkonnostná otázka, funkčne to isté).
+      let membership;
+      try {
+        membership = await getMyActiveMembership();
+      } catch (err) {
+        logChatDiagnostic("getMyActiveMembership()", err);
+        throw err;
+      }
+
       if (!membership) {
         setLoading(false);
         return;
       }
 
-      const [companyId, memberRows, unreadRows] = await Promise.all([
-        ensureCompanyChatChannel(),
-        listCompanyMembersForChat(),
-        getMyUnreadCounts(),
-      ]);
+      let companyId: string;
+      try {
+        companyId = await ensureCompanyChatChannel();
+      } catch (err) {
+        logChatDiagnostic("esblu_ensure_company_chat_channel() [RPC]", err);
+        throw err;
+      }
+
+      let memberRows: CompanyMemberForChat[];
+      try {
+        memberRows = await listCompanyMembersForChat();
+      } catch (err) {
+        logChatDiagnostic("esblu_list_company_members_for_chat() [RPC]", err);
+        throw err;
+      }
+
+      let unreadRows: Awaited<ReturnType<typeof getMyUnreadCounts>>;
+      try {
+        unreadRows = await getMyUnreadCounts();
+      } catch (err) {
+        logChatDiagnostic("esblu_get_my_unread_counts() [RPC]", err);
+        throw err;
+      }
 
       setCompanyConversationId(companyId);
       setMembers(memberRows);
@@ -109,8 +163,20 @@ export default function ChatConversationList({
         .select("*")
         .order("created_at", { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        logChatDiagnostic("SELECT chat_conversations", error);
+        throw error;
+      }
 
+      // Poznámka k diagnostike: názov 1:1 konverzácie (riadky nižšie) sa
+      // dopočítava VÝHRADNE z memberRows už načítaných vyššie
+      // (esblu_list_company_members_for_chat) — žiadny ďalší SELECT/join tu
+      // neprebieha, takže tu nie je čo samostatne logovať. Rovnako
+      // chat_conversation_members sa z frontendu NIKDY priamo neSELECT-uje
+      // — appka sa naň spolieha iba nepriamo (cez RLS vo vnútri
+      // chat_conversations SELECT-u a vyššie uvedených RPC), takže prípadný
+      // problém s touto tabuľkou (napr. chýbajúca RLS policy) sa prejaví
+      // ako chyba na NIEKTOROM z operácií vyššie, nie samostatne tu.
       const directConversations = (
         (conversations as ChatConversation[]) || []
       ).filter((c) => c.type === "direct");
@@ -132,7 +198,10 @@ export default function ChatConversationList({
 
       setDirectRows(rows);
       setLoading(false);
-    } catch {
+    } catch (err) {
+      // Fallback log — pokryje aj chyby MIMO vyššie označených blokov
+      // (napr. neočakávaná výnimka pri mapovaní dát).
+      logChatDiagnostic("loadAll() — neoznačená chyba", err);
       setLoadError(t("chat.errors.loadFailed"));
       setLoading(false);
     }
