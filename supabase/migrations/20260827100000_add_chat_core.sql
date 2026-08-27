@@ -153,27 +153,12 @@ alter table public.chat_conversations enable row level security;
 revoke all on public.chat_conversations from public, anon, authenticated;
 grant select on public.chat_conversations to authenticated;
 
--- SELECT: company kanál = ktokoľvek aktívny v tej istej firme; direct
--- konverzácia = iba jej dvaja explicitní členovia (chat_conversation_members).
--- Žiadna self-rekurzia: subquery nižšie filtruje chat_conversation_members
--- iba na `user_id = auth.uid()`, presne ako company_members_select_own vzor.
-create policy chat_conversations_select_member
-  on public.chat_conversations
-  for select
-  to authenticated
-  using (
-    (type = 'company' and company_id = public.esblu_my_active_company_id())
-    or (
-      type = 'direct'
-      and exists (
-        select 1
-        from public.chat_conversation_members m
-        where m.conversation_id = chat_conversations.id
-          and m.user_id = auth.uid()
-      )
-    )
-  );
-
+-- POZOR: SELECT policy pre túto tabuľku (chat_conversations_select_member)
+-- odkazuje v subquery na chat_conversation_members, takže musí byť
+-- vytvorená AŽ PO tejto tabuľke (sekcia 2 nižšie) — inak by migrácia na
+-- čistej DB zlyhala na "relation chat_conversation_members does not exist".
+-- Samotná definícia policy je preto umiestnená na konci sekcie 2.
+--
 -- Zámerne žiadna INSERT/UPDATE/DELETE policy — zápis výhradne cez SECURITY
 -- DEFINER RPC nižšie (esblu_ensure_company_chat_channel,
 -- esblu_get_or_create_direct_conversation), rovnaký vzor ako company_invites.
@@ -231,6 +216,30 @@ create policy chat_conversation_members_select_own
 -- Zámerne žiadna INSERT/UPDATE/DELETE policy — výhradne cez
 -- esblu_get_or_create_direct_conversation() (2 riadky pri vytvorení direct
 -- konverzácie) a esblu_mark_conversation_read() (upsert last_read_at).
+
+-- SELECT policy pre chat_conversations (sekcia 1) — presunutá SEM (musí byť
+-- vytvorená AŽ PO chat_conversation_members, na ktorú odkazuje v subquery;
+-- na čistej DB by CREATE POLICY pred existenciou tejto tabuľky zlyhal).
+-- company kanál = ktokoľvek aktívny v tej istej firme; direct konverzácia =
+-- iba jej explicitní členovia (chat_conversation_members). Žiadna
+-- self-rekurzia: subquery nižšie filtruje chat_conversation_members iba na
+-- `user_id = auth.uid()`, presne ako company_members_select_own vzor.
+create policy chat_conversations_select_member
+  on public.chat_conversations
+  for select
+  to authenticated
+  using (
+    (type = 'company' and company_id = public.esblu_my_active_company_id())
+    or (
+      type = 'direct'
+      and exists (
+        select 1
+        from public.chat_conversation_members m
+        where m.conversation_id = chat_conversations.id
+          and m.user_id = auth.uid()
+      )
+    )
+  );
 
 
 -- -----------------------------------------------------------------------------
@@ -363,6 +372,60 @@ create trigger esblu_lock_company_id_before_update
 before update on public.chat_messages
 for each row execute function public.esblu_lock_company_id_on_update();
 
+-- chat_messages_update_own vyššie dovoľuje UPDATE iba na VLASTNEJ správe,
+-- ale samotné RLS (USING/WITH CHECK) nevie porovnať staré vs. nové hodnoty
+-- naprieč stĺpcami — bez ďalšej ochrany by tak autor mohol v tom istom
+-- UPDATE (ktorý mení napr. body/deleted_at) prepašovať aj zmenu
+-- conversation_id (presunutie vlastnej správy do inej konverzácie) alebo
+-- created_at. company_id je už chránený existujúcim
+-- esblu_lock_company_id_before_update; tento trigger dopĺňa rovnakú ochranu
+-- pre conversation_id a created_at, a author_id ako defense-in-depth
+-- backstop (RLS WITH CHECK author_id = auth.uid() to už de facto vynucuje
+-- pre bežný klientský UPDATE, ale author_id MUSÍ zostať meniteľné na NULL
+-- pre legitímnu FK ON DELETE SET NULL akciu pri zrušení účtu autora —
+-- Postgres referenčné akcie interne fungujú ako UPDATE a TOTO BEFORE UPDATE
+-- triggerom prechádzajú, takže trigger smie zablokovať iba zmenu na INÚ
+-- non-null hodnotu, nie prechod na NULL).
+create or replace function public.esblu_lock_chat_message_identity_before_update()
+returns trigger
+language plpgsql
+set search_path = ''
+as $function$
+begin
+  if new.conversation_id is distinct from old.conversation_id then
+    raise exception using
+      errcode = '22023',
+      message = 'ESBLU_CHAT_MESSAGE_CONVERSATION_ID_IMMUTABLE';
+  end if;
+
+  if new.created_at is distinct from old.created_at then
+    raise exception using
+      errcode = '22023',
+      message = 'ESBLU_CHAT_MESSAGE_CREATED_AT_IMMUTABLE';
+  end if;
+
+  if new.author_id is distinct from old.author_id and new.author_id is not null then
+    raise exception using
+      errcode = '22023',
+      message = 'ESBLU_CHAT_MESSAGE_AUTHOR_ID_IMMUTABLE';
+  end if;
+
+  return new;
+end;
+$function$;
+
+comment on function public.esblu_lock_chat_message_identity_before_update() is
+  'BEFORE UPDATE guard na chat_messages: conversation_id a created_at sú '
+  'úplne immutable; author_id smie prejsť iba na NULL (FK ON DELETE SET '
+  'NULL pri zrušení účtu autora), nikdy na inú non-null hodnotu. Bráni '
+  'autorovi vlastnej správy "presunúť" ju do inej konverzácie alebo '
+  'zmeniť jej pôvodný časový údaj cez ten istý UPDATE, ktorým edituje '
+  'body/deleted_at.';
+
+create trigger esblu_lock_chat_message_identity_before_update
+before update on public.chat_messages
+for each row execute function public.esblu_lock_chat_message_identity_before_update();
+
 -- DPA gate — chat správa je nový substantívny obsah, ktorý môže obsahovať
 -- osobné údaje tretích strán (rovnaká kategória ako documents/ai_evidence).
 create trigger esblu_require_company_dpa_before_insert
@@ -411,11 +474,37 @@ alter table public.chat_attachments enable row level security;
 revoke all on public.chat_attachments from public, anon, authenticated;
 grant select, insert on public.chat_attachments to authenticated;
 
+-- SELECT: NESMIE byť iba company_id (to by pri direct konverzácii dovolilo
+-- ktorémukoľvek členovi firmy vidieť metadata prílohy cudzej 1:1 správy).
+-- Viditeľnosť sa preto vždy odvodí zo zodpovedajúcej chat_messages
+-- (message_id), rovnaká podmienka ako chat_messages_select_company —
+-- company kanál = ktokoľvek z firmy; direct = iba explicitní členovia.
 create policy chat_attachments_select_company
   on public.chat_attachments
   for select
   to authenticated
-  using (company_id = public.esblu_my_active_company_id());
+  using (
+    exists (
+      select 1
+      from public.chat_messages m
+      where m.id = chat_attachments.message_id
+        and m.company_id = public.esblu_my_active_company_id()
+        and (
+          exists (
+            select 1
+            from public.chat_conversations c
+            where c.id = m.conversation_id
+              and c.type = 'company'
+          )
+          or exists (
+            select 1
+            from public.chat_conversation_members cm
+            where cm.conversation_id = m.conversation_id
+              and cm.user_id = auth.uid()
+          )
+        )
+    )
+  );
 
 -- INSERT: iba k VLASTNEJ, ešte nezmazanej správe — zabraňuje "podhodenie"
 -- prílohy do cudzej správy.
@@ -497,11 +586,35 @@ alter table public.chat_message_references enable row level security;
 revoke all on public.chat_message_references from public, anon, authenticated;
 grant select on public.chat_message_references to authenticated;
 
+-- SELECT: rovnaké odôvodnenie ako chat_attachments_select_company vyššie —
+-- referencia z direct správy NESMIE byť viditeľná company-wide, iba
+-- explicitným členom danej 1:1 konverzácie (+ vlastníkom company kanála).
 create policy chat_message_references_select_company
   on public.chat_message_references
   for select
   to authenticated
-  using (company_id = public.esblu_my_active_company_id());
+  using (
+    exists (
+      select 1
+      from public.chat_messages m
+      where m.id = chat_message_references.message_id
+        and m.company_id = public.esblu_my_active_company_id()
+        and (
+          exists (
+            select 1
+            from public.chat_conversations c
+            where c.id = m.conversation_id
+              and c.type = 'company'
+          )
+          or exists (
+            select 1
+            from public.chat_conversation_members cm
+            where cm.conversation_id = m.conversation_id
+              and cm.user_id = auth.uid()
+          )
+        )
+    )
+  );
 
 -- Zámerne žiadna INSERT policy — výhradne cez
 -- esblu_attach_chat_message_reference() nižšie (server-side existence +
