@@ -15,30 +15,6 @@ import {
   type CompanyMemberForChat,
 } from "@/lib/chat";
 
-// =============================================================================
-// DOČASNÁ DIAGNOSTIKA (produkčné ladenie "Načítanie správ zlyhalo") —
-// vypíše do browser console PRESNE ktorá operácia v loadAll() zlyhala a
-// Postgres/PostgREST chybové polia (code/message/details/hint). Zámerne
-// BEZ akýchkoľvek citlivých dát — žiadny obsah správ, emaily, tokeny a
-// pod., iba technické chybové metadáta. Odstrániť po diagnostikovaní
-// produkčného problému (pozri sprievodnú komunikáciu).
-// =============================================================================
-function logChatDiagnostic(operation: string, error: unknown) {
-  const e = error as {
-    code?: string;
-    message?: string;
-    details?: string;
-    hint?: string;
-  } | null;
-
-  console.error(`[ESBLU_CHAT_DIAG] zlyhalo: ${operation}`, {
-    code: e?.code ?? null,
-    message: e?.message ?? (error instanceof Error ? error.message : String(error)),
-    details: e?.details ?? null,
-    hint: e?.hint ?? null,
-  });
-}
-
 type DirectConversationRow = {
   conversation: ChatConversation;
   // null, ak druhý účastník medzičasom zrušil svoj účet — direct_user_low/
@@ -49,9 +25,19 @@ type DirectConversationRow = {
 };
 
 /**
- * Ľavý panel /chat — firemný kanál (pevne navrchu) + súkromné konverzácie,
- * s unread badge pri každej položke. Zdieľaný medzi /chat a
- * /chat/[conversationId] cez app/chat/layout.tsx.
+ * Ľavý panel chatu — firemný kanál (pevne navrchu) + súkromné konverzácie,
+ * s unread badge pri každej položke. Zdieľaný medzi troma miestami:
+ * (1) /chat + /chat/[conversationId] cez app/chat/layout.tsx (plná stránka,
+ * navigácia cez URL/Link), (2) plávajúci FloatingChatWidget panel
+ * (app/components/chat/FloatingChatWidget.tsx) — kompaktný overlay, ktorý
+ * NESMIE navigovať preč zo stránky, na ktorej sa používateľ nachádza.
+ *
+ * `onSelectConversation`, ak je zadaný, prepne komponent do "panel" módu:
+ * riadky konverzácií sa renderujú ako <button onClick> namiesto <Link>, a
+ * `startConversationWith` volá tento callback namiesto router.push — žiadna
+ * navigácia, iba lokálny stav vo vnútri floating panelu. Bez neho (default)
+ * sa správa presne ako doteraz — plnohodnotná URL-based navigácia pre
+ * samostatnú /chat stránku.
  *
  * Zoznam konverzácií sa načíta priamo cez normálny SELECT na
  * chat_conversations (RLS už sama vráti presne to, čo má volajúci vidieť —
@@ -60,8 +46,10 @@ type DirectConversationRow = {
  */
 export default function ChatConversationList({
   activeConversationId,
+  onSelectConversation,
 }: {
   activeConversationId: string | null;
+  onSelectConversation?: (conversationId: string) => void;
 }) {
   const router = useRouter();
   const { t } = useLocale();
@@ -107,47 +95,17 @@ export default function ChatConversationList({
 
       setMyUserId(session.user.id);
 
-      // DOČASNE: každá operácia samostatne (nie Promise.all) + vlastný
-      // try/catch s logChatDiagnostic — aby bolo v console jednoznačne
-      // vidno, KTORÁ konkrétna operácia padá, vrátane Postgres/PostgREST
-      // code/message/details/hint. Po diagnostikovaní sa dá vrátiť späť na
-      // Promise.all (čisto výkonnostná otázka, funkčne to isté).
-      let membership;
-      try {
-        membership = await getMyActiveMembership();
-      } catch (err) {
-        logChatDiagnostic("getMyActiveMembership()", err);
-        throw err;
-      }
-
+      const membership = await getMyActiveMembership();
       if (!membership) {
         setLoading(false);
         return;
       }
 
-      let companyId: string;
-      try {
-        companyId = await ensureCompanyChatChannel();
-      } catch (err) {
-        logChatDiagnostic("esblu_ensure_company_chat_channel() [RPC]", err);
-        throw err;
-      }
-
-      let memberRows: CompanyMemberForChat[];
-      try {
-        memberRows = await listCompanyMembersForChat();
-      } catch (err) {
-        logChatDiagnostic("esblu_list_company_members_for_chat() [RPC]", err);
-        throw err;
-      }
-
-      let unreadRows: Awaited<ReturnType<typeof getMyUnreadCounts>>;
-      try {
-        unreadRows = await getMyUnreadCounts();
-      } catch (err) {
-        logChatDiagnostic("esblu_get_my_unread_counts() [RPC]", err);
-        throw err;
-      }
+      const [companyId, memberRows, unreadRows] = await Promise.all([
+        ensureCompanyChatChannel(),
+        listCompanyMembersForChat(),
+        getMyUnreadCounts(),
+      ]);
 
       setCompanyConversationId(companyId);
       setMembers(memberRows);
@@ -163,20 +121,8 @@ export default function ChatConversationList({
         .select("*")
         .order("created_at", { ascending: false });
 
-      if (error) {
-        logChatDiagnostic("SELECT chat_conversations", error);
-        throw error;
-      }
+      if (error) throw error;
 
-      // Poznámka k diagnostike: názov 1:1 konverzácie (riadky nižšie) sa
-      // dopočítava VÝHRADNE z memberRows už načítaných vyššie
-      // (esblu_list_company_members_for_chat) — žiadny ďalší SELECT/join tu
-      // neprebieha, takže tu nie je čo samostatne logovať. Rovnako
-      // chat_conversation_members sa z frontendu NIKDY priamo neSELECT-uje
-      // — appka sa naň spolieha iba nepriamo (cez RLS vo vnútri
-      // chat_conversations SELECT-u a vyššie uvedených RPC), takže prípadný
-      // problém s touto tabuľkou (napr. chýbajúca RLS policy) sa prejaví
-      // ako chyba na NIEKTOROM z operácií vyššie, nie samostatne tu.
       const directConversations = (
         (conversations as ChatConversation[]) || []
       ).filter((c) => c.type === "direct");
@@ -198,10 +144,7 @@ export default function ChatConversationList({
 
       setDirectRows(rows);
       setLoading(false);
-    } catch (err) {
-      // Fallback log — pokryje aj chyby MIMO vyššie označených blokov
-      // (napr. neočakávaná výnimka pri mapovaní dát).
-      logChatDiagnostic("loadAll() — neoznačená chyba", err);
+    } catch {
       setLoadError(t("chat.errors.loadFailed"));
       setLoading(false);
     }
@@ -259,7 +202,12 @@ export default function ChatConversationList({
       const conversationId = await getOrCreateDirectConversation(otherUserId);
       setShowNewConversation(false);
       await loadAll();
-      router.push(`/chat/${conversationId}`);
+
+      if (onSelectConversation) {
+        onSelectConversation(conversationId);
+      } else {
+        router.push(`/chat/${conversationId}`);
+      }
     } catch {
       setLoadError(t("chat.errors.conversationLoadFailed"));
     } finally {
@@ -295,6 +243,11 @@ export default function ChatConversationList({
           {companyConversationId && (
             <ConversationRow
               href={`/chat/${companyConversationId}`}
+              onSelect={
+                onSelectConversation
+                  ? () => onSelectConversation(companyConversationId)
+                  : undefined
+              }
               active={activeConversationId === companyConversationId}
               title={t("chat.companyChannel")}
               unread={unreadMap[companyConversationId] || 0}
@@ -331,6 +284,11 @@ export default function ChatConversationList({
                 <ConversationRow
                   key={row.conversation.id}
                   href={`/chat/${row.conversation.id}`}
+                  onSelect={
+                    onSelectConversation
+                      ? () => onSelectConversation(row.conversation.id)
+                      : undefined
+                  }
                   active={activeConversationId === row.conversation.id}
                   title={row.otherMember?.email || t("chat.formerMember")}
                   unread={unreadMap[row.conversation.id] || 0}
@@ -386,26 +344,29 @@ export default function ChatConversationList({
 
 function ConversationRow({
   href,
+  onSelect,
   active,
   title,
   unread,
   icon,
 }: {
   href: string;
+  /** Ak zadané, riadok sa renderuje ako button (panel mód) namiesto Link
+   * (route mód) — pozri komentár nad ChatConversationList vyššie. */
+  onSelect?: () => void;
   active: boolean;
   title: string;
   unread: number;
   icon: string;
 }) {
-  return (
-    <Link
-      href={href}
-      className={`flex items-center gap-2.5 rounded-xl px-2.5 py-2.5 text-sm font-semibold transition ${
-        active
-          ? "bg-accent-cyan/12 text-accent-cyan"
-          : "text-secondary hover:bg-surface-hover hover:text-primary"
-      }`}
-    >
+  const className = `flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2.5 text-left text-sm font-semibold transition ${
+    active
+      ? "bg-accent-cyan/12 text-accent-cyan"
+      : "text-secondary hover:bg-surface-hover hover:text-primary"
+  }`;
+
+  const content = (
+    <>
       <span aria-hidden="true" className="text-base leading-none">
         {icon}
       </span>
@@ -415,6 +376,20 @@ function ConversationRow({
           {unread}
         </span>
       )}
+    </>
+  );
+
+  if (onSelect) {
+    return (
+      <button type="button" onClick={onSelect} className={className}>
+        {content}
+      </button>
+    );
+  }
+
+  return (
+    <Link href={href} className={className}>
+      {content}
     </Link>
   );
 }

@@ -1418,6 +1418,8 @@ const sk = {
     markAsRead: "Označiť ako prečítané",
     loadOlderMessages: "Načítať staršie správy",
     backToList: "Späť na zoznam",
+    openPanel: "Otvoriť chat",
+    closePanel: "Zavrieť chat",
     you: "Vy",
     formerMember: "Bývalý člen",
     entityPicker: {

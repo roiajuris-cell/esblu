@@ -12,7 +12,6 @@ import {
   vignetteCountryLabel,
   type VehicleVignette,
 } from "@/lib/vehicle-vignettes";
-import { getMyUnreadCounts } from "@/lib/chat";
 
 function getGreeting(t: (key: string) => string) {
   const hour = new Date().getHours();
@@ -36,7 +35,6 @@ export default function Dashboard() {
   // raz pre celú firmu (rovnaký vzor ako vehicles/machines/items vyššie) a
   // v createAlerts() nižšie priradené k vozidlu cez vehicle_id.
   const [vignettes, setVignettes] = useState<VehicleVignette[]>([]);
-  const [chatUnreadTotal, setChatUnreadTotal] = useState(0);
   const [companyName, setCompanyName] = useState("ESBLU");
   const [companyLogoUrl, setCompanyLogoUrl] = useState("");
   const [search, setSearch] = useState("");
@@ -67,7 +65,6 @@ export default function Dashboard() {
       setMachines([]);
       setItems([]);
       setVignettes([]);
-      setChatUnreadTotal(0);
       // Bez aktívneho membershipu niet "firmy", ktorej branding by sa dal
       // načítať (esblu_get_company_profile by aj tak nič nevrátila) —
       // ostáva dnešný generický fallback ("ESBLU", žiadne logo).
@@ -76,21 +73,6 @@ export default function Dashboard() {
 
     loadData(membership.company_id);
     loadCompanyProfile();
-    loadChatUnread();
-  }
-
-  // Súčet neprečítaných správ naprieč všetkými konverzáciami (firemný kanál
-  // + 1:1) pre badge pri položke Chat — best-effort, nikdy neblokuje zvyšok
-  // Dashboardu. Realtime aktualizácia počas otvoreného Dashboardu zámerne nie
-  // je v V1 (badge sa obnoví pri ďalšom otvorení/navigácii); samotná /chat
-  // stránka má vlastný realtime unread mechanizmus.
-  async function loadChatUnread() {
-    try {
-      const rows = await getMyUnreadCounts();
-      setChatUnreadTotal(rows.reduce((sum, row) => sum + row.unread_count, 0));
-    } catch (error) {
-      console.error("Načítanie neprečítaných chat správ zlyhalo:", error);
-    }
   }
 
   async function logout() {
@@ -348,14 +330,6 @@ export default function Dashboard() {
       accent: "teal",
     },
     {
-      title: t("nav.chat"),
-      subtitle: t("dashboard.moduleChatSubtitle"),
-      stat: String(chatUnreadTotal),
-      href: "/chat",
-      icon: <ChatIcon />,
-      accent: "blue",
-    },
-    {
       title: t("nav.settings"),
       subtitle: t("dashboard.moduleSettingsSubtitle"),
       href: "/nastavenia",
@@ -377,7 +351,6 @@ export default function Dashboard() {
     { href: "/vozidla", label: t("nav.vehicles"), image: "/images/van.png" },
     { href: "/stroje", label: t("nav.machines"), image: "/images/excavator.png" },
     { href: "/sklad", label: t("nav.inventory"), image: "/images/warehouse.png" },
-    { href: "/chat", label: t("nav.chat"), icon: <ChatIcon />, badge: chatUnreadTotal },
     { href: "/nastavenia", label: t("nav.settings"), image: "/images/settings.png" },
   ];
 
@@ -712,14 +685,6 @@ function SideLink({
         </span>
       )}
     </Link>
-  );
-}
-
-function ChatIcon() {
-  return (
-    <IconBase size={20}>
-      <path d="M4 4h16v11H8l-4 4V4z" />
-    </IconBase>
   );
 }
 

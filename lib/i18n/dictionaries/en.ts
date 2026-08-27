@@ -1407,6 +1407,8 @@ const en = {
     markAsRead: "Mark as read",
     loadOlderMessages: "Load older messages",
     backToList: "Back to list",
+    openPanel: "Open chat",
+    closePanel: "Close chat",
     you: "You",
     formerMember: "Former member",
     entityPicker: {

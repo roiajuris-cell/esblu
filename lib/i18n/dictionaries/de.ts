@@ -1423,6 +1423,8 @@ const de = {
     markAsRead: "Als gelesen markieren",
     loadOlderMessages: "Ältere Nachrichten laden",
     backToList: "Zurück zur Liste",
+    openPanel: "Chat öffnen",
+    closePanel: "Chat schließen",
     you: "Sie",
     formerMember: "Ehemaliges Mitglied",
     entityPicker: {

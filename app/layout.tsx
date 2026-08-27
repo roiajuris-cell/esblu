@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import LegalAcceptanceGate from "./components/LegalAcceptanceGate";
 import CompanyDpaGate from "./components/CompanyDpaGate";
+import FloatingChatWidget from "./components/chat/FloatingChatWidget";
 import { LocaleProvider } from "@/lib/i18n/LocaleProvider";
 import { DEFAULT_LOCALE } from "@/lib/i18n/locales";
 
@@ -46,7 +47,17 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col">
         <LocaleProvider>
           <LegalAcceptanceGate>
-            <CompanyDpaGate>{children}</CompanyDpaGate>
+            <CompanyDpaGate>
+              {children}
+              {/* Globálny plávajúci chat — jediné miesto v appke, ktoré
+                  obaľuje VŠETKY moduly (tie samotné nemajú spoločný
+                  sidebar/layout, pozri audit v FloatingChatWidget.tsx).
+                  Renderuje sa AŽ za {children}/vnútri CompanyDpaGate, takže
+                  jeho z-index (70) je zámerne pod LegalAcceptanceGate (100)
+                  aj CompanyDpaGate (90) — nedostupný gate vždy prekryje
+                  bublinku, presne ako medzi sebou tieto dva gate. */}
+              <FloatingChatWidget />
+            </CompanyDpaGate>
           </LegalAcceptanceGate>
         </LocaleProvider>
       </body>
