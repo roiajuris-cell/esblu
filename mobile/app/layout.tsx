@@ -1,8 +1,32 @@
+import RootLayout, { metadata, viewport } from "@/app/layout";
+import DeepLinkBridge from "./DeepLinkBridge";
+
 // -----------------------------------------------------------------------------
-// MOBILE root layout — čistý re-export koreňového app/layout.tsx. Next.js
-// vyžaduje, aby KAŽDÝ projekt mal vlastný app/layout.tsx (routovací koreň),
-// preto tento súbor musí fyzicky existovať tu v mobile/ — ale jeho OBSAH
-// (LocaleProvider, LegalAcceptanceGate, CompanyDpaGate, FloatingChatWidget,
-// fonty, metadata) je 100% zdieľaný, nič sa neduplikuje ani neprepisuje.
+// MOBILE root layout — kompozícia, NIE duplikácia. Celá vizuálna/business
+// štruktúra (LocaleProvider, LegalAcceptanceGate, CompanyDpaGate,
+// FloatingChatWidget, fonty, metadata/viewport) zostáva 100% zdieľaná zo
+// @/app/layout — ten istý RootLayout komponent, ktorý používa web. Tento
+// súbor ho iba VOLÁ ako obyčajný React komponent (nie cez file-based layout
+// nesting — mobile/ je vlastný Next.js projekt, takže toto JE jeho root
+// layout) a vloží doň navyše <DeepLinkBridge /> ako súrodenca {children},
+// vnútri rovnakého <html><body> stromu.
+//
+// DeepLinkBridge (App Links routing cez @capacitor/app) sa TAKTO mountuje
+// VÝHRADNE v mobile builde — @capacitor/app sa nikde v koreňovom (web)
+// app/layout.tsx neimportuje ani nespomína, takže webový bundle/build sa
+// touto zmenou vôbec nedotýka.
 // -----------------------------------------------------------------------------
-export { default, metadata, viewport } from "@/app/layout";
+export { metadata, viewport };
+
+export default function MobileRootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  return (
+    <RootLayout>
+      <DeepLinkBridge />
+      {children}
+    </RootLayout>
+  );
+}

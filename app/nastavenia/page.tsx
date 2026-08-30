@@ -20,6 +20,7 @@ import {
   type MyLegalAcceptanceRow,
 } from "@/lib/legal-acceptance";
 import { legalConfig } from "@/lib/legal-config";
+import { publicWebUrl } from "@/lib/public-url";
 import {
   ACCOUNT_DELETION_CONFIRM_PHRASE,
   deleteMyAccount,
@@ -224,7 +225,11 @@ export default function NastaveniaPage() {
 
     try {
       const result = await createCompanyInvite(normalizedEmail, inviteRole);
-      const inviteLink = `${window.location.origin}/invite/${result.token}`;
+      // publicWebUrl() namiesto priameho window.location.origin — na mobile
+      // (Capacitor) builde by origin bol lokálny WebView origin, nie
+      // https://esblu.com, a odkaz skopírovaný/zdieľaný mimo appku by bol
+      // nepoužiteľný. Pozri lib/public-url.ts.
+      const inviteLink = publicWebUrl(`/invite/${result.token}`);
 
       setLastInviteLink(inviteLink);
       setInviteEmail("");
