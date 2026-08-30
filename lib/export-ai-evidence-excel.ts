@@ -1,4 +1,5 @@
 import type { Workbook, Worksheet } from "exceljs";
+import { downloadBlob } from "@/lib/file-actions";
 import { normalizeSpz } from "@/lib/normalize-spz";
 import {
   convertWeightToTons,
@@ -585,16 +586,7 @@ export async function exportAiEvidenceToExcel(
     type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   });
   const fileName = `ai-evidencia_${getLocalDateFilePart(generatedAt)}.xlsx`;
-  const objectUrl = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-
-  link.href = objectUrl;
-  link.download = fileName;
-  link.style.display = "none";
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+  await downloadBlob(blob, fileName);
 
   return { exportedCount: records.length, fileName };
 }

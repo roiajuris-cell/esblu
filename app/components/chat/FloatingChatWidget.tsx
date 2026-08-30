@@ -308,6 +308,15 @@ export default function FloatingChatWidget() {
     }
   }
 
+  // Pomenovaná funkcia namiesto inline `() => setOpen(false)` — potrebná
+  // ako stabilná referencia posielaná ako `onClose` do MobilePanel/
+  // DesktopPanel, odkiaľ sa ďalej prehnáva do ChatMessageView ako
+  // `onInternalNavigate` (zavretie panelu pri kliku na entity-referenciu,
+  // pozri PanelBody nižšie a ChatEntityReferenceCard.handleClick()).
+  function closePanel() {
+    setOpen(false);
+  }
+
   if (!mounted || skip || !authorized) return null;
 
   // Panel sa ukotvuje k rohu, ku ktorému je bublinka aktuálne bližšie —
@@ -358,7 +367,7 @@ export default function FloatingChatWidget() {
       {open &&
         (isMobile ? (
           <MobilePanel
-            onClose={() => setOpen(false)}
+            onClose={closePanel}
             selectedConversationId={selectedConversationId}
             onSelectConversation={setSelectedConversationId}
             onBack={() => setSelectedConversationId(null)}
@@ -369,7 +378,7 @@ export default function FloatingChatWidget() {
             anchorRight={anchorRight}
             anchorBottom={anchorBottom}
             bubblePosition={position}
-            onClose={() => setOpen(false)}
+            onClose={closePanel}
             selectedConversationId={selectedConversationId}
             onSelectConversation={setSelectedConversationId}
             onBack={() => setSelectedConversationId(null)}
@@ -451,6 +460,7 @@ function DesktopPanel({
       <PanelBody
         selectedConversationId={selectedConversationId}
         onSelectConversation={onSelectConversation}
+        onClose={onClose}
       />
     </div>
   );
@@ -478,6 +488,8 @@ function MobilePanel({
     <div
       className="fixed inset-0 z-[70] flex flex-col justify-end bg-slate-950/60 backdrop-blur-sm"
       onClick={(event) => {
+        // Zatvorí panel iba pri kliku priamo na backdrop (target ===
+        // currentTarget), nie pri kliku na čokoľvek v podstrome panelu.
         if (event.target === event.currentTarget) onClose();
       }}
     >
@@ -495,6 +507,7 @@ function MobilePanel({
           <PanelBody
             selectedConversationId={selectedConversationId}
             onSelectConversation={onSelectConversation}
+            onClose={onClose}
           />
         </div>
       </div>
@@ -543,14 +556,23 @@ function PanelHeader({
 function PanelBody({
   selectedConversationId,
   onSelectConversation,
+  onClose,
 }: {
   selectedConversationId: string | null;
   onSelectConversation: (id: string) => void;
+  /** Zavolá sa TESNE PRED interným router.push() z entity-reference karty
+   * (klik na vozidlo/stroj/sklad/servis), aby plávajúci panel neprekrýval
+   * cieľovú stránku po navigácii. Prehnané cez ChatMessageView →
+   * MessageBubble → ChatEntityReferenceCard (pozri ChatMessageView.tsx). */
+  onClose: () => void;
 }) {
   return (
     <div className="min-h-0 flex-1 overflow-hidden p-3">
       {selectedConversationId ? (
-        <ChatMessageView conversationId={selectedConversationId} />
+        <ChatMessageView
+          conversationId={selectedConversationId}
+          onInternalNavigate={onClose}
+        />
       ) : (
         <ChatConversationList
           activeConversationId={null}

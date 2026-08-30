@@ -1,4 +1,5 @@
 import type { Workbook, Worksheet } from "exceljs";
+import { downloadBlob } from "@/lib/file-actions";
 
 type TranslateFn = (
   key: string,
@@ -256,16 +257,7 @@ export async function exportAiInboxFolderToExcel(
   });
   const filePrefix = kind === "receipt" ? "blocky" : "faktury";
   const fileName = `${filePrefix}_${getLocalDateFilePart(generatedAt)}.xlsx`;
-  const objectUrl = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-
-  link.href = objectUrl;
-  link.download = fileName;
-  link.style.display = "none";
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+  await downloadBlob(blob, fileName);
 
   return { exportedCount: records.length, fileName };
 }

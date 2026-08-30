@@ -1432,6 +1432,7 @@ const en = {
       remove: "Remove attachment",
       tooLarge: "File is too large (max. 15 MB).",
       unsupportedType: "Unsupported file type. Images (JPG/PNG/WEBP) and PDF are allowed.",
+      openFailed: "The attachment could not be opened. Please try again.",
     },
     errors: {
       ESBLU_NO_ACTIVE_COMPANY: "You don't have an active membership in any company.",

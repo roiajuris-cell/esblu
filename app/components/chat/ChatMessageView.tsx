@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { openExternalUrl } from "@/lib/file-actions";
 import { useLocale } from "@/lib/i18n/LocaleProvider";
 import {
   attachChatMessageReference,
@@ -33,7 +35,23 @@ const COMPOSER_MAX_HEIGHT_PX = 144;
 
 type PendingEntity = { entityType: ChatEntityType; entityId: string; label: string };
 
-export default function ChatMessageView({ conversationId }: { conversationId: string }) {
+export default function ChatMessageView({
+  conversationId,
+  onInternalNavigate,
+}: {
+  conversationId: string;
+  /**
+   * Voliteľný callback — zavolá sa TESNE PRED router.push() pri kliku na
+   * interný entity-reference (vozidlo/stroj/sklad/servis), teda len keď má
+   * `card.href` hodnotu. Na /chat/[conversationId] (samostatná stránka) nie
+   * je potrebný a ostáva `undefined` (žiadny panel na zatvorenie).
+   * Vo FloatingChatWidget doň mount posiela `closePanel`, aby plávajúci
+   * panel neprekrýval detail entity po navigácii (pozri FloatingChatWidget.tsx).
+   * Dokumentové referencie (href === null, otvárajú sa cez signed URL) tento
+   * callback nevolajú — chat sa pri nich nezatvára.
+   */
+  onInternalNavigate?: () => void;
+}) {
   const { t, locale } = useLocale();
 
   const [loading, setLoading] = useState(true);
@@ -519,6 +537,7 @@ export default function ChatMessageView({ conversationId }: { conversationId: st
             onCancelEdit={() => setEditingMessageId(null)}
             onSaveEdit={() => saveEdit(message.id)}
             onDelete={() => deleteMessage(message.id)}
+            onInternalNavigate={onInternalNavigate}
             locale={locale}
             t={t}
           />
@@ -645,6 +664,7 @@ function MessageBubble({
   onCancelEdit,
   onSaveEdit,
   onDelete,
+  onInternalNavigate,
   locale,
   t,
 }: {
@@ -659,6 +679,7 @@ function MessageBubble({
   onCancelEdit: () => void;
   onSaveEdit: () => void;
   onDelete: () => void;
+  onInternalNavigate?: () => void;
   locale: string;
   t: (key: string, vars?: Record<string, string | number>) => string;
 }) {
@@ -716,7 +737,12 @@ function MessageBubble({
             ))}
 
             {references.map((reference) => (
-              <ChatEntityReferenceCard key={reference.id} reference={reference} t={t} />
+              <ChatEntityReferenceCard
+                key={reference.id}
+                reference={reference}
+                onNavigate={onInternalNavigate}
+                t={t}
+              />
             ))}
           </>
         )}
@@ -750,19 +776,36 @@ function ChatAttachmentChip({
   const [signedUrl, setSignedUrl] = useState<string | null>(null);
   const isImage = attachment.mime_type.startsWith("image/");
 
+  // Otvorenie prílohy — web: nová karta prehliadača; mobile: Chrome Custom
+  // Tab (openExternalUrl(), lib/file-actions.ts). Pri zlyhaní (signed URL
+  // sa nepodarilo vytvoriť, alebo samotné otvorenie zlyhá) sa používateľovi
+  // zobrazí zrozumiteľná spätná väzba — rovnaký `alert(t(...))` vzor ako
+  // ai-evidencia/page.tsx's openAttachment()/downloadOriginal(). Nikdy sa
+  // nelogguje signed URL, storage_path, bucket názov ani token.
   async function openAttachment() {
-    if (signedUrl) {
-      window.open(signedUrl, "_blank", "noopener,noreferrer");
-      return;
-    }
+    try {
+      if (signedUrl) {
+        await openExternalUrl(signedUrl);
+        return;
+      }
 
-    const { data } = await supabase.storage
-      .from(attachment.storage_bucket)
-      .createSignedUrl(attachment.storage_path, 300);
+      const { data, error } = await supabase.storage
+        .from(attachment.storage_bucket)
+        .createSignedUrl(attachment.storage_path, 300);
 
-    if (data?.signedUrl) {
+      if (error || !data?.signedUrl) {
+        alert(t("chat.attachments.openFailed"));
+        return;
+      }
+
       setSignedUrl(data.signedUrl);
-      window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+      await openExternalUrl(data.signedUrl);
+    } catch {
+      // openExternalUrl() (Browser.open() na mobile) môže zlyhať aj po
+      // úspešnom createSignedUrl() — rovnaká spätná väzba pre používateľa,
+      // bez rozlišovania dôvodu (nikdy nelogovať/zobraziť chybový objekt,
+      // ktorý by mohol obsahovať URL).
+      alert(t("chat.attachments.openFailed"));
     }
   }
 
@@ -782,12 +825,17 @@ function ChatAttachmentChip({
 
 function ChatEntityReferenceCard({
   reference,
+  onNavigate,
   t,
 }: {
   reference: ChatMessageReference;
+  /** Zavolá sa TESNE PRED router.push() — iba pri internej navigácii
+   * (card.href truthy). Dokumentové referencie (signed URL) ho nevolajú. */
+  onNavigate?: () => void;
   t: (key: string) => string;
 }) {
   const [card, setCard] = useState<ResolvedEntityCard | null | "loading">("loading");
+  const router = useRouter();
 
   useEffect(() => {
     let cancelled = false;
@@ -805,7 +853,30 @@ function ChatEntityReferenceCard({
     if (!card || card === "loading") return;
 
     if (card.href) {
-      window.location.href = card.href;
+      // OPRAVA (potvrdený root cause — Android test s TOYOTA RAV4): predtým
+      // `window.location.href = card.href` — document-level hard reload,
+      // ktorý na mobile static-exporte žiadal web-only cestu (/vozidla/<id>)
+      // namiesto skutočnej mobilnej routy (/vozidla/detail?id=<id>), a
+      // Capacitor WebViewLocalServer html5mode fallback (rovnaký root cause
+      // ako pri invite/reset/onboarding deep-linkoch, pozri
+      // mobile/app/DeepLinkBridge.tsx komentár bod 6) ticho servoval
+      // root bundle → vyzeralo to ako "návrat do menu". `card.href` teraz
+      // prichádza z resolveChatEntityCard() (lib/chat.ts), ktorý už
+      // generuje správnu web/mobile cestu cez lib/entity-links.ts. Klientská
+      // router.push() navyše na mobile vôbec nezasiahne WebViewLocalServer
+      // (žiadny hard reload) a na webe je to bežná Next.js navigácia — v
+      // oboch prípadoch FloatingChatWidget ostáva pri živote/konzistentný.
+      //
+      // UX oprava (potvrdené Android retestom): pri internej navigácii sa
+      // najprv zavrie prípadný FloatingChatWidget panel (onNavigate — vo
+      // FloatingChatWidget.tsx je to `closePanel`, na /chat/[conversationId]
+      // je `undefined`, teda no-op), AŽ POTOM router.push(), aby plávajúci
+      // panel neprekrýval detail entity. Dokumentové referencie (nižšie,
+      // href === null) tento callback nevolajú — chat sa pri nich
+      // nezatvára, keďže tam ide iba o otvorenie prílohy, nie o opustenie
+      // konverzácie.
+      onNavigate?.();
+      router.push(card.href);
       return;
     }
 
@@ -822,7 +893,7 @@ function ChatEntityReferenceCard({
           .createSignedUrl(data.storage_path, 300);
 
         if (signed?.signedUrl) {
-          window.open(signed.signedUrl, "_blank", "noopener,noreferrer");
+          await openExternalUrl(signed.signedUrl);
         }
       }
     }

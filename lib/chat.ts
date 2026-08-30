@@ -1,4 +1,9 @@
 import { supabase } from "@/lib/supabase";
+import {
+  vehicleDetailHref,
+  machineDetailHref,
+  inventoryItemDetailHref,
+} from "@/lib/entity-links";
 
 // =============================================================================
 // Esblu — Interný firemný chat: zdieľané typy + klientske helpery
@@ -281,7 +286,7 @@ export async function resolveChatEntityCard(
         entityId,
         title: `${data.znacka || ""} ${data.model || ""}`.trim() || data.spz || "",
         subtitle: data.spz || null,
-        href: `/vozidla/${data.id}`,
+        href: vehicleDetailHref(data.id),
       };
     }
     case "machine": {
@@ -298,7 +303,7 @@ export async function resolveChatEntityCard(
         entityId,
         title: data.name || "",
         subtitle: data.category || null,
-        href: `/stroje/${data.id}`,
+        href: machineDetailHref(data.id),
       };
     }
     case "inventory_item": {
@@ -316,7 +321,7 @@ export async function resolveChatEntityCard(
         title: data.name || "",
         subtitle:
           data.quantity != null ? `${data.quantity} ${data.unit || ""}`.trim() : null,
-        href: `/sklad/${data.id}`,
+        href: inventoryItemDetailHref(data.id),
       };
     }
     case "document": {
@@ -355,7 +360,9 @@ export async function resolveChatEntityCard(
         entityId,
         title: data.title || "",
         subtitle: data.service_date || null,
-        href: `/vozidla/${data.vehicle_id}`,
+        // Servisný záznam nemá vlastnú detail routu — smeruje na detail
+        // rodičovského vozidla (rovnaký princíp ako VehicleDetailView).
+        href: vehicleDetailHref(data.vehicle_id),
       };
     }
     case "machine_service": {
@@ -372,7 +379,9 @@ export async function resolveChatEntityCard(
         entityId,
         title: data.title || "",
         subtitle: data.service_date || null,
-        href: `/stroje/${data.machine_id}`,
+        // Rovnaký princíp ako vehicle_service — smeruje na detail
+        // rodičovského stroja.
+        href: machineDetailHref(data.machine_id),
       };
     }
     default:

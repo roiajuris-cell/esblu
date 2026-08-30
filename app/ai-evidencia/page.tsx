@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { apiUrl } from "@/lib/api-url";
+import { openExternalUrl, downloadBlob } from "@/lib/file-actions";
 import PlanLimitNotice from "@/app/components/PlanLimitNotice";
 import { usePlanUsage } from "@/hooks/use-plan-usage";
 import {
@@ -2605,12 +2606,15 @@ review_status: reviewStatus,
       return;
     }
 
-    window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+    await openExternalUrl(data.signedUrl);
   }
 
   // Stiahnutie originálneho súboru dokumentu do zariadenia (bod 4/5
   // zadania) — skutočný download (nie iba otvorenie v novej záložke), aby
   // šlo dokument následne vytlačiť štandardným spôsobom zariadenia.
+  // downloadBlob() (lib/file-actions.ts) rieši web (nezmenené) aj mobile
+  // (Filesystem + Share, keďže blob: URL v Android WebView nie je spoľahlivo
+  // sťahovateľná cez <a download>).
   async function downloadOriginal(doc: OtherDocumentRow) {
     if (!doc.storage_bucket || !doc.storage_path) return;
 
@@ -2629,16 +2633,7 @@ review_status: reviewStatus,
       }
 
       const blob = await response.blob();
-      const objectUrl = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-
-      link.href = objectUrl;
-      link.download = doc.original_filename || `dokument-${doc.id}`;
-      link.style.display = "none";
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+      await downloadBlob(blob, doc.original_filename || `dokument-${doc.id}`);
     } catch (downloadError: unknown) {
       alert(
         downloadError instanceof Error
@@ -2663,7 +2658,7 @@ review_status: reviewStatus,
       return;
     }
 
-    window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+    await openExternalUrl(data.signedUrl);
   }
 
   // Bezpečný delete flow (opravené po security audite): najprv overíme

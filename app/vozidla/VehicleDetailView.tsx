@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { openExternalUrl } from "@/lib/file-actions";
 import BackLink from "@/app/components/BackLink";
 import {
   getMyActiveMembership,
@@ -1131,14 +1132,16 @@ export default function VehicleDetailView({
 
                   <div className="flex shrink-0 items-center gap-2">
                     {doc.signedUrl && (
-                      <a
-                        href={doc.signedUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const url = doc.signedUrl;
+                          if (url) openExternalUrl(url);
+                        }}
                         className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700"
                       >
                         {t("inbox.open")}
-                      </a>
+                      </button>
                     )}
 
                     {/* Zmazať — iba PZP (nie technický preukaz, mimo scope)
@@ -1165,21 +1168,23 @@ export default function VehicleDetailView({
 
                 {doc.attachments.length > 0 && (
                   <div className="mt-4 flex flex-wrap gap-2">
-                    {doc.attachments.map((attachment) =>
-                      attachment.signedUrl ? (
-                        <a
+                    {doc.attachments.map((attachment) => {
+                      const attachmentUrl = attachment.signedUrl;
+                      if (!attachmentUrl) return null;
+
+                      return (
+                        <button
                           key={attachment.id}
-                          href={attachment.signedUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
+                          type="button"
+                          onClick={() => openExternalUrl(attachmentUrl)}
                           className="rounded-lg border border-subtle bg-surface-1 px-3 py-2 text-xs font-semibold text-secondary hover:bg-surface-hover"
                         >
                           {linkedAttachmentTypeLabels[
                             attachment.attachment_type
                           ] || t("vehicles.detail.attachmentFallback")}
-                        </a>
-                      ) : null
-                    )}
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
               </div>

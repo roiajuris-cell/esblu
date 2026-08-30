@@ -1448,6 +1448,7 @@ const de = {
       remove: "Anhang entfernen",
       tooLarge: "Datei ist zu groß (max. 15 MB).",
       unsupportedType: "Nicht unterstützter Dateityp. Erlaubt sind Bilder (JPG/PNG/WEBP) und PDF.",
+      openFailed: "Der Anhang konnte nicht geöffnet werden. Bitte versuchen Sie es erneut.",
     },
     errors: {
       ESBLU_NO_ACTIVE_COMPANY: "Sie sind aktuell in keiner Firma aktives Mitglied.",

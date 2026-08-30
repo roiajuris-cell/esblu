@@ -1443,6 +1443,7 @@ const sk = {
       remove: "Odstrániť prílohu",
       tooLarge: "Súbor je príliš veľký (max. 15 MB).",
       unsupportedType: "Nepodporovaný typ súboru. Povolené sú obrázky (JPG/PNG/WEBP) a PDF.",
+      openFailed: "Prílohu sa nepodarilo otvoriť. Skúste to prosím znova.",
     },
     errors: {
       ESBLU_NO_ACTIVE_COMPANY: "Nemáte aktívne členstvo v žiadnej firme.",
