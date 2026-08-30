@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { apiUrl } from "@/lib/api-url";
 import PlanLimitNotice from "@/app/components/PlanLimitNotice";
 import { usePlanUsage } from "@/hooks/use-plan-usage";
 import {
@@ -1089,7 +1090,7 @@ const openFolderDocuments =
       const formData = new FormData();
       formData.append("image", compressedFile);
 
-      const response = await fetch("/api/scan-document", {
+      const response = await fetch(apiUrl("/api/scan-document"), {
         method: "POST",
         headers: {
           Authorization: `Bearer ${session.access_token}`,
@@ -2046,7 +2047,7 @@ review_status: reviewStatus,
         formData.append("back", regBackFile);
       }
 
-      const response = await fetch("/api/scan-vehicle-registration", {
+      const response = await fetch(apiUrl("/api/scan-vehicle-registration"), {
         method: "POST",
         headers: {
           Authorization: `Bearer ${session.access_token}`,

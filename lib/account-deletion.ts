@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { apiUrl } from "@/lib/api-url";
 import { REQUEST_LOCALE_HEADER } from "@/lib/i18n/request-locale";
 import { translate } from "@/lib/i18n/translate";
 import type { Locale } from "@/lib/i18n/locales";
@@ -69,7 +70,7 @@ export async function fetchAccountDeletionPreflight(
 ): Promise<AccountDeletionPreflight> {
   const accessToken = await getAccessToken(locale);
 
-  const response = await fetch("/api/account/preflight", {
+  const response = await fetch(apiUrl("/api/account/preflight"), {
     method: "GET",
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -95,7 +96,7 @@ export async function deleteMyAccount(
 ): Promise<void> {
   const accessToken = await getAccessToken(locale);
 
-  const response = await fetch("/api/account/delete", {
+  const response = await fetch(apiUrl("/api/account/delete"), {
     method: "POST",
     headers: {
       Authorization: `Bearer ${accessToken}`,

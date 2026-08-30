@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { useLocale } from "@/lib/i18n/LocaleProvider";
+import { vehicleDetailHref } from "@/lib/entity-links";
 
 type Props = {
   car: any;
@@ -44,7 +45,7 @@ export default function VehicleCard({
 
       <div className="mt-5 flex gap-3">
         <Link
-          href={`/vozidla/${car.id}`}
+          href={vehicleDetailHref(car.id)}
           className="btn-secondary px-4 py-2"
         >
           {t("common.buttons.detail")}

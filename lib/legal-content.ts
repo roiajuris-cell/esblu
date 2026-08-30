@@ -33,7 +33,23 @@ const CONTENT_FOLDER_BY_TYPE: Record<LegalDocumentType, string> = {
   cookie_policy: "cookies",
 };
 
-const LEGAL_CONTENT_ROOT = path.join(process.cwd(), "legal");
+// V mobile builde (samostatný Next.js projekt, mobile/next.config.ts) je cwd
+// pri `next build` = mobile/, ktorý žiadny vlastný legal/ priečinok nemá
+// (obsah je zdieľaný, nekopíruje sa — presne ako pri app/globals.css
+// @source fixe pre Tailwind, pozri tam). process.cwd() by preto v mobile
+// builde ukazoval na neexistujúci mobile/legal.
+//
+// __dirname NEFUNGUJE ako riešenie: Turbopack ho pri serverovom Node.js
+// bundlovaní staticky nahrádza virtuálnou hodnotou (napr. "/ROOT"), nie
+// skutočnou cestou zdrojového súboru — overené priamym buildom (ENOENT na
+// "/ROOT/legal/..."). Preto sa presná absolútna cesta k legal/ vypočíta v
+// mobile/next.config.ts (tam __dirname funguje správne, lebo konfig sa
+// načítava ako obyčajný Node.js skript, nie je súčasťou Turbopack grafu) a
+// odovzdá sa cez build-time env premennú ESBLU_LEGAL_CONTENT_ROOT. Web
+// build túto premennú nenastavuje vôbec, takže tam zostáva pôvodné
+// process.cwd() správanie bez zmeny.
+const LEGAL_CONTENT_ROOT =
+  process.env.ESBLU_LEGAL_CONTENT_ROOT ?? path.join(process.cwd(), "legal");
 
 /**
  * Cesta k nemennému .md súboru pre danú (document_type, version) — presne

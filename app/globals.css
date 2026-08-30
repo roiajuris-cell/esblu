@@ -1,6 +1,39 @@
 @import "tailwindcss";
 
 /* =============================================================================
+   MOBILE BUILD FIX (Capacitor FÁZA 1B) — explicitný @source pre Tailwind v4
+   automatic source detection.
+
+   PRÍČINA: Tailwind v4 nemá tailwind.config.js so "content" glob poľom — sám
+   si heuristicky nájde template súbory na základe toho, odkiaľ beží build
+   nástroj (Turbopack project root). Vo webovom builde je to koreň
+   repozitára (obsahuje celý app priečinok), takže sa naskenuje automaticky.
+   V mobile builde (samostatný Next.js projekt, mobile/next.config.ts) je
+   Turbopack root = priečinok mobile — automatická detekcia preto naskenuje
+   iba tenké wrapper súbory vnútri mobile, ale NIKDY sa nedostane von k
+   skutočným zdieľaným komponentom v koreňovom app priečinku (Dashboard.tsx,
+   VehicleCard.tsx, VehicleDetailView.tsx, sidebar.tsx atď.) — výsledok:
+   vygenerované CSS obsahuje iba fonty a ručne písané .surface-card,
+   .btn-primary a podobné utility z @layer nižšie, ale ŽIADNE
+   Tailwind-generované utility triedy (flex, grid-cols, gap, max-w, p-10,
+   rounded-xl...), ktoré appka reálne používa v JSX.
+
+   OPRAVA: @source smernica je VŽDY relatívna k tomuto CSS súboru (nie k CWD
+   buildu), takže funguje identicky pre web aj mobile build bez ohľadu na
+   to, odkiaľ sa Turbopack spúšťa. Tento súbor (app/globals.css) leží
+   priamo v koreňovom app priečinku, takže smernica nižšie pokrýva celý
+   tento priečinok rekurzívne (vrátane podpriečinka components) — presne
+   tam, kde žijú všetky skutočne používané Tailwind triedy. lib a hooks
+   priečinky overené (grep className=) — neobsahujú žiadny JSX, netreba ich
+   sem pridávať.
+
+   Pre WEB build je toto redundantné (rovnaký priečinok sa aj tak skenuje
+   automaticky), preto nemá žiadny vizuálny/funkčný vplyv na existujúci web
+   dizajn — iba dopĺňa to, čo mobile buildu chýbalo.
+   ============================================================================= */
+@source "./";
+
+/* =============================================================================
    ESBLU DESIGN SYSTEM — vizuálny redesign (tmavý premium/tech vzhľad)
    =============================================================================
    Centrálne design tokeny podľa priloženej vizuálnej referencie: veľmi tmavé

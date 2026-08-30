@@ -12,6 +12,7 @@ import BackLink from "@/app/components/BackLink";
 import { getMyActiveMembership } from "@/lib/company";
 import { useCompanyDpaLegalHold } from "@/app/components/CompanyDpaGate";
 import { useLocale } from "@/lib/i18n/LocaleProvider";
+import { machineDetailHref } from "@/lib/entity-links";
 
 export default function StrojePage() {
   const { t } = useLocale();
@@ -567,7 +568,7 @@ export default function StrojePage() {
 
                   <div className="mt-5 flex gap-3">
                     <Link
-                      href={`/stroje/${item.id}`}
+                      href={machineDetailHref(item.id)}
                       className="btn-secondary px-4 py-2"
                     >
                       {t("machines.list.detailLink")}

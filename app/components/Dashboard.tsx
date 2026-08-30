@@ -12,6 +12,7 @@ import {
   vignetteCountryLabel,
   type VehicleVignette,
 } from "@/lib/vehicle-vignettes";
+import { vehicleDetailHref } from "@/lib/entity-links";
 
 function getGreeting(t: (key: string) => string) {
   const hour = new Date().getHours();
@@ -594,7 +595,7 @@ export default function Dashboard() {
                   return (
                     <Link
                       key={index}
-                      href={`/vozidla/${alert.vehicleId}`}
+                      href={vehicleDetailHref(alert.vehicleId)}
                       className="flex items-center gap-3 rounded-lg py-3 -mx-2 px-2 transition cursor-pointer hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-cyan"
                     >
                       <span

@@ -12,6 +12,7 @@ import BackLink from "@/app/components/BackLink";
 import { getMyActiveMembership } from "@/lib/company";
 import { useCompanyDpaLegalHold } from "@/app/components/CompanyDpaGate";
 import { useLocale } from "@/lib/i18n/LocaleProvider";
+import { inventoryItemDetailHref } from "@/lib/entity-links";
 async function compressImage(
   file: File,
   t: (key: string) => string
@@ -629,7 +630,7 @@ setItems(itemsWithPhotos);
 
                 <div className="mt-5 flex gap-3">
                   <Link
-                    href={`/sklad/${row.id}`}
+                    href={inventoryItemDetailHref(row.id)}
                     className="btn-secondary px-4 py-2"
                   >
                     {t("inventory.list.detailLink")}

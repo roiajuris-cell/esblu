@@ -1,0 +1,32 @@
+# mobile/ je samostatný Next.js projekt (FÁZA 1 Capacitor PoC) — vlastný
+# node_modules/build output, nezávislý od koreňového .gitignore (ten používa
+# absolútne /cesty, ktoré mobile/ podadresár nepokrývajú).
+node_modules
+.next
+out
+next-env.d.ts
+*.tsbuildinfo
+
+# GENEROVANÝ artefakt — pred KAŽDÝM mobile buildom ho vygeneruje
+# scripts/prepare-mobile-public.mjs (kópia koreňového public/, žiadny
+# symlink — symlinky sú krehké na Windows). Nikdy sa necommituje, jediný
+# zdroj pravdy zostáva koreňový public/.
+public
+
+# Reálny .env.local s hodnotami sa NIKDY necommituje (pokrýva to už aj
+# koreňové pravidlo ".env*" v ../.gitignore, toto je tu navyše pre
+# jednoznačnosť). .env.local.example (bez reálnych hodnôt) je zámerne
+# VYNIMKA — pozri negáciu nižšie — slúži ako dokumentácia pre Windows/CI
+# setup.
+.env.local
+!.env.local.example
+
+# iOS Capacitor natívny projekt zatiaľ nepridaný — ostáva ignorovaný.
+# Android natívny projekt (mobile/android/) sa OD TOHTO BODU COMMITUJE —
+# vlastné mobile/android/.gitignore (generované `npx cap add android`,
+# štandardná Android gitignore šablóna + Capacitor-špecifické doplnky)
+# vylučuje iba generované/build artefakty (.gradle/, build/, app/build/,
+# local.properties, app/src/main/assets/public, capacitor.config.json a
+# ďalšie) — zdrojové súbory (build.gradle, gradle wrapper, AndroidManifest,
+# MainActivity, resources, Capacitor Android config) do gitu idú.
+ios
