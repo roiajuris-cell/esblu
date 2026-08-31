@@ -1210,6 +1210,13 @@ const de = {
       "Das Firmenkonto konnte nicht erstellt werden. Bitte erneut anmelden — falls das Problem weiterhin besteht, kontaktieren Sie den Support.",
   },
 
+  authCallback: {
+    processing: "Link wird überprüft...",
+    failedTitle: "Der Link konnte nicht überprüft werden",
+    failedDescription:
+      "Dieser Link ist ungültig, wurde bereits verwendet oder ist abgelaufen. Falls Sie sich in diesem Browser zwischenzeitlich bei einem anderen Konto angemeldet haben, stellen Sie bitte sicher, dass Sie beim richtigen Konto angemeldet sind, und fordern Sie einen neuen Link an.",
+  },
+
   inventory: {
     list: {
       subtitle: "Erfassung von Werkzeugen, Material und Lagerbeständen.",

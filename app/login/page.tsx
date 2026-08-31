@@ -176,10 +176,21 @@ export default function LoginPage() {
   email: normalizedEmail,
   password,
   options: {
-    // NIE "/login" — /login slúži aj bežnému loginu existujúcich
-    // používateľov a nesmie z toho odvodzovať owner-registration intent.
-    // /onboarding/company je explicitná, na tento účel vyhradená route.
-    emailRedirectTo: "https://esblu.com/onboarding/company",
+    // AUTH CALLBACK BEZPEČNOSTNÁ OPRAVA (2026-08-31, RELEASE BLOCKER,
+    // TokenHash revízia): skutočný potvrdzovací odkaz, ktorý používateľ
+    // dostane e-mailom, je od tejto zmeny riadený PRIAMO Supabase Email
+    // Template (Dashboard → Authentication → Email Templates → Confirm
+    // signup), manuálne nastaveným na
+    // "{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=email"
+    // — NIE týmto `emailRedirectTo`. app/auth/callback/page.tsx explicitne
+    // volá supabase.auth.verifyOtp({ token_hash, type }) a AŽ PO úspechu +
+    // nezávislom getUser() overení presmeruje na /onboarding/company; nikdy
+    // sa nedôveruje getSession() ani prípadnej existujúcej session iného
+    // účtu (pôvodný root cause cross-account bugu). `emailRedirectTo` tu
+    // ostáva iba ako neškodná fallback hodnota (Supabase ju v praxi
+    // nepoužije, pokiaľ je template nastavená podľa vyššie — pozri
+    // komentár v app/auth/callback/page.tsx pre presný text template).
+    emailRedirectTo: "https://esblu.com/auth/callback",
   },
 });
 
@@ -260,7 +271,19 @@ async function resetPassword() {
   const { error } = await supabase.auth.resetPasswordForEmail(
     normalizedEmail,
     {
-      redirectTo: "https://esblu.com/reset-hesla",
+      // AUTH CALLBACK BEZPEČNOSTNÁ OPRAVA (2026-08-31, TokenHash revízia) —
+      // rovnaký dôvod ako pri emailRedirectTo v register() vyššie: skutočný
+      // recovery odkaz je riadený Supabase Email Template (Dashboard →
+      // Reset Password), manuálne nastavenou na
+      // "{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=recovery"
+      // — NIE týmto `redirectTo`. app/auth/callback/page.tsx explicitne
+      // volá verifyOtp({ token_hash, type: "recovery" }) a AŽ PO úspechu +
+      // getUser() overení presmeruje na /reset-hesla?verified=1; /reset-hesla
+      // predtým dôverovala AKEJKOĽVEK existujúcej/ambientnej session (aj
+      // "INITIAL_SESSION" bežne prihláseného používateľa) — pozri fix v
+      // app/reset-hesla/page.tsx. `redirectTo` tu ostáva iba ako neškodná
+      // fallback hodnota.
+      redirectTo: "https://esblu.com/auth/callback",
     }
   );
 

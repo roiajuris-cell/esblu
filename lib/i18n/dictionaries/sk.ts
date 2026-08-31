@@ -1208,6 +1208,13 @@ const sk = {
       "Firemný účet sa nepodarilo založiť. Skús sa prihlásiť znova — ak problém pretrváva, kontaktuj podporu.",
   },
 
+  authCallback: {
+    processing: "Overujem odkaz...",
+    failedTitle: "Odkaz sa nepodarilo overiť",
+    failedDescription:
+      "Tento odkaz je neplatný, už bol použitý, alebo vypršal. Ak si sa medzičasom v tomto prehliadači prihlásil(a) do iného účtu, over si prosím, že si prihlásený(á) do správneho účtu, a skús požiadať o nový odkaz.",
+  },
+
   inventory: {
     list: {
       subtitle: "Evidencia náradia, materiálu a skladových zásob.",

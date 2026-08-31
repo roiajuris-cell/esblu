@@ -1194,6 +1194,13 @@ const en = {
       "The company account could not be created. Please log in again — if the problem persists, contact support.",
   },
 
+  authCallback: {
+    processing: "Verifying link...",
+    failedTitle: "The link could not be verified",
+    failedDescription:
+      "This link is invalid, already used, or has expired. If you've since signed in to a different account in this browser, please make sure you're signed in to the right account, then request a new link.",
+  },
+
   inventory: {
     list: {
       subtitle: "Records of tools, materials, and inventory stock.",

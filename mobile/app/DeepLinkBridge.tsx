@@ -17,7 +17,8 @@ import { App, type URLOpenListenerEvent } from "@capacitor/app";
 // 2. Foreground/background: App.addListener("appUrlOpen", ...) chytí URL,
 //    keď appka už beží a používateľ klikne na App Link odkaz znova.
 // 3. Oba prípady sa spracujú TOU ISTOU funkciou resolveEsbluDeepLink() —
-//    prísny allowlist (https + esblu.com + presne 3 cesty), nikdy
+//    prísny allowlist (https + esblu.com + presne 4 cesty, pozri
+//    AUTH CALLBACK BEZPEČNOSTNÁ OPRAVA 2026-08-31 nižšie), nikdy
 //    "otvor čokoľvek z esblu.com".
 // 4. Skutočná navigácia je VŽDY window.location.replace(target), NIE
 //    Next.js router.push()/replace(). Dôvod (kritické pre requirement 5):
@@ -132,6 +133,23 @@ export function resolveEsbluDeepLink(rawUrl: string): string | null {
     url.pathname === "/onboarding/company/"
   ) {
     return buildLocalTarget("/onboarding/company.html", {}, url);
+  }
+
+  // AUTH CALLBACK BEZPEČNOSTNÁ OPRAVA (2026-08-31, RELEASE BLOCKER,
+  // TokenHash revízia): nový dedikovaný auth callback
+  // (app/auth/callback/page.tsx) — skutočné signup potvrdenie aj reset hesla
+  // odkazy (Supabase Email Templates, Dashboard) teraz smerujú SEM, s
+  // `?token_hash=...&type=email|recovery` v query stringu (NIE priamo na
+  // /onboarding/company alebo /reset-hesla), aby callback vedel explicitne
+  // zavolať supabase.auth.verifyOtp({ token_hash, type }) a nezávisle
+  // (getUser()) overiť identitu namiesto ticheho ponechania prípadnej
+  // existujúcej session iného účtu. `token_hash`/`type` sú bežné query
+  // parametre — buildLocalTarget() nižšie ich zachová 1:1 (rovnaký
+  // mechanizmus ako pri ostatných cieľoch vyššie), žiadna extra logika
+  // potrebná. Rovnaký ".html" dôvod ako pri ostatných cieľoch vyššie —
+  // mobile/out/auth/callback.html.
+  if (url.pathname === "/auth/callback" || url.pathname === "/auth/callback/") {
+    return buildLocalTarget("/auth/callback.html", {}, url);
   }
 
   // Čokoľvek iné na esblu.com (napr. /vozidla, /login, marketing landing) —

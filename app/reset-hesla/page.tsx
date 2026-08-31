@@ -15,27 +15,36 @@ export default function ResetHeslaPage() {
   const [recoveryReady, setRecoveryReady] = useState(false);
 
   useEffect(() => {
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((event) => {
-      if (
-        event === "PASSWORD_RECOVERY" ||
-        event === "SIGNED_IN" ||
-        event === "INITIAL_SESSION"
-      ) {
-        setRecoveryReady(true);
-      }
-    });
+    // AUTH CALLBACK BEZPEČNOSTNÁ OPRAVA (2026-08-31, RELEASE BLOCKER):
+    // predtým táto stránka nastavila recoveryReady=true pri ĽUBOVOĽNEJ
+    // existujúcej/ambientnej session — vrátane "INITIAL_SESSION" (bežná
+    // session obyčajne prihláseného používateľa, ŽIADNY reset odkaz vôbec
+    // nebol potrebný) a "SIGNED_IN" (ktorý, ako dokázal audit cross-account
+    // bugu, môže znamenať aj ticho ponechanú STARÚ session iného účtu, nie
+    // skutočne overený recovery odkaz). Toto by v najhoršom prípade dovolilo
+    // komukoľvek s aktívnou session zmeniť si heslo bez toho, aby vôbec
+    // prešiel cez e-mailový recovery odkaz.
+    //
+    // Jediný legitímny zdroj pravdy je teraz app/auth/callback/page.tsx —
+    // ten explicitne ustanoví session priamo z recovery odkazu cez
+    // supabase.auth.verifyOtp({ token_hash, type: "recovery" }) (nie
+    // ambientne, nie dôverou v getSession()) a AŽ PO nezávislom overení
+    // identity (getUser()) sem presmeruje s `?verified=1` markerom. Bez
+    // tohto markera recoveryReady zostáva false bez ohľadu na to, aká
+    // session prípadne existuje.
+    const verified =
+      typeof window !== "undefined" &&
+      new URLSearchParams(window.location.search).get("verified") === "1";
+
+    if (!verified) {
+      return;
+    }
 
     supabase.auth.getSession().then(({ data }) => {
       if (data.session) {
         setRecoveryReady(true);
       }
     });
-
-    return () => {
-      subscription.unsubscribe();
-    };
   }, []);
 
   async function updatePassword() {
