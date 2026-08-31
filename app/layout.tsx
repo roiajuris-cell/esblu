@@ -26,6 +26,18 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: "#2563eb",
+  // MOBILE CHAT LAYOUT BUG fix (2026-08-30): default Chrome/Android WebView
+  // viewport behavior ("resizes-visual") shrinká iba VIZUÁLNY viewport pri
+  // otvorení soft klávesnice, ale NIE layout viewport — takže `dvh` jednotky
+  // (a `position: fixed` elementy, ktoré sa naň spoliehajú) zostávajú
+  // rovnaké aj s otvorenou klávesnicou, čo spôsobovalo, že spodná časť
+  // FloatingChatWidget bottom-sheetu (composer) skončila skrytá pod
+  // klávesnicou/Android nav barom. `resizes-content` prepína prehliadač na
+  // to, aby PRI OTVORENÍ klávesnice skutočne zmenšil samotný layout
+  // viewport — `dvh`/`fixed` elementy sa potom prepočítajú a zmenšia
+  // automaticky, bez JS visualViewport hackov. Zdieľané webom aj mobile
+  // (mobile/app/layout.tsx re-exportuje `viewport` z tohto súboru).
+  interactiveWidget: "resizes-content",
 };
 
 export default function RootLayout({

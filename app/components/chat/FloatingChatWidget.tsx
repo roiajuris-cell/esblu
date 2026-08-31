@@ -494,7 +494,27 @@ function MobilePanel({
       }}
     >
       <div
-        className="surface-card flex max-h-[85vh] flex-col overflow-hidden rounded-t-2xl border-t border-subtle shadow-2xl"
+        // MOBILE CHAT LAYOUT BUG fix (2026-08-30): `max-h-[85vh]` samo osebe
+        // NEdáva tomuto flex-col kontajneru definitívnu výšku — iba hornú
+        // hranicu pre inak content-driven (shrink-to-fit) výšku. Kým sa
+        // obsah (header + správy + composer) zmestil pod 85vh, fungovalo to
+        // "náhodou" správne; po pridaní dosť správ (najmä vyššej bubliny s
+        // obrázkovou prílohou) prirodzená výška obsahu presiahla strop,
+        // orezalo sa to cez overflow-hidden ZDOLA (posledná správa +
+        // composer zmizli pod okraj) — a keďže ChatMessageView vnútri
+        // spolieha na `h-full` (potrebuje DEFINITÍVNU výšku rodiča, aby
+        // svoja `min-h-0 flex-1 overflow-y-auto` oblasť správ vedela
+        // skutočne interne scrollovať namiesto rastu do nekonečna), vnútorný
+        // scroll sa nikdy nespustil. Oprava: `h-[85dvh]` (s `h-[85vh]`
+        // fallbackom pre prehliadače bez `dvh`) dáva panelu PEVNÚ výšku —
+        // vnútorný flex layout (ChatMessageView.tsx: header auto / správy
+        // min-h-0 flex-1 overflow-y-auto / composer auto) sa tak správa
+        // presne podľa zámeru: composer je vždy vo viditeľnej časti, rastie
+        // iba zoznam správ (interným scrollom). `dvh` navyše (na rozdiel od
+        // statického `vh`) spolu s `interactiveWidget: "resizes-content"`
+        // (app/layout.tsx) korektne zmenší panel pri otvorení soft
+        // klávesnice bez JS hacku na výšku viewportu.
+        className="surface-card flex h-[85vh] h-[85dvh] flex-col overflow-hidden rounded-t-2xl border-t border-subtle shadow-2xl"
         style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
       >
         <PanelHeader
@@ -503,13 +523,46 @@ function MobilePanel({
           onClose={onClose}
           t={t}
         />
-        <div className="min-h-0 flex-1">
-          <PanelBody
-            selectedConversationId={selectedConversationId}
-            onSelectConversation={onSelectConversation}
-            onClose={onClose}
-          />
-        </div>
+        {/* MOBILE CHAT LAYOUT BUG fix #2 (2026-08-30, DOM/flex chain audit):
+            PanelBody musí byť PRIAMYM flex-item potomkom tejto karty (rovnako
+            ako na Desklope nižšie — DesktopPanel renderuje PanelHeader +
+            PanelBody priamo, bez medzičlánku). Predtým tu bol obalový
+            `<div className="min-h-0 flex-1">` okolo PanelBody — ten obal SÁM
+            nemal `display:flex`, takže:
+              1) jeho vlastné `min-h-0 flex-1` triedy správne fungovali (bol
+                 flex-itemom TEJTO karty), takže od svojho rodiča DOSTAL
+                 definitívnu výšku,
+              2) ale PanelBody vo vnútri (ktoré má TIE ISTÉ `min-h-0 flex-1`
+                 triedy) bolo iba obyčajné block dieťa tohto obalu — keďže
+                 obal nemal `display:flex`, PanelBody's `flex-1`/`min-h-0`
+                 triedy boli úplne bez efektu (fungujú len na flex-itemoch) a
+                 PanelBody zostalo na `height:auto` (shrink-to-fit obsahu),
+              3) ChatMessageView vo vnútri PanelBody spolieha na `h-full`
+                 (height:100%) — percentuálna výška sa ale nedá vypočítať
+                 voči rodičovi s `auto` výškou, takže sa podľa CSS špecifikácie
+                 vyhodnotí tiež ako `auto` → CELÝ obsah (hlavička + VŠETKY
+                 správy + composer) sa vykreslil na plnú výšku obsahu, bez
+                 akéhokoľvek interného scrollu,
+              4) tento "príliš vysoký" obsah potom pretiekol cez obalový div
+                 (ten mal `overflow: visible`, žiadne orezanie) až po TÚTO
+                 kartu, kde ho až `overflow-hidden` orezalo ZDOLA — presne to,
+                 čo bolo vidno na screenshote (posledná správa + composer
+                 odrezané, composer nedostupný).
+            Odstránením obalu je PanelBody priamym flex-itemom tejto karty
+            (`flex h-[85dvh] flex-col`, definitívna výška) — PanelBody's
+            vlastné `min-h-0 flex-1 overflow-hidden p-3` (nezmenené) teraz
+            skutočne fungujú, ChatMessageView's `h-full` má voči čomu
+            rezolvovať percentá, a jeho vnútorný `min-h-0 flex-1
+            overflow-y-auto` zoznam správ dostane skutočnú scrollovateľnú
+            výšku — composer (flex-none sibling, nie vo vnútri scroll
+            containera) ostáva vždy viditeľný. Mobile je touto zmenou
+            štruktúrne zhodný s Desktopom (ten tento problém nikdy nemal,
+            keďže PanelBody tam bolo od začiatku priamym potomkom). */}
+        <PanelBody
+          selectedConversationId={selectedConversationId}
+          onSelectConversation={onSelectConversation}
+          onClose={onClose}
+        />
       </div>
     </div>
   );
