@@ -166,6 +166,13 @@ const en = {
         "Overview of company machines and equipment, including basic data, photos and service history.",
       inventoryTitle: "Inventory",
       inventoryDesc: "Simple tracking of inventory items, quantities and photos.",
+      chatTitle: "Company chat",
+      chatDesc:
+        "Internal communication between your company's team members, built into Esblu. Real-time messages, attachments, and the ability to reference a specific vehicle, machine, inventory item or document.",
+      chatExample1: "Real-time messages",
+      chatExample2: "Attachments",
+      chatExample3: "Links to vehicles, machines and inventory",
+      chatExample4: "Company members only",
     },
     ai: {
       kicker: "AI processing",

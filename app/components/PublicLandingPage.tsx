@@ -2,8 +2,11 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { useLocale } from "@/lib/i18n/LocaleProvider";
 import LanguageSwitcher from "./LanguageSwitcher";
+import InboxDocumentIcon from "./icons/InboxDocumentIcon";
+import ChatBubbleIcon from "./icons/ChatBubbleIcon";
 
 // =============================================================================
 // PublicLandingPage — verejná marketingová stránka (neprihlásený návštevník
@@ -47,22 +50,44 @@ const FEATURE_ACCENT_STYLES: Record<
   },
 };
 
-// Rovnaké 4 moduly a rovnaké obrázky ako v app/components/Dashboard.tsx
+// Rovnaké moduly a rovnaké obrázky ako v app/components/Dashboard.tsx
 // (modules[]) — landing page zámerne nepoužíva vlastné/nové obrázky.
 // Samotný text (title/description/examples) sa prekladá cez t() vnútri
 // komponentu nižšie (getFeatureCards) — tu ostávajú iba jazykovo neutrálne
-// metadáta (obrázok, accent farba, prekladové kľúče).
+// metadáta (obrázok/ikona, accent farba, prekladové kľúče).
+//
+// ÚPRAVA VEREJNÉHO WEBU (Inbox vizuál + vyváženie veľkostí + Firemný chat):
+// - Inbox teraz používa rovnakú zdieľanú `InboxDocumentIcon` SVG ako
+//   Dashboard (predtým `/images/ai-evidencia.png`, starý rastrový mockup)
+//   — `icon` má prednosť pred `image` v render bloku nižšie, rovnaký `icon
+//   ?? image` vzor ako `app/components/ModuleCard.tsx`.
+// - `imageZoom` (voliteľné, default 1) — identická kalibrácia ako
+//   `app/components/Dashboard.tsx` (modules[], KOREKCIA v5): rastrové
+//   produktové fotky (van/excavator/warehouse .png) majú v samom súbore
+//   výrazný priehľadný okraj okolo motívu (zmerané cez alfa kanál), takže
+//   pri mechanicky rovnakom CSS boxe pôsobia vizuálne menšie než nová
+//   Inbox SVG, ktorá kreslí takmer na celú plochu viewBoxu. Hodnoty (van
+//   1.2, excavator 1.6, warehouse 1.7) sú rovnaké čísla, rovnaké assety —
+//   pozri komentár pri ModuleCard.tsx pre plné odvodenie/rezervu pred
+//   orezaním motívu.
+// - Firemný chat je nová 5. karta (icon = zdieľaná `ChatBubbleIcon`,
+//   rovnaká ikona ako trigger tlačidlo `FloatingChatWidget.tsx` v appke) —
+//   žiadny nový vizuálny jazyk, accent cyan zvolený zámerne zhodne s
+//   `bg-accent-cyan` chat trigger tlačidlom v appke.
 const featureCardDefs: {
   titleKey: string;
   descKey: string;
-  image: string;
+  image?: string;
+  icon?: ReactNode;
+  imageZoom?: number;
   accent: FeatureAccent;
   exampleKeys?: string[];
+  spanFull?: boolean;
 }[] = [
   {
     titleKey: "landing.features.inboxTitle",
     descKey: "landing.features.inboxDesc",
-    image: "/images/ai-evidencia.png",
+    icon: <InboxDocumentIcon size={36} className="h-9 w-9" />,
     accent: "cyan",
     exampleKeys: [
       "landing.features.inboxExample1",
@@ -79,19 +104,35 @@ const featureCardDefs: {
     titleKey: "landing.features.vehiclesTitle",
     descKey: "landing.features.vehiclesDesc",
     image: "/images/van.png",
+    imageZoom: 1.2,
     accent: "blue",
   },
   {
     titleKey: "landing.features.machinesTitle",
     descKey: "landing.features.machinesDesc",
     image: "/images/excavator.png",
+    imageZoom: 1.6,
     accent: "orange",
   },
   {
     titleKey: "landing.features.inventoryTitle",
     descKey: "landing.features.inventoryDesc",
     image: "/images/warehouse.png",
+    imageZoom: 1.7,
     accent: "teal",
+  },
+  {
+    titleKey: "landing.features.chatTitle",
+    descKey: "landing.features.chatDesc",
+    icon: <ChatBubbleIcon size={36} className="h-9 w-9" />,
+    accent: "cyan",
+    exampleKeys: [
+      "landing.features.chatExample1",
+      "landing.features.chatExample2",
+      "landing.features.chatExample3",
+      "landing.features.chatExample4",
+    ],
+    spanFull: true,
   },
 ];
 
@@ -345,10 +386,15 @@ export default function PublicLandingPage() {
           </div>
         </section>
 
-        {/* FUNKCIE — 4 moduly v rovnakom vizuálnom jazyku ako ModuleCard na
-            Dashboarde (surface-card + farebný ikonový chip s icon-glow),
-            bohatšie na obsah, keďže ide o marketingovú kartu, nie o
-            kompaktnú appkovú dlaždicu. */}
+        {/* FUNKCIE — moduly (Inbox/Vozidlá/Stroje/Sklad) + Firemný chat v
+            rovnakom vizuálnom jazyku ako ModuleCard na Dashboarde
+            (surface-card + farebný ikonový chip s icon-glow), bohatšie na
+            obsah, keďže ide o marketingovú kartu, nie o kompaktnú appkovú
+            dlaždicu. Chat je 5. (posledná) karta — na desktope 2-stĺpcovej
+            mriežky by ako nepárna osamotene "trčala" v novom riadku s
+            prázdnym miestom vedľa seba, preto dostáva md:col-span-2
+            (prirodzené uzatvárajúce zhrnutie sekcie, nie nalepený
+            zvyšok). */}
         <section id="funkcie" className="scroll-mt-28 bg-page-bg py-20 sm:py-24">
           <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
             <div className="max-w-2xl">
@@ -371,19 +417,29 @@ export default function PublicLandingPage() {
                 return (
                   <article
                     key={feature.titleKey}
-                    className="surface-card surface-card-hover flex min-h-full flex-col p-6 transition sm:p-7"
+                    className={`surface-card surface-card-hover flex min-h-full flex-col p-6 transition sm:p-7 ${
+                      feature.spanFull ? "md:col-span-2" : ""
+                    }`}
                   >
                     <div
-                      className={`flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl ${styles.icon} ${styles.glow}`}
+                      className={`flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl ${styles.icon} ${styles.glow}`}
                     >
-                      <Image
-                        src={feature.image}
-                        alt=""
-                        aria-hidden="true"
-                        width={40}
-                        height={40}
-                        className="h-9 w-9 object-contain"
-                      />
+                      {feature.icon ??
+                        (feature.image ? (
+                          <Image
+                            src={feature.image}
+                            alt=""
+                            aria-hidden="true"
+                            width={40}
+                            height={40}
+                            className="h-9 w-9 object-contain"
+                            style={
+                              feature.imageZoom && feature.imageZoom !== 1
+                                ? { transform: `scale(${feature.imageZoom})` }
+                                : undefined
+                            }
+                          />
+                        ) : null)}
                     </div>
                     <h3 className="mt-6 text-2xl font-black text-primary">
                       {title}

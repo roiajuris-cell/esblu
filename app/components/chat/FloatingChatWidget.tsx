@@ -8,6 +8,7 @@ import { getMyActiveMembership } from "@/lib/company";
 import { getMyUnreadCounts } from "@/lib/chat";
 import ChatConversationList from "./ChatConversationList";
 import ChatMessageView from "./ChatMessageView";
+import ChatBubbleIcon from "../icons/ChatBubbleIcon";
 
 // =============================================================================
 // Esblu — Globálny plávajúci chat widget
@@ -633,23 +634,5 @@ function PanelBody({
         />
       )}
     </div>
-  );
-}
-
-function ChatBubbleIcon() {
-  return (
-    <svg
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M4 4h16v11H8l-4 4V4z" />
-    </svg>
   );
 }

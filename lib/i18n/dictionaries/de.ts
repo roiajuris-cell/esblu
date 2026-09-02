@@ -165,6 +165,13 @@ const de = {
         "Übersicht über Firmenmaschinen und -technik inklusive Grunddaten, Fotos und Serviceeinträgen.",
       inventoryTitle: "Lager",
       inventoryDesc: "Einfache Erfassung von Lagerartikeln, Mengen und Fotos.",
+      chatTitle: "Firmenchat",
+      chatDesc:
+        "Interne Kommunikation zwischen den Mitgliedern Ihrer Firma direkt in Esblu. Nachrichten in Echtzeit, Anhänge und die Möglichkeit, auf ein bestimmtes Fahrzeug, eine Maschine, einen Lagerartikel oder ein Dokument zu verweisen.",
+      chatExample1: "Nachrichten in Echtzeit",
+      chatExample2: "Anhänge",
+      chatExample3: "Verweise auf Fahrzeuge, Maschinen und Lager",
+      chatExample4: "Nur für Firmenmitglieder",
     },
     ai: {
       kicker: "KI-Verarbeitung",

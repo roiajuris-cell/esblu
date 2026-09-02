@@ -169,6 +169,13 @@ const sk = {
       inventoryTitle: "Sklad",
       inventoryDesc:
         "Jednoduchá evidencia skladových položiek, množstva a fotografií.",
+      chatTitle: "Firemný chat",
+      chatDesc:
+        "Interná komunikácia medzi členmi vašej firmy priamo v Esblu. Správy v reálnom čase, prílohy a možnosť odkázať na konkrétne vozidlo, stroj, skladovú položku alebo dokument.",
+      chatExample1: "Správy v reálnom čase",
+      chatExample2: "Prílohy",
+      chatExample3: "Odkazy na vozidlá, stroje a sklad",
+      chatExample4: "Iba pre členov firmy",
     },
     ai: {
       kicker: "AI spracovanie",
