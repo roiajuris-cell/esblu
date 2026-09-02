@@ -32,10 +32,33 @@
                                         mobile/app/invite?token=...)
                 /reset-hesla         — resetPasswordForEmail redirectTo
                 /onboarding/company  — owner signup emailRedirectTo
+                /auth/callback       — pridané (GOOGLE PLAY RELEASE PRÍPRAVA,
+                                        App Links audit): dedikovaný auth
+                                        callback (TokenHash revízia,
+                                        2026-08-31, app/auth/callback/page.tsx)
+                                        — Supabase Email Templates (Confirm
+                                        signup, Reset Password) odkazujú
+                                        PRIAMO sem s ?token_hash=...&type=...
+                                        DeepLinkBridge.resolveEsbluDeepLink()
+                                        už tento presný pathname rozpoznávala
+                                        (pozri "AUTH CALLBACK BEZPEČNOSTNÁ
+                                        OPRAVA" komentár tam) — chýbal iba
+                                        tento natívny intent-filter záznam,
+                                        bez ktorého Android odkaz appke vôbec
+                                        neponúkol. Bez tejto zmeny by
+                                        potvrdenie registrácie/reset hesla na
+                                        mobile vždy skončilo iba vo web
+                                        prehliadači (bezpečný, ale neúplný
+                                        fallback) namiesto priamo v appke.
 
               Zámerne NEPOKRÝVA celú doménu esblu.com (napr. /vozidla,
               /login, marketing landing page atď.) — tie majú zostať bežné
-              web odkazy, nikdy sa neotvárajú v appke automaticky.
+              web odkazy, nikdy sa neotvárajú v appke automaticky. Host je
+              iba apex "esblu.com" — appka aj celý zvyšok kódu (lib/public-
+              url.ts, lib/api-url.ts) dôsledne generuje/používa výhradne
+              https://esblu.com (bez "www."), preto "www.esblu.com" tu
+              zámerne nie je pridané (žiadne reálne odkazy naň nesmerujú;
+              dá sa doplniť rovnakým vzorom, ak sa to v budúcnosti zmení).
 
               android:autoVerify="true" spustí Android Digital Asset Links
               verifikáciu voči https://esblu.com/.well-known/assetlinks.json
@@ -69,6 +92,7 @@
                 <data android:pathPrefix="/invite" />
                 <data android:path="/reset-hesla" />
                 <data android:path="/onboarding/company" />
+                <data android:path="/auth/callback" />
             </intent-filter>
 
         </activity>

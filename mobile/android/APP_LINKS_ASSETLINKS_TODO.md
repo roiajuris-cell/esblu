@@ -17,10 +17,23 @@ distribúcii (release keystore). Tento keystore ešte neexistuje. Publikovanie
 - a bolo by to nepravdivá produkčná konfigurácia na verejnej doméne —
   vyslovene zakázané zadaním tejto úlohy.
 
+## Stav (GOOGLE PLAY RELEASE PRÍPRAVA, aktualizované)
+
+- Intent-filter v `AndroidManifest.xml` teraz pokrýva aj `/auth/callback`
+  (predtým iba `/invite`, `/reset-hesla`, `/onboarding/company`) —
+  `DeepLinkBridge.resolveEsbluDeepLink()` ho už rozpoznávala, chýbal iba
+  natívny záznam.
+- Signing flow (keystore.properties + `signingConfigs.release`) je
+  pripravený — pozri `mobile/android/RELEASE_SIGNING.md`. Release keystore
+  samotný ešte neexistuje (musí ho vytvoriť používateľ lokálne, pozri ten
+  dokument, krok 1).
+- Tento súbor (`assetlinks.json`) zostáva JEDINÝ zostávajúci blokujúci krok
+  — presne ako nižšie, čaká na SHA-256 z krokom 1 vytvoreného keystore.
+
 ## Čo urobiť, keď bude release keystore hotový
 
-1. Vygeneruj/over release keystore (napr. `keytool -genkeypair ...` alebo cez
-   Android Studio "Generate Signed Bundle / APK").
+1. Vygeneruj/over release keystore — presný príkaz je v
+   `mobile/android/RELEASE_SIGNING.md` (krok 1).
 2. Zisti SHA-256 fingerprint certifikátu:
    ```
    keytool -list -v -keystore <cesta-ku-keystore> -alias <alias>

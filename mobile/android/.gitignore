@@ -53,10 +53,17 @@ captures/
 # Comment next line if keeping position of elements in Navigation Editor is relevant for you
 .idea/navEditor.xml
 
-# Keystore files
-# Uncomment the following lines if you do not want to check your keystore files in.
-#*.jks
-#*.keystore
+# Keystore files — NIKDY sa nesmú commitnúť (GOOGLE PLAY RELEASE PRÍPRAVA).
+# Predvolený Android template tieto riadky necháva zakomentované; tu sú
+# zámerne AKTÍVNE (bez #) — pozri app/keystore.properties.example pre
+# bezpečný signing flow (skutočný app/keystore.properties nižšie).
+*.jks
+*.keystore
+
+# Release signing secrets (store/key heslá + alias + cesta ku keystore) —
+# skutočný súbor NIKDY netrackovať, iba app/keystore.properties.example
+# (bez hesiel) zostáva v repozitári ako šablóna.
+app/keystore.properties
 
 # External native build folder generated in Android Studio 2.2 and later
 .externalNativeBuild

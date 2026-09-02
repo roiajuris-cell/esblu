@@ -1,5 +1,26 @@
 apply plugin: 'com.android.application'
 
+// GOOGLE PLAY RELEASE PRÍPRAVA — release signing.
+//
+// Čerpá zo súboru app/keystore.properties (VŽDY mimo Gitu — pozri
+// mobile/android/.gitignore), nikdy nie sú heslá/cesta ku keystore
+// hardcoded priamo tu. Pozri app/keystore.properties.example pre presný
+// formát a mobile/android/RELEASE_SIGNING.md pre postup vytvorenia
+// release keystore.
+//
+// Ak app/keystore.properties (zatiaľ) neexistuje — napr. bežný `npm run
+// build`/`cap sync`/debug vývoj, ktorý release signing vôbec nepotrebuje —
+// signingConfigs.release ostáva bez storeFile/hesiel. Debug aj bežné
+// non-signing Gradle úlohy tým nie sú nijako ovplyvnené; iba samotné
+// podpísanie release artefaktu (napr. `bundleRelease`) v tom prípade
+// zlyhá jasnou Gradle chybou ("Keystore file ... not found"), nikdy sa
+// TICHO nepoužije debug signing namiesto release.
+def keystorePropertiesFile = file("keystore.properties")
+def keystoreProperties = new Properties()
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+}
+
 android {
     namespace = "com.esblu.app"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -16,10 +37,21 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        release {
+            if (keystorePropertiesFile.exists()) {
+                storeFile file(keystoreProperties['storeFile'])
+                storePassword keystoreProperties['storePassword']
+                keyAlias keystoreProperties['keyAlias']
+                keyPassword keystoreProperties['keyPassword']
+            }
+        }
+    }
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.release
         }
     }
 }
