@@ -291,12 +291,25 @@ export default function Dashboard() {
       ]
     : [];
 
+  // ZVÄČŠENIE IKON (KOREKCIA v5): imageZoom kompenzuje vnútorný priehľadný
+  // okraj rastrových produktových fotiek (van/excavator/warehouse), aby po
+  // novej výraznejšej Inbox SVG ikone pôsobili moduly vizuálne vyvážene —
+  // pozri komentár pri ModuleCard. Hodnoty sú kalibrované na základe
+  // zmeranej polohy motívu v jednotlivých .png (percento auditu, nie
+  // odhad): van ~72 %/61 % vyplnenia rámu → miernejší zoom (1.2), excavator
+  // ~43 %/64 % → 1.6, warehouse ~45 %/49 % → 1.7 (najviac priehľadného
+  // okraja, preto najväčší dopočet). Každá hodnota ostáva bezpečne pod
+  // hranicou, pri ktorej by orez orezal samotný motív (min. nameraný okraj
+  // motívu vs. skutočne použitý orez má rezervu min. ~3 percentuálne
+  // body). Nastavenia (settings.png) a Inbox (SVG icon) imageZoom nemajú —
+  // ich vzhľad je nezmenený.
   const modules: {
     title: string;
     subtitle: string;
     stat?: string;
     href: string;
     image?: string;
+    imageZoom?: number;
     icon?: ReactNode;
     accent: ModuleAccent;
   }[] = [
@@ -313,6 +326,7 @@ export default function Dashboard() {
       stat: String(vehicles.length),
       href: "/vozidla",
       image: "/images/van.png",
+      imageZoom: 1.2,
       accent: "blue",
     },
     {
@@ -321,6 +335,7 @@ export default function Dashboard() {
       stat: String(machines.length),
       href: "/stroje",
       image: "/images/excavator.png",
+      imageZoom: 1.6,
       accent: "orange",
     },
     {
@@ -329,6 +344,7 @@ export default function Dashboard() {
       stat: String(items.length),
       href: "/sklad",
       image: "/images/warehouse.png",
+      imageZoom: 1.7,
       accent: "teal",
     },
     {
@@ -555,6 +571,7 @@ export default function Dashboard() {
                   subtitle={module.subtitle}
                   stat={module.stat}
                   image={module.image}
+                  imageZoom={module.imageZoom}
                   icon={module.icon}
                   accent={module.accent}
                 />

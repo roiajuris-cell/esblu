@@ -63,6 +63,22 @@ const ACCENT_STYLES: Record<
  * (2-column grid) — číslo aj popis zostávajú čitateľné naľavo cez celú
  * šírku karty, presne ako v pôvodnom layoute, iba pod hlavičkou namiesto
  * pod ikonou. Href/props/dáta nezmenené.
+ *
+ * KOREKCIA v5 (zväčšenie ikon Vozidlá/Stroje/Sklad, aby vizuálne
+ * zodpovedali novej Inbox ikone): raster produktové fotky (van/excavator/
+ * warehouse .png) majú v samotnom súbore výrazný priehľadný okraj okolo
+ * objektu (zmeraných ~44-72 % šírky rámu podľa assetu), zatiaľ čo nová
+ * InboxDocumentIcon SVG kreslí takmer na celú plochu svojho viewBoxu
+ * (~85 %). Pri rovnakom CSS rozmere boxu preto rastrové ikony vizuálne
+ * pôsobia menšie, hoci box má identické px rozmery. `imageZoom` (voliteľný,
+ * default 1 = beze zmeny) škáluje IBA vykreslený <Image> transformom
+ * (CSS scale, stred zachovaný — centrovanie nedotknuté), zvyšok presahu je
+ * orezaný pomocou `overflow-hidden` na chipe. `overflow-hidden` nemá vplyv
+ * na `.icon-glow-*` (box-shadow sa kreslí mimo clip regiónu vlastného
+ * obsahu elementu), takže glow/pozadie chipu zostáva nezmenené. Hodnoty
+ * imageZoom sú kalibrované per-asset podľa zmeraného bezpečného orezu
+ * (pozri Dashboard.tsx modules[]), Inbox (icon prop) a Nastavenia
+ * (bez imageZoom) nie sú touto zmenou dotknuté.
  */
 export default function ModuleCard({
   href,
@@ -70,6 +86,7 @@ export default function ModuleCard({
   subtitle,
   stat,
   image,
+  imageZoom = 1,
   icon,
   accent = "blue",
   className = "",
@@ -79,6 +96,7 @@ export default function ModuleCard({
   subtitle: string;
   stat?: string;
   image?: string;
+  imageZoom?: number;
   icon?: ReactNode;
   accent?: ModuleAccent;
   className?: string;
@@ -110,7 +128,7 @@ export default function ModuleCard({
         </div>
 
         <div
-          className={`flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl sm:h-20 sm:w-20 ${styles.icon} ${styles.iconGlow}`}
+          className={`flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl sm:h-20 sm:w-20 ${styles.icon} ${styles.iconGlow}`}
         >
           {icon ??
             (image ? (
@@ -121,6 +139,7 @@ export default function ModuleCard({
                 alt=""
                 aria-hidden="true"
                 className="h-11 w-11 object-contain sm:h-14 sm:w-14"
+                style={imageZoom !== 1 ? { transform: `scale(${imageZoom})` } : undefined}
               />
             ) : null)}
         </div>
