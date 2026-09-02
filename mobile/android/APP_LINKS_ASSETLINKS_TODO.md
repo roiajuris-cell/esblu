@@ -1,48 +1,27 @@
-# Android App Links — `assetlinks.json` TODO
+# Android App Links — `assetlinks.json`
 
-Tento súbor je zámerne **mimo `public/`** (nikdy sa neservíruje, nie je súčasťou
-žiadneho buildu) — je to iba príprava/dokumentácia pre krok, ktorý sa dá
-bezpečne dokončiť až po vytvorení release keystore. Pozri finálny report
-(MOBILE AUTH + DEEP LINKS), sekcia 7 pre plný kontext.
+## Stav (DOPLNENIE PRODUKČNÉHO assetlinks.json, aktualizované)
 
-## Prečo to ešte nejde dokončiť
+**Hotovo.** `public/.well-known/assetlinks.json` existuje a obsahuje
+skutočný SHA-256 fingerprint upload/release certifikátu (nie placeholder).
+Servíruje ho priamo Next.js ako statický súbor z `public/` — žiadna ďalšia
+Vercel/next.config konfigurácia nebola potrebná (over produkčne cez
+`curl -I https://esblu.com/.well-known/assetlinks.json`).
 
-Digital Asset Links verifikácia (`android:autoVerify="true"` v
-`mobile/android/app/src/main/AndroidManifest.xml`) vyžaduje, aby
-`https://esblu.com/.well-known/assetlinks.json` obsahoval **SHA-256
-fingerprint podpisového certifikátu**, ktorým bude appka podpísaná pri
-distribúcii (release keystore). Tento keystore ešte neexistuje. Publikovanie
-`assetlinks.json` s vymysleným/placeholder fingerprintom by:
-- neprešlo Android verifikáciou aj tak (fingerprint sa musí presne zhodovať),
-- a bolo by to nepravdivá produkčná konfigurácia na verejnej doméne —
-  vyslovene zakázané zadaním tejto úlohy.
+Zostávajúci krok je iba bod 5 nižšie (doplnenie Play App Signing
+fingerprintu) — až po aktivácii Play App Signing v Play Console.
 
-## Stav (GOOGLE PLAY RELEASE PRÍPRAVA, aktualizované)
+## Referenčný postup (pre budúcu úpravu, napr. Play App Signing fingerprint)
 
-- Intent-filter v `AndroidManifest.xml` teraz pokrýva aj `/auth/callback`
-  (predtým iba `/invite`, `/reset-hesla`, `/onboarding/company`) —
-  `DeepLinkBridge.resolveEsbluDeepLink()` ho už rozpoznávala, chýbal iba
-  natívny záznam.
-- Signing flow (keystore.properties + `signingConfigs.release`) je
-  pripravený — pozri `mobile/android/RELEASE_SIGNING.md`. Release keystore
-  samotný ešte neexistuje (musí ho vytvoriť používateľ lokálne, pozri ten
-  dokument, krok 1).
-- Tento súbor (`assetlinks.json`) zostáva JEDINÝ zostávajúci blokujúci krok
-  — presne ako nižšie, čaká na SHA-256 z krokom 1 vytvoreného keystore.
-
-## Čo urobiť, keď bude release keystore hotový
-
-1. Vygeneruj/over release keystore — presný príkaz je v
-   `mobile/android/RELEASE_SIGNING.md` (krok 1).
-2. Zisti SHA-256 fingerprint certifikátu:
+1. Zisti SHA-256 fingerprint certifikátu:
    ```
    keytool -list -v -keystore <cesta-ku-keystore> -alias <alias>
    ```
    (hodnota za `SHA256:`, formát `AA:BB:CC:...` — pre assetlinks.json sa píše
-   presne v tomto dvojbodkovom hex formáte).
-3. Vytvor `public/.well-known/assetlinks.json` (v koreňovom web projekte,
-   nie v `mobile/` — servíruje ho web/Vercel deployment na
-   `https://esblu.com/.well-known/assetlinks.json`) s obsahom:
+   presne v tomto dvojbodkovom hex formáte). Pre Play App Signing certifikát
+   nájdeš rovnaký formát priamo v Play Console (Release → Setup → App
+   integrity → App signing key certificate).
+2. Aktuálny obsah `public/.well-known/assetlinks.json`:
    ```json
    [
      {
@@ -51,19 +30,23 @@ distribúcii (release keystore). Tento keystore ešte neexistuje. Publikovanie
          "namespace": "android_app",
          "package_name": "com.esblu.app",
          "sha256_cert_fingerprints": [
-           "REPLACE_WITH_RELEASE_SHA256_FINGERPRINT"
+           "D0:D0:81:55:01:54:6E:CF:F7:91:74:57:53:DB:F6:43:92:B7:D8:DA:F6:3A:DA:A5:77:0B:E0:0A:90:F6:A2:FC"
          ]
        }
      }
    ]
    ```
-4. Over, že Next.js web build servíruje tento súbor s `Content-Type:
-   application/json` (statický súbor v `public/.well-known/` by mal fungovať
-   bez ďalšej konfigurácie — over po deployi cez
+3. Over, že Next.js web build servíruje tento súbor s `Content-Type:
+   application/json` (statický súbor v `public/.well-known/` funguje bez
+   ďalšej konfigurácie — over po deployi cez
    `curl -I https://esblu.com/.well-known/assetlinks.json`).
-5. Ak appka niekedy dostane samostatný **debug** keystore fingerprint na
+4. Ak appka niekedy dostane samostatný **debug** keystore fingerprint na
    testovanie App Links pred release buildom, pridaj ho ako ĎALŠÍ prvok v
    poli `sha256_cert_fingerprints` (nie namiesto release fingerprintu).
+5. Po aktivácii **Play App Signing** v Play Console pridaj AJ jeho SHA-256
+   (Release → Setup → App integrity → App signing key certificate) ako
+   ĎALŠÍ prvok v tom istom poli `sha256_cert_fingerprints` — NIE namiesto
+   upload-key fingerprintu vyššie (obidva môžu byť platné súčasne).
 6. Po nasadení over Digital Asset Links štatút priamo cez Google-ov nástroj:
    ```
    https://digitalassetlinks.googleapis.com/v1/statements:list?source.web.site=https://esblu.com&relation=delegate_permission/common.handle_all_urls
@@ -76,7 +59,7 @@ distribúcii (release keystore). Tento keystore ešte neexistuje. Publikovanie
 `@capacitor/app` (`App.getLaunchUrl()` pre cold start, `App.addListener(
 'appUrlOpen', ...)` pre foreground/background) je zapojené v
 `mobile/app/DeepLinkBridge.tsx`, mountovanom cez `mobile/app/layout.tsx`.
-Tento súbor (`assetlinks.json`) je teda JEDINÝ zostávajúci blokujúci krok
-pre plne overené App Links — bez neho appka funguje ako bezpečný fallback
-(odkaz sa otvorí vo web prehliadači), ale Android ju automaticky nenavrhne
-ako predvoleného handlera.
+S `assetlinks.json` už publikovaným (s reálnym fingerprintom) je App Links
+reťazec kompletný na strane appky aj domény — zostáva iba produkčné
+overenie Digital Asset Links štatútu po nainštalovaní appky (bod 6
+vyššie) a neskoršie doplnenie Play App Signing fingerprintu (bod 5).
