@@ -982,10 +982,11 @@ const de = {
   vehicles: {
     list: {
       subtitle: "Erfassung der Firmenfahrzeuge.",
-      addViaInboxTitle: "Neues Fahrzeug über die Inbox hinzufügen",
-      addViaInboxDescription:
-        "Fotografieren Sie den Fahrzeugschein (Vorder- und Rückseite) im Modul Inbox — die KI liest die Daten aus, und nach Ihrer Bestätigung wird das Fahrzeug automatisch angelegt oder einem vorhandenen zugeordnet.",
-      openInboxCta: "Inbox öffnen →",
+      addVehicleTitle: "Neues Fahrzeug hinzufügen",
+      addVehicleDescription:
+        "Fotografieren Sie den Fahrzeugschein (Vorder- und Rückseite) — die KI liest die Daten aus, und nach Ihrer Bestätigung wird das Fahrzeug automatisch angelegt oder einem vorhandenen zugeordnet. Sie können ein Fahrzeug auch manuell hinzufügen.",
+      scanRegistrationCta: "Fahrzeugschein scannen (KI) →",
+      addManuallyCta: "Manuell hinzufügen",
       noneYetShort: "Sie haben noch kein Fahrzeug gespeichert.",
       savedVehiclesTitle: "Gespeicherte Fahrzeuge",
       noneYet: "Es ist noch kein Fahrzeug gespeichert.",

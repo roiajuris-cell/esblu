@@ -8,6 +8,7 @@ import { supabase } from "@/lib/supabase";
 import { getCompanyProfile, getMyActiveMembership } from "@/lib/company";
 import { useLocale } from "@/lib/i18n/LocaleProvider";
 import ModuleCard, { type ModuleAccent } from "./ModuleCard";
+import InboxDocumentIcon from "./icons/InboxDocumentIcon";
 import {
   vignetteCountryLabel,
   type VehicleVignette,
@@ -303,7 +304,7 @@ export default function Dashboard() {
       title: t("nav.inbox"),
       subtitle: t("dashboard.moduleInboxSubtitle"),
       href: "/ai-evidencia",
-      image: "/images/ai-evidencia.png",
+      icon: <InboxDocumentIcon size={56} className="h-11 w-11 sm:h-14 sm:w-14" />,
       accent: "cyan",
     },
     {
@@ -348,7 +349,7 @@ export default function Dashboard() {
     icon?: ReactNode;
     badge?: number;
   }[] = [
-    { href: "/ai-evidencia", label: t("nav.inbox"), image: "/images/ai-evidencia.png" },
+    { href: "/ai-evidencia", label: t("nav.inbox"), icon: <InboxDocumentIcon size={20} /> },
     { href: "/vozidla", label: t("nav.vehicles"), image: "/images/van.png" },
     { href: "/stroje", label: t("nav.machines"), image: "/images/excavator.png" },
     { href: "/sklad", label: t("nav.inventory"), image: "/images/warehouse.png" },

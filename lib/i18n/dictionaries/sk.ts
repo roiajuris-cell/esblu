@@ -984,10 +984,11 @@ const sk = {
   vehicles: {
     list: {
       subtitle: "Evidencia firemných vozidiel.",
-      addViaInboxTitle: "Nové vozidlo pridáte cez Inbox",
-      addViaInboxDescription:
-        "Odfotografujte technický preukaz (prednú a zadnú stranu) v module Inbox — AI údaje načíta a po vašom potvrdení vozidlo automaticky založí alebo priradí k existujúcemu.",
-      openInboxCta: "Otvoriť Inbox →",
+      addVehicleTitle: "Pridať nové vozidlo",
+      addVehicleDescription:
+        "Odfotografujte technický preukaz (prednú a zadnú stranu) — AI údaje načíta a po vašom potvrdení vozidlo automaticky založí alebo priradí k existujúcemu. Vozidlo môžete pridať aj ručne.",
+      scanRegistrationCta: "Naskenovať technický preukaz (AI) →",
+      addManuallyCta: "Pridať manuálne",
       noneYetShort: "Zatiaľ nemáš uložené žiadne vozidlo.",
       savedVehiclesTitle: "Uložené vozidlá",
       noneYet: "Zatiaľ nie je uložené žiadne vozidlo.",

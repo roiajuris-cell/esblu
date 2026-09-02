@@ -970,10 +970,11 @@ const en = {
   vehicles: {
     list: {
       subtitle: "Records of company vehicles.",
-      addViaInboxTitle: "Add a new vehicle via the Inbox",
-      addViaInboxDescription:
-        "Photograph the registration certificate (front and back) in the Inbox module — the AI will read the data, and after your confirmation the vehicle will be automatically created or matched to an existing one.",
-      openInboxCta: "Open Inbox →",
+      addVehicleTitle: "Add a new vehicle",
+      addVehicleDescription:
+        "Photograph the registration certificate (front and back) — the AI will read the data, and after your confirmation the vehicle will be automatically created or matched to an existing one. You can also add a vehicle manually.",
+      scanRegistrationCta: "Scan registration certificate (AI) →",
+      addManuallyCta: "Add manually",
       noneYetShort: "You don't have any vehicles saved yet.",
       savedVehiclesTitle: "Saved vehicles",
       noneYet: "No vehicle has been saved yet.",

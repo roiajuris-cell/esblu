@@ -25,13 +25,26 @@ import EntityPickerModal from "./EntityPickerModal";
 
 const PAGE_SIZE = 50;
 
-// Auto-grow composer textarea — v prázdnom/krátkom stave kompaktné (~1-2
-// riadky), rastie s obsahom po riadkoch až po ~5-6 riadkov, potom sa zapne
-// vnútorný scroll namiesto ďalšieho rastu. Hodnoty v px zodpovedajú
-// text-sm (14px, line-height ~21px) + vertikálny padding composera
-// (px-3.5 py-2.5 → 2×10px), zaokrúhlené na rozumné minimum/maximum.
-const COMPOSER_MIN_HEIGHT_PX = 44;
+// Auto-grow composer textarea — v prázdnom/krátkom stave pohodlné ~2-3
+// riadky (nie stiesnený 1 riadok), rastie s obsahom po riadkoch až po
+// ~5-6 riadkov, potom sa zapne vnútorný scroll namiesto ďalšieho rastu.
+// Hodnoty v px zodpovedajú text-sm (14px, line-height ~21px) + vertikálny
+// padding composera (px-3.5 py-2.5 → 2×10px), zaokrúhlené na rozumné
+// minimum/maximum. POZOR: COMPOSER_MIN_HEIGHT_PX musí zodpovedať Tailwind
+// triede `min-h-[...]` na <textarea> nižšie (arbitrary value je statický
+// string, nedá sa naviazať na JS konštantu) — pri zmene meň oboje spolu.
+const COMPOSER_MIN_HEIGHT_PX = 72;
 const COMPOSER_MAX_HEIGHT_PX = 144;
+
+// Koľko px od spodku kontajnera sa ešte považuje za "používateľ je pri
+// spodku" — realtime správa od niekoho iného v tomto rozsahu smie
+// automaticky doscrollovať; mimo neho (používateľ číta staršiu históriu)
+// scroll pozíciu nemeníme, aby sme ho neagresívne "neodtrhli" od čítania.
+const NEAR_BOTTOM_THRESHOLD_PX = 120;
+
+function isScrolledNearBottom(el: HTMLDivElement) {
+  return el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_BOTTOM_THRESHOLD_PX;
+}
 
 type PendingEntity = { entityType: ChatEntityType; entityId: string; label: string };
 
@@ -81,9 +94,21 @@ export default function ChatMessageView({
   const [editText, setEditText] = useState("");
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const scrollBottomRef = useRef<HTMLDivElement | null>(null);
+  const messagesScrollRef = useRef<HTMLDivElement | null>(null);
   const messageIdsRef = useRef<Set<string>>(new Set());
   const composerTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // Scrolluje kontajner správ úplne na spodok (najnovšia správa) —
+  // spoločný helper pre: prvé otvorenie konverzácie, odoslanie vlastnej
+  // správy/prílohy, a realtime správu od niekoho iného KEĎ bol používateľ
+  // už pri spodku (pozri jednotlivé volania nižšie). Volá sa vždy cez
+  // requestAnimationFrame z volajúceho miesta (po commite/vykreslení nového
+  // DOM), takže scrollHeight je tu už aktuálny.
+  function scrollMessagesToBottom() {
+    const el = messagesScrollRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }
 
   useEffect(() => {
     messageIdsRef.current = new Set(messages.map((m) => m.id));
@@ -195,6 +220,12 @@ export default function ChatMessageView({
 
       await markConversationRead(conversationId);
       setLoading(false);
+      // Otvorenie konverzácie musí ukázať NAJNOVŠIE správy okamžite (ako
+      // SMS/WhatsApp) — nie hornú/staršiu časť histórie. requestAnimationFrame
+      // čaká na vykreslenie zoznamu správ (loading→false prepne render vetvu
+      // z "loading" na skutočný zoznam), až potom má messagesScrollRef
+      // korektný scrollHeight.
+      requestAnimationFrame(() => scrollMessagesToBottom());
     } catch {
       setNotFound(true);
       setLoading(false);
@@ -211,15 +242,19 @@ export default function ChatMessageView({
     loadInitial();
   }, [conversationId]);
 
-  useEffect(() => {
-    // Scroll na spodok pri prvom načítaní / novej vlastnej správe.
-    scrollBottomRef.current?.scrollIntoView({ block: "end" });
-  }, [messages.length]);
-
   async function loadOlderMessages() {
     if (messages.length === 0) return;
 
     setLoadingOlder(true);
+
+    // Načítanie starších správ NESMIE odscrollovať používateľa späť na
+    // spodok (presný opak toho, čo práve chcel — kliknutím sem si vyžiadal
+    // históriu). Namiesto toho zachováme jeho pozíciu v obsahu: zapamätáme
+    // si scrollHeight PRED pridaním starších správ na začiatok zoznamu a po
+    // vykreslení posunieme scrollTop presne o rozdiel výšok, takže na
+    // obrazovke zostane rovnaká správa, len s históriou pribudnutou nad ňou.
+    const container = messagesScrollRef.current;
+    const prevScrollHeight = container?.scrollHeight ?? null;
 
     try {
       const oldest = messages[0].created_at;
@@ -240,6 +275,11 @@ export default function ChatMessageView({
     } finally {
       setLoadingOlder(false);
     }
+
+    requestAnimationFrame(() => {
+      if (!container || prevScrollHeight === null) return;
+      container.scrollTop += container.scrollHeight - prevScrollHeight;
+    });
   }
 
   // Realtime: nové/upravené správy tejto konverzácie + nové prílohy/referencie
@@ -260,8 +300,22 @@ export default function ChatMessageView({
 
           if (messageIdsRef.current.has(message.id)) return;
 
+          // Zisti PRED pridaním správy, či bol používateľ už pri spodku —
+          // ak áno (alebo je to jeho vlastná správa prišlá cez realtime
+          // echo), doscrolluje sa automaticky. Ak číta staršiu históriu
+          // vyššie v zozname, scroll pozíciu nemeníme (žiadne agresívne
+          // "odtrhnutie" od rozčítanej histórie).
+          const container = messagesScrollRef.current;
+          const shouldAutoScroll =
+            message.author_id === myUserId ||
+            (container ? isScrolledNearBottom(container) : true);
+
           setMessages((current) => [...current, message]);
           await loadAttachmentsAndReferences([message.id]);
+
+          if (shouldAutoScroll) {
+            requestAnimationFrame(() => scrollMessagesToBottom());
+          }
 
           if (message.author_id !== myUserId) {
             markConversationRead(conversationId).catch(() => {});
@@ -425,6 +479,10 @@ export default function ChatMessageView({
       setPendingFile(null);
       setPendingEntity(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
+      // Vlastná odoslaná správa (aj s prílohou) sa má vždy zobraziť —
+      // doscrolluj na spodok po vykreslení (rAF čaká na commit vyššie
+      // uvedených setMessages/setAttachmentsByMessage volaní).
+      requestAnimationFrame(() => scrollMessagesToBottom());
     } catch (error) {
       setComposerError(getChatErrorMessage(error, t));
     } finally {
@@ -503,7 +561,10 @@ export default function ChatMessageView({
         </h2>
       </div>
 
-      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4 sm:px-5">
+      <div
+        ref={messagesScrollRef}
+        className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4 sm:px-5"
+      >
         {hasMore && (
           <div className="flex justify-center">
             <button
@@ -542,8 +603,6 @@ export default function ChatMessageView({
             t={t}
           />
         ))}
-
-        <div ref={scrollBottomRef} />
       </div>
 
       <div className="border-t border-subtle px-4 py-3 sm:px-5">
@@ -620,12 +679,13 @@ export default function ChatMessageView({
             placeholder={t("chat.composerPlaceholder")}
             rows={1}
             // Výška riadená JS efektom vyššie (auto-grow podľa obsahu,
-            // min ~1-2 riadky až max ~5-6 riadkov, potom vnútorný scroll) —
-            // min-h-[44px] ostáva ako CSS fallback pred prvým behom efektu.
+            // pohodlné min ~2-3 riadky až max ~5-6 riadkov, potom vnútorný
+            // scroll) — min-h-[72px] ostáva ako CSS fallback pred prvým
+            // behom efektu (musí zodpovedať COMPOSER_MIN_HEIGHT_PX vyššie).
             // overflow-x-hidden vylučuje horizontálny scroll aj pri veľmi
             // dlhom jednom "slove" bez medzery (wrap už rieši resize-none
             // textarea samo, toto je len istota).
-            className="min-h-[44px] flex-1 resize-none overflow-x-hidden rounded-xl border border-subtle bg-surface-1/60 px-3.5 py-2.5 text-sm text-primary outline-none placeholder:text-muted-esblu"
+            className="min-h-[72px] flex-1 resize-none overflow-x-hidden rounded-xl border border-subtle bg-surface-1/60 px-3.5 py-2.5 text-sm text-primary outline-none placeholder:text-muted-esblu"
           />
 
           <button
